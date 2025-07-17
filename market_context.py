@@ -49,29 +49,28 @@ class MarketContextProvider:
             logger.error(f"Error getting market context: {e}")
             return {"error": str(e)}
     
-    def get_fundamental_data(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
+    def get_technical_context(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
         """
-        Get fundamental data for long-term fair value determination.
+        Get technical context data for enhanced analysis.
         
         Args:
             symbol: Stock symbol
             exchange: Exchange code
             
         Returns:
-            Dict containing fundamental data
+            Dict containing technical context data
         """
         try:
-            fundamental_data = {
+            technical_context = {
                 "timestamp": datetime.now().isoformat(),
-                "valuation_metrics": self._get_valuation_metrics(symbol),
-                "financial_ratios": self._get_financial_ratios(symbol),
-                "earnings_data": self._get_earnings_data(symbol),
-                "dividend_info": self._get_dividend_info(symbol),
-                "sector_comparison": self._get_sector_comparison(symbol)
+                "market_structure": self._get_market_structure(symbol),
+                "sector_technical": self._get_sector_technical(symbol),
+                "correlation_analysis": self._get_correlation_analysis(symbol),
+                "volatility_context": self._get_volatility_context()
             }
-            return fundamental_data
+            return technical_context
         except Exception as e:
-            logger.error(f"Error getting fundamental data: {e}")
+            logger.error(f"Error getting technical context: {e}")
             return {"error": str(e)}
     
     def get_news_events(self, symbol: str, date_range: List[str] = None) -> Dict[str, Any]:
@@ -180,61 +179,49 @@ class MarketContextProvider:
             "currency": {"usd_inr": 83.2, "trend": "stable"}
         }
     
-    def _get_valuation_metrics(self, symbol: str) -> Dict[str, Any]:
-        """Get valuation metrics for the stock."""
-        # This would typically call fundamental data APIs
+    def _get_market_structure(self, symbol: str) -> Dict[str, Any]:
+        """Get market structure analysis."""
         return {
-            "pe_ratio": 25.5,
-            "pb_ratio": 3.2,
-            "ps_ratio": 2.1,
-            "ev_ebitda": 15.8,
-            "dividend_yield": 0.8,
-            "book_value": 450.5,
-            "market_cap": 1500000  # in crores
+            "trend_structure": "uptrend",
+            "key_levels": {
+                "major_support": 2400,
+                "major_resistance": 2800,
+                "intermediate_support": 2500,
+                "intermediate_resistance": 2700
+            },
+            "market_regime": "trending",
+            "structure_quality": "strong"
         }
     
-    def _get_financial_ratios(self, symbol: str) -> Dict[str, Any]:
-        """Get financial ratios."""
+    def _get_sector_technical(self, symbol: str) -> Dict[str, Any]:
+        """Get sector technical analysis."""
         return {
-            "roe": 12.5,
-            "roa": 8.2,
-            "debt_to_equity": 0.3,
-            "current_ratio": 1.8,
-            "quick_ratio": 1.5,
-            "interest_coverage": 8.5
+            "sector_trend": "bullish",
+            "sector_strength": "strong",
+            "sector_momentum": "positive",
+            "sector_volatility": "normal",
+            "sector_rank": 3,
+            "sector_relative_strength": 1.2
         }
     
-    def _get_earnings_data(self, symbol: str) -> Dict[str, Any]:
-        """Get earnings data."""
+    def _get_correlation_analysis(self, symbol: str) -> Dict[str, Any]:
+        """Get correlation analysis with broader market."""
         return {
-            "last_quarter_eps": 25.5,
-            "eps_growth_yoy": 15.2,
-            "revenue_growth_yoy": 12.8,
-            "profit_margin": 18.5,
-            "next_earnings_date": "2025-01-20",
-            "earnings_estimate": 28.5
+            "nifty_correlation": 0.85,
+            "sector_correlation": 0.92,
+            "market_beta": 1.1,
+            "correlation_strength": "high",
+            "diversification_benefit": "low"
         }
     
-    def _get_dividend_info(self, symbol: str) -> Dict[str, Any]:
-        """Get dividend information."""
+    def _get_volatility_context(self) -> Dict[str, Any]:
+        """Get volatility context for the market."""
         return {
-            "dividend_yield": 0.8,
-            "dividend_payout_ratio": 25.5,
-            "last_dividend": 12.5,
-            "ex_dividend_date": "2024-12-15",
-            "payment_date": "2025-01-15"
-        }
-    
-    def _get_sector_comparison(self, symbol: str) -> Dict[str, Any]:
-        """Get sector comparison data."""
-        return {
-            "sector_pe": 15.5,
-            "sector_pb": 2.1,
-            "sector_roe": 14.2,
-            "company_pe": 25.5,
-            "company_pb": 3.2,
-            "company_roe": 12.5,
-            "valuation_status": "premium"
+            "current_volatility": "normal",
+            "volatility_trend": "decreasing",
+            "volatility_regime": "low",
+            "expected_volatility": "stable",
+            "volatility_risk": "low"
         }
     
     def _get_company_news(self, symbol: str, date_range: List[str]) -> List[Dict]:

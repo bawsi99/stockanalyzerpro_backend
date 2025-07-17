@@ -26,4 +26,6 @@ Format your response as:
 - Volume-Based Levels: [support/resistance levels from volume analysis]
 - Trading Signals: [volume-based trading implications]
 - Risk Assessment: [volume-related risks and false signals]
-- Confidence Level: [high/medium/low with reasoning] 
+- Confidence Level: [high/medium/low with reasoning]
+- Pattern Reliability: [assess pattern reliability based on volume confirmation, completion percentage, and market conditions]
+- Risk Assessment: [identify potential pattern failures and risk factors] 

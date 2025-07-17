@@ -627,3 +627,574 @@ class ChartVisualizer:
         plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close() 
+
+    @staticmethod
+    def plot_head_and_shoulders_pattern(data: pd.DataFrame, patterns: List[Dict], save_path: str = None):
+        """
+        Plot Head and Shoulders patterns.
+        
+        Args:
+            data: Price data
+            patterns: List of H&S patterns
+            save_path: Path to save the plot
+        """
+        if not patterns:
+            return
+        
+        fig, ax = plt.subplots(figsize=(15, 8))
+        
+        # Plot price data
+        ax.plot(data.index, data['close'], 'b-', linewidth=1, alpha=0.7, label='Price')
+        
+        colors = ['red', 'orange', 'purple', 'brown', 'pink']
+        
+        for i, pattern in enumerate(patterns[:5]):  # Limit to 5 patterns for clarity
+            color = colors[i % len(colors)]
+            
+            # Plot shoulders and head
+            left_shoulder = pattern['left_shoulder']
+            head = pattern['head']
+            right_shoulder = pattern['right_shoulder']
+            neckline = pattern['neckline']
+            
+            # Plot key points
+            ax.scatter(left_shoulder['index'], left_shoulder['price'], 
+                      color=color, s=100, marker='o', alpha=0.8, label=f'Left Shoulder {i+1}')
+            ax.scatter(head['index'], head['price'], 
+                      color=color, s=150, marker='^', alpha=0.8, label=f'Head {i+1}')
+            ax.scatter(right_shoulder['index'], right_shoulder['price'], 
+                      color=color, s=100, marker='o', alpha=0.8, label=f'Right Shoulder {i+1}')
+            
+            # Plot neckline
+            neckline_start = left_shoulder['index']
+            neckline_end = right_shoulder['index']
+            ax.plot([neckline_start, neckline_end], [neckline['level'], neckline['level']], 
+                   color=color, linestyle='--', linewidth=2, alpha=0.8, label=f'Neckline {i+1}')
+            
+            # Add pattern info
+            ax.annotate(f'H&S {i+1}\nQ:{pattern["quality_score"]:.0f}', 
+                       xy=(head['index'], head['price']), 
+                       xytext=(10, 10), textcoords='offset points',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor=color, alpha=0.3),
+                       fontsize=8)
+        
+        ax.set_title('Head and Shoulders Patterns', fontsize=16, fontweight='bold')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Price')
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.show()
+
+    @staticmethod
+    def plot_inverse_head_and_shoulders_pattern(data: pd.DataFrame, patterns: List[Dict], save_path: str = None):
+        """
+        Plot Inverse Head and Shoulders patterns.
+        
+        Args:
+            data: Price data
+            patterns: List of inverse H&S patterns
+            save_path: Path to save the plot
+        """
+        if not patterns:
+            return
+        
+        fig, ax = plt.subplots(figsize=(15, 8))
+        
+        # Plot price data
+        ax.plot(data.index, data['close'], 'b-', linewidth=1, alpha=0.7, label='Price')
+        
+        colors = ['green', 'lime', 'teal', 'olive', 'darkgreen']
+        
+        for i, pattern in enumerate(patterns[:5]):  # Limit to 5 patterns for clarity
+            color = colors[i % len(colors)]
+            
+            # Plot shoulders and head
+            left_shoulder = pattern['left_shoulder']
+            head = pattern['head']
+            right_shoulder = pattern['right_shoulder']
+            neckline = pattern['neckline']
+            
+            # Plot key points
+            ax.scatter(left_shoulder['index'], left_shoulder['price'], 
+                      color=color, s=100, marker='o', alpha=0.8, label=f'Left Shoulder {i+1}')
+            ax.scatter(head['index'], head['price'], 
+                      color=color, s=150, marker='v', alpha=0.8, label=f'Head {i+1}')
+            ax.scatter(right_shoulder['index'], right_shoulder['price'], 
+                      color=color, s=100, marker='o', alpha=0.8, label=f'Right Shoulder {i+1}')
+            
+            # Plot neckline
+            neckline_start = left_shoulder['index']
+            neckline_end = right_shoulder['index']
+            ax.plot([neckline_start, neckline_end], [neckline['level'], neckline['level']], 
+                   color=color, linestyle='--', linewidth=2, alpha=0.8, label=f'Neckline {i+1}')
+            
+            # Add pattern info
+            ax.annotate(f'Inv H&S {i+1}\nQ:{pattern["quality_score"]:.0f}', 
+                       xy=(head['index'], head['price']), 
+                       xytext=(10, -10), textcoords='offset points',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor=color, alpha=0.3),
+                       fontsize=8)
+        
+        ax.set_title('Inverse Head and Shoulders Patterns', fontsize=16, fontweight='bold')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Price')
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.show()
+
+    @staticmethod
+    def plot_cup_and_handle_pattern(data: pd.DataFrame, patterns: List[Dict], save_path: str = None):
+        """
+        Plot Cup and Handle patterns.
+        
+        Args:
+            data: Price data
+            patterns: List of Cup and Handle patterns
+            save_path: Path to save the plot
+        """
+        if not patterns:
+            return
+        
+        fig, ax = plt.subplots(figsize=(15, 8))
+        
+        # Plot price data
+        ax.plot(data.index, data['close'], 'b-', linewidth=1, alpha=0.7, label='Price')
+        
+        colors = ['blue', 'cyan', 'navy', 'skyblue', 'royalblue']
+        
+        for i, pattern in enumerate(patterns[:3]):  # Limit to 3 patterns for clarity
+            color = colors[i % len(colors)]
+            
+            cup = pattern['cup']
+            handle = pattern['handle']
+            
+            # Plot cup
+            cup_start = cup['start_index']
+            cup_end = cup['end_index']
+            cup_data = data.iloc[cup_start:cup_end + 1]
+            ax.plot(cup_data.index, cup_data['close'], color=color, linewidth=3, alpha=0.8, label=f'Cup {i+1}')
+            
+            # Plot handle
+            handle_start = handle['start_index']
+            handle_end = handle['end_index']
+            handle_data = data.iloc[handle_start:handle_end + 1]
+            ax.plot(handle_data.index, handle_data['close'], color=color, linewidth=2, alpha=0.8, label=f'Handle {i+1}')
+            
+            # Plot breakout level
+            ax.axhline(y=pattern['breakout_level'], color=color, linestyle='--', alpha=0.6, label=f'Breakout {i+1}')
+            
+            # Add pattern info
+            ax.annotate(f'C&H {i+1}\nQ:{pattern["quality_score"]:.0f}', 
+                       xy=(handle_end, handle['end_price']), 
+                       xytext=(10, 10), textcoords='offset points',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor=color, alpha=0.3),
+                       fontsize=8)
+        
+        ax.set_title('Cup and Handle Patterns', fontsize=16, fontweight='bold')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Price')
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.show()
+
+    @staticmethod
+    def plot_multi_timeframe_analysis(data: pd.DataFrame, mtf_analysis: Dict, save_path: str = None):
+        """
+        Plot multi-timeframe analysis.
+        
+        Args:
+            data: Price data
+            mtf_analysis: Multi-timeframe analysis results
+            save_path: Path to save the plot
+        """
+        if not mtf_analysis or "error" in mtf_analysis:
+            return
+        
+        fig, axes = plt.subplots(2, 2, figsize=(20, 12))
+        fig.suptitle('Multi-Timeframe Analysis', fontsize=16, fontweight='bold')
+        
+        # Plot 1: Short-term analysis
+        ax1 = axes[0, 0]
+        if "short_term" in mtf_analysis:
+            short_term = mtf_analysis["short_term"]
+            consensus = short_term["consensus"]
+            
+            ax1.plot(data.index, data['close'], 'b-', linewidth=1, alpha=0.7)
+            ax1.set_title(f'Short-term Analysis\nConsensus: {consensus["direction"].title()} ({consensus["strength"]:.0f}%)', 
+                         fontsize=12, fontweight='bold')
+            ax1.set_ylabel('Price')
+            ax1.grid(True, alpha=0.3)
+            
+            # Add consensus info
+            ax1.text(0.02, 0.98, f'Bullish: {consensus["bullish_periods"]}\nBearish: {consensus["bearish_periods"]}', 
+                    transform=ax1.transAxes, verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
+        
+        # Plot 2: Medium-term analysis
+        ax2 = axes[0, 1]
+        if "medium_term" in mtf_analysis:
+            medium_term = mtf_analysis["medium_term"]
+            consensus = medium_term["consensus"]
+            
+            ax2.plot(data.index, data['close'], 'g-', linewidth=1, alpha=0.7)
+            ax2.set_title(f'Medium-term Analysis\nConsensus: {consensus["direction"].title()} ({consensus["strength"]:.0f}%)', 
+                         fontsize=12, fontweight='bold')
+            ax2.set_ylabel('Price')
+            ax2.grid(True, alpha=0.3)
+            
+            # Add consensus info
+            ax2.text(0.02, 0.98, f'Bullish: {consensus["bullish_periods"]}\nBearish: {consensus["bearish_periods"]}', 
+                    transform=ax2.transAxes, verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.8))
+        
+        # Plot 3: Long-term analysis
+        ax3 = axes[1, 0]
+        if "long_term" in mtf_analysis:
+            long_term = mtf_analysis["long_term"]
+            consensus = long_term["consensus"]
+            
+            ax3.plot(data.index, data['close'], 'r-', linewidth=1, alpha=0.7)
+            ax3.set_title(f'Long-term Analysis\nConsensus: {consensus["direction"].title()} ({consensus["strength"]:.0f}%)', 
+                         fontsize=12, fontweight='bold')
+            ax3.set_xlabel('Date')
+            ax3.set_ylabel('Price')
+            ax3.grid(True, alpha=0.3)
+            
+            # Add consensus info
+            ax3.text(0.02, 0.98, f'Bullish: {consensus["bullish_periods"]}\nBearish: {consensus["bearish_periods"]}', 
+                    transform=ax3.transAxes, verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='lightcoral', alpha=0.8))
+        
+        # Plot 4: Overall consensus
+        ax4 = axes[1, 1]
+        if "overall_consensus" in mtf_analysis:
+            overall = mtf_analysis["overall_consensus"]
+            alignment = overall["timeframe_alignment"]
+            
+            # Create alignment visualization
+            timeframes = list(alignment.keys())
+            directions = [alignment[tf] for tf in timeframes]
+            
+            colors = []
+            for direction in directions:
+                if direction == "bullish":
+                    colors.append('green')
+                elif direction == "bearish":
+                    colors.append('red')
+                else:
+                    colors.append('gray')
+            
+            bars = ax4.bar(timeframes, [1, 1, 1], color=colors, alpha=0.7)
+            ax4.set_title(f'Overall Consensus\nDirection: {overall["direction"].title()} ({overall["strength"]:.0f}%)', 
+                         fontsize=12, fontweight='bold')
+            ax4.set_ylabel('Alignment')
+            ax4.set_ylim(0, 1.2)
+            
+            # Add score info
+            ax4.text(0.02, 0.98, f'Score: {overall["score"]:.1f}', 
+                    transform=ax4.transAxes, verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.show() 
+
+    @staticmethod
+    def plot_triple_top_pattern(data: pd.DataFrame, patterns: List[Dict], save_path: str = None):
+        """
+        Plot Triple Top patterns.
+        
+        Args:
+            data: Price data
+            patterns: List of Triple Top patterns
+            save_path: Path to save the plot
+        """
+        if not patterns:
+            return
+        
+        fig, ax = plt.subplots(figsize=(15, 8))
+        
+        # Plot price data
+        ax.plot(data.index, data['close'], 'b-', linewidth=1, alpha=0.7, label='Price')
+        
+        colors = ['red', 'darkred', 'crimson', 'firebrick', 'indianred']
+        
+        for i, pattern in enumerate(patterns[:3]):  # Limit to 3 patterns for clarity
+            color = colors[i % len(colors)]
+            
+            peaks = pattern['peaks']
+            valleys = pattern['valleys']
+            support_level = pattern['support_level']
+            
+            # Plot peaks
+            for j, peak in enumerate(peaks):
+                ax.scatter(peak['index'], peak['price'], 
+                          color=color, s=100, marker='v', alpha=0.8, 
+                          label=f'Peak {j+1} {i+1}' if j == 0 else "")
+            
+            # Plot support level
+            start_idx = peaks[0]['index']
+            end_idx = peaks[-1]['index']
+            ax.plot([start_idx, end_idx], [support_level, support_level], 
+                   color=color, linestyle='--', linewidth=2, alpha=0.8, 
+                   label=f'Support {i+1}' if i == 0 else "")
+            
+            # Add pattern info
+            ax.annotate(f'Triple Top {i+1}\nQ:{pattern["quality_score"]:.0f}', 
+                       xy=(peaks[1]['index'], peaks[1]['price']), 
+                       xytext=(10, 10), textcoords='offset points',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor=color, alpha=0.3),
+                       fontsize=8)
+        
+        ax.set_title('Triple Top Patterns', fontsize=16, fontweight='bold')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Price')
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.show()
+
+    @staticmethod
+    def plot_triple_bottom_pattern(data: pd.DataFrame, patterns: List[Dict], save_path: str = None):
+        """
+        Plot Triple Bottom patterns.
+        
+        Args:
+            data: Price data
+            patterns: List of Triple Bottom patterns
+            save_path: Path to save the plot
+        """
+        if not patterns:
+            return
+        
+        fig, ax = plt.subplots(figsize=(15, 8))
+        
+        # Plot price data
+        ax.plot(data.index, data['close'], 'b-', linewidth=1, alpha=0.7, label='Price')
+        
+        colors = ['green', 'darkgreen', 'forestgreen', 'limegreen', 'seagreen']
+        
+        for i, pattern in enumerate(patterns[:3]):  # Limit to 3 patterns for clarity
+            color = colors[i % len(colors)]
+            
+            lows = pattern['lows']
+            peaks = pattern['peaks']
+            resistance_level = pattern['resistance_level']
+            
+            # Plot lows
+            for j, low in enumerate(lows):
+                ax.scatter(low['index'], low['price'], 
+                          color=color, s=100, marker='^', alpha=0.8, 
+                          label=f'Low {j+1} {i+1}' if j == 0 else "")
+            
+            # Plot resistance level
+            start_idx = lows[0]['index']
+            end_idx = lows[-1]['index']
+            ax.plot([start_idx, end_idx], [resistance_level, resistance_level], 
+                   color=color, linestyle='--', linewidth=2, alpha=0.8, 
+                   label=f'Resistance {i+1}' if i == 0 else "")
+            
+            # Add pattern info
+            ax.annotate(f'Triple Bottom {i+1}\nQ:{pattern["quality_score"]:.0f}', 
+                       xy=(lows[1]['index'], lows[1]['price']), 
+                       xytext=(10, -10), textcoords='offset points',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor=color, alpha=0.3),
+                       fontsize=8)
+        
+        ax.set_title('Triple Bottom Patterns', fontsize=16, fontweight='bold')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Price')
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.show()
+
+    @staticmethod
+    def plot_wedge_patterns(data: pd.DataFrame, patterns: List[Dict], save_path: str = None):
+        """
+        Plot Wedge patterns.
+        
+        Args:
+            data: Price data
+            patterns: List of Wedge patterns
+            save_path: Path to save the plot
+        """
+        if not patterns:
+            return
+        
+        fig, ax = plt.subplots(figsize=(15, 8))
+        
+        # Plot price data
+        ax.plot(data.index, data['close'], 'b-', linewidth=1, alpha=0.7, label='Price')
+        
+        colors = ['purple', 'orange', 'brown', 'pink', 'olive']
+        
+        for i, pattern in enumerate(patterns[:3]):  # Limit to 3 patterns for clarity
+            color = colors[i % len(colors)]
+            
+            start_idx = pattern['start_index']
+            end_idx = pattern['end_index']
+            wedge_type = pattern['type']
+            slope_highs = pattern['slope_highs']
+            slope_lows = pattern['slope_lows']
+            swing_points = pattern['swing_points']
+            
+            # Plot swing points
+            highs = swing_points['highs']
+            lows = swing_points['lows']
+            
+            for high in highs:
+                ax.scatter(high['index'], high['price'], 
+                          color=color, s=80, marker='v', alpha=0.8)
+            
+            for low in lows:
+                ax.scatter(low['index'], low['price'], 
+                          color=color, s=80, marker='^', alpha=0.8)
+            
+            # Plot trend lines
+            x_range = np.array([start_idx, end_idx])
+            
+            # Upper line (highs)
+            if len(highs) >= 2:
+                high_x = np.array([h['index'] for h in highs])
+                high_y = np.array([h['price'] for h in highs])
+                high_slope, high_intercept = np.polyfit(high_x, high_y, 1)
+                upper_line = high_slope * x_range + high_intercept
+                ax.plot(x_range, upper_line, color=color, linestyle='--', linewidth=2, alpha=0.8)
+            
+            # Lower line (lows)
+            if len(lows) >= 2:
+                low_x = np.array([l['index'] for l in lows])
+                low_y = np.array([l['price'] for l in lows])
+                low_slope, low_intercept = np.polyfit(low_x, low_y, 1)
+                lower_line = low_slope * x_range + low_intercept
+                ax.plot(x_range, lower_line, color=color, linestyle='--', linewidth=2, alpha=0.8)
+            
+            # Add pattern info
+            ax.annotate(f'{wedge_type.replace("_", " ").title()} {i+1}\nQ:{pattern["quality_score"]:.0f}', 
+                       xy=((start_idx + end_idx) / 2, data['close'].iloc[start_idx:end_idx].mean()), 
+                       xytext=(10, 10), textcoords='offset points',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor=color, alpha=0.3),
+                       fontsize=8)
+        
+        ax.set_title('Wedge Patterns', fontsize=16, fontweight='bold')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Price')
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.show()
+
+    @staticmethod
+    def plot_channel_patterns(data: pd.DataFrame, patterns: List[Dict], save_path: str = None):
+        """
+        Plot Channel patterns.
+        
+        Args:
+            data: Price data
+            patterns: List of Channel patterns
+            save_path: Path to save the plot
+        """
+        if not patterns:
+            return
+        
+        fig, ax = plt.subplots(figsize=(15, 8))
+        
+        # Plot price data
+        ax.plot(data.index, data['close'], 'b-', linewidth=1, alpha=0.7, label='Price')
+        
+        colors = ['teal', 'gold', 'coral', 'slateblue', 'chocolate']
+        
+        for i, pattern in enumerate(patterns[:3]):  # Limit to 3 patterns for clarity
+            color = colors[i % len(colors)]
+            
+            start_idx = pattern['start_index']
+            end_idx = pattern['end_index']
+            channel_type = pattern['type']
+            slope_highs = pattern['slope_highs']
+            slope_lows = pattern['slope_lows']
+            swing_points = pattern['swing_points']
+            
+            # Plot swing points
+            highs = swing_points['highs']
+            lows = swing_points['lows']
+            
+            for high in highs:
+                ax.scatter(high['index'], high['price'], 
+                          color=color, s=80, marker='v', alpha=0.8)
+            
+            for low in lows:
+                ax.scatter(low['index'], low['price'], 
+                          color=color, s=80, marker='^', alpha=0.8)
+            
+            # Plot channel lines
+            x_range = np.array([start_idx, end_idx])
+            
+            # Upper line (highs)
+            if len(highs) >= 2:
+                high_x = np.array([h['index'] for h in highs])
+                high_y = np.array([h['price'] for h in highs])
+                high_slope, high_intercept = np.polyfit(high_x, high_y, 1)
+                upper_line = high_slope * x_range + high_intercept
+                ax.plot(x_range, upper_line, color=color, linestyle='-', linewidth=2, alpha=0.8)
+            
+            # Lower line (lows)
+            if len(lows) >= 2:
+                low_x = np.array([l['index'] for l in lows])
+                low_y = np.array([l['price'] for l in lows])
+                low_slope, low_intercept = np.polyfit(low_x, low_y, 1)
+                lower_line = low_slope * x_range + low_intercept
+                ax.plot(x_range, lower_line, color=color, linestyle='-', linewidth=2, alpha=0.8)
+            
+            # Fill channel area
+            if len(highs) >= 2 and len(lows) >= 2:
+                ax.fill_between(x_range, lower_line, upper_line, 
+                               color=color, alpha=0.1)
+            
+            # Add pattern info
+            ax.annotate(f'{channel_type.replace("_", " ").title()} {i+1}\nQ:{pattern["quality_score"]:.0f}\nTouches: {pattern["touches"]}', 
+                       xy=((start_idx + end_idx) / 2, data['close'].iloc[start_idx:end_idx].mean()), 
+                       xytext=(10, 10), textcoords='offset points',
+                       bbox=dict(boxstyle='round,pad=0.3', facecolor=color, alpha=0.3),
+                       fontsize=8)
+        
+        ax.set_title('Channel Patterns', fontsize=16, fontweight='bold')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Price')
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.show() 

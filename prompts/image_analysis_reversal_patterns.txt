@@ -28,4 +28,6 @@ Format your response as:
 - Risk Management: [stop loss and target levels for reversal trades]
 - False Signal Risk: [potential false signals and how to avoid them]
 - Trading Strategy: [recommendations based on reversal analysis]
-- Confidence Level: [high/medium/low with reasoning] 
+- Confidence Level: [high/medium/low with reasoning]
+- Pattern Reliability: [assess pattern reliability based on volume confirmation, completion percentage, and market conditions]
+- Risk Assessment: [identify potential pattern failures and risk factors] 

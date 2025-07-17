@@ -10,6 +10,17 @@ Step 3: Identify any truly missing, ambiguous, or contradictory data. If any, me
 Step 4: Write a concise markdown summary (1-2 paragraphs) of the technical outlook, including notable signals, trends, actionable entry/exit points, and warnings. Clearly state your reasoning for each insight.
 Step 5: Output a JSON object (in a code block) with the following structure, filling in all fields and providing a confidence score (0-100) for each signal and for the overall trend. If any field cannot be filled due to missing data, state "unknown" and explain in "warnings".
 Step 6: Use python for making any calculations or comparing values
+Step 7: Consider enhanced indicators including volatility analysis, volume profile, momentum divergences, and trend strength
+Step 8: Assess pattern reliability and risk factors for any detected patterns
+Step 9: Pay special attention to volume analysis including:
+- Daily volume metrics and volume/price ratios
+- Volume ratios vs multiple moving averages (5d, 10d, 20d, 50d)
+- Volume trends and confirmation with price movements
+- Volume strength scoring and quality assessment
+- Price-volume correlation analysis
+- Volume anomalies and their significance
+- Advanced volume indicators (MFI, OBV, VWAP)
+- Volume volatility analysis
 {{
   "trend": "Bullish | Bearish | Neutral | Unknown",
   "strength": 0-100,

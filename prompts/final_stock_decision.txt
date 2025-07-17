@@ -18,7 +18,7 @@ Step 2: Note the current price data freshness and market status - this is NOT mi
 Step 3: Identify any truly missing, ambiguous, or contradictory data. If any, mention them in the rationale fields and in "risks".
 Step 4: For each recommendation (entry, stop, targets), provide a brief rationale, referencing indicators, chart patterns, and additional context.
 Step 5: Use all available data, and highlight any contradictions or uncertainties.
-Step 6: Incorporate market context, and news events into your analysis where relevant.
+Step 6: Incorporate market context, technical patterns, and news events into your analysis where relevant.
 step 7: Use python for making any calculations, comparing values
 Step 8: CRITICAL: Output ONLY a valid JSON object with the following schema. NO PROSE, NO NARRATIVE TEXT, NO EXPLANATIONS OUTSIDE THE JSON. The response must be parseable JSON.
 
@@ -41,9 +41,9 @@ Step 8: CRITICAL: Output ONLY a valid JSON object with the following schema. NO 
 }},
 "long_term": {{
 "horizon_days": 60-365,
-"investment_rating": "Accumulate | Hold | Reduce | Unknown",
+"technical_rating": "Accumulate | Hold | Reduce | Unknown",
 "fair_value_range": [low, high],
-"rationale": "Explain the long-term outlook and any valuation considerations, incorporating fundamental data."
+"rationale": "Explain the long-term outlook based on technical patterns, trend analysis, and historical price behavior."
 }},
 "risks": [ "List key risks, uncertainties, or missing data (excluding normal market timing behavior).", ... ],
 "must_watch_levels": [ "List any critical price levels to monitor.", ... ],

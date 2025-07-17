@@ -551,6 +551,265 @@ class TechnicalIndicators:
         return support_levels, resistance_levels
     
     @staticmethod
+    def calculate_vwap(data: pd.DataFrame) -> pd.Series:
+        """
+        Calculate Volume Weighted Average Price (VWAP).
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            
+        Returns:
+            pd.Series: VWAP values
+        """
+        typical_price = (data['high'] + data['low'] + data['close']) / 3
+        vwap = (typical_price * data['volume']).cumsum() / data['volume'].cumsum()
+        return vwap
+    
+    @staticmethod
+    def calculate_money_flow_index(data: pd.DataFrame, window: int = 14) -> pd.Series:
+        """
+        Calculate Money Flow Index (MFI).
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            window: Period for calculation
+            
+        Returns:
+            pd.Series: MFI values
+        """
+        typical_price = (data['high'] + data['low'] + data['close']) / 3
+        money_flow = typical_price * data['volume']
+        
+        positive_flow = pd.Series(0.0, index=data.index)
+        negative_flow = pd.Series(0.0, index=data.index)
+        
+        # Calculate positive and negative money flow
+        for i in range(1, len(data)):
+            if typical_price.iloc[i] > typical_price.iloc[i-1]:
+                positive_flow.iloc[i] = money_flow.iloc[i]
+            elif typical_price.iloc[i] < typical_price.iloc[i-1]:
+                negative_flow.iloc[i] = money_flow.iloc[i]
+        
+        positive_mf = positive_flow.rolling(window=window).sum()
+        negative_mf = negative_flow.rolling(window=window).sum()
+        
+        mfi = 100 - (100 / (1 + positive_mf / negative_mf))
+        return mfi
+    
+    @staticmethod
+    def calculate_volume_profile(data: pd.DataFrame, bins: int = 20) -> Dict[str, Any]:
+        """
+        Calculate volume profile analysis.
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            bins: Number of price bins for analysis
+            
+        Returns:
+            Dict containing volume profile data
+        """
+        price_range = data['high'].max() - data['low'].min()
+        bin_size = price_range / bins
+        
+        volume_profile = {}
+        for i in range(bins):
+            price_level = data['low'].min() + (i * bin_size)
+            volume_at_level = data[
+                (data['low'] <= price_level + bin_size) & 
+                (data['high'] >= price_level)
+            ]['volume'].sum()
+            volume_profile[f"level_{i}"] = {
+                "price": price_level,
+                "volume": volume_at_level
+            }
+        
+        # Find high volume nodes
+        volumes = [v['volume'] for v in volume_profile.values()]
+        avg_volume = np.mean(volumes)
+        high_volume_nodes = [
+            level for level, data in volume_profile.items() 
+            if data['volume'] > avg_volume * 1.5
+        ]
+        
+        return {
+            "profile": volume_profile,
+            "high_volume_nodes": high_volume_nodes,
+            "avg_volume": avg_volume
+        }
+    
+    @staticmethod
+    def calculate_williams_r(data: pd.DataFrame, window: int = 14) -> pd.Series:
+        """
+        Calculate Williams %R oscillator.
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            window: Period for calculation
+            
+        Returns:
+            pd.Series: Williams %R values
+        """
+        highest_high = data['high'].rolling(window=window).max()
+        lowest_low = data['low'].rolling(window=window).min()
+        
+        williams_r = ((highest_high - data['close']) / (highest_high - lowest_low)) * -100
+        return williams_r
+    
+    @staticmethod
+    def detect_rsi_divergence(prices: pd.Series, rsi: pd.Series, order: int = 5) -> Dict[str, Any]:
+        """
+        Detect RSI divergence patterns.
+        
+        Args:
+            prices: Price series
+            rsi: RSI series
+            order: Order for peak detection
+            
+        Returns:
+            Dict containing divergence information
+        """
+        from scipy.signal import argrelextrema
+        
+        price_peaks = argrelextrema(prices.values, np.greater, order=order)[0]
+        price_lows = argrelextrema(prices.values, np.less, order=order)[0]
+        rsi_peaks = argrelextrema(rsi.values, np.greater, order=order)[0]
+        rsi_lows = argrelextrema(rsi.values, np.less, order=order)[0]
+        
+        divergences = {
+            "bearish_divergence": [],
+            "bullish_divergence": [],
+            "hidden_bearish": [],
+            "hidden_bullish": []
+        }
+        
+        # Regular bearish divergence (price higher, RSI lower)
+        if len(price_peaks) >= 2 and len(rsi_peaks) >= 2:
+            if (prices.iloc[price_peaks[-1]] > prices.iloc[price_peaks[-2]] and 
+                rsi.iloc[rsi_peaks[-1]] < rsi.iloc[rsi_peaks[-2]]):
+                divergences["bearish_divergence"].append({
+                    "strength": "strong",
+                    "price_peaks": [price_peaks[-2], price_peaks[-1]],
+                    "rsi_peaks": [rsi_peaks[-2], rsi_peaks[-1]]
+                })
+        
+        # Regular bullish divergence (price lower, RSI higher)
+        if len(price_lows) >= 2 and len(rsi_lows) >= 2:
+            if (prices.iloc[price_lows[-1]] < prices.iloc[price_lows[-2]] and 
+                rsi.iloc[rsi_lows[-1]] > rsi.iloc[rsi_lows[-2]]):
+                divergences["bullish_divergence"].append({
+                    "strength": "strong",
+                    "price_lows": [price_lows[-2], price_lows[-1]],
+                    "rsi_lows": [rsi_lows[-2], rsi_lows[-1]]
+                })
+        
+        return divergences
+    
+    @staticmethod
+    def calculate_trend_strength(data: pd.DataFrame, sma_20: pd.Series, sma_50: pd.Series, sma_200: pd.Series) -> Dict[str, Any]:
+        """
+        Calculate comprehensive trend strength analysis.
+        
+        Args:
+            data: DataFrame containing price data
+            sma_20: 20-period SMA
+            sma_50: 50-period SMA
+            sma_200: 200-period SMA
+            
+        Returns:
+            Dict containing trend strength analysis
+        """
+        current_price = data['close'].iloc[-1]
+        
+        # Price position relative to moving averages
+        price_position = {
+            "above_sma_20": current_price > sma_20.iloc[-1],
+            "above_sma_50": current_price > sma_50.iloc[-1],
+            "above_sma_200": current_price > sma_200.iloc[-1]
+        }
+        
+        # Moving average alignment
+        ma_alignment = {
+            "sma_20_above_50": sma_20.iloc[-1] > sma_50.iloc[-1],
+            "sma_50_above_200": sma_50.iloc[-1] > sma_200.iloc[-1],
+            "all_bullish": sma_20.iloc[-1] > sma_50.iloc[-1] > sma_200.iloc[-1],
+            "all_bearish": sma_20.iloc[-1] < sma_50.iloc[-1] < sma_200.iloc[-1]
+        }
+        
+        # Trend consistency (last 20 periods)
+        price_trend = data['close'].iloc[-20:].pct_change().mean()
+        trend_consistency = "bullish" if price_trend > 0.001 else "bearish" if price_trend < -0.001 else "sideways"
+        
+        # Overall strength score (0-100)
+        strength_score = 0
+        
+        # Add points for price position
+        if price_position["above_sma_20"]: strength_score += 10
+        if price_position["above_sma_50"]: strength_score += 15
+        if price_position["above_sma_200"]: strength_score += 20
+        
+        # Add points for MA alignment
+        if ma_alignment["sma_20_above_50"]: strength_score += 15
+        if ma_alignment["sma_50_above_200"]: strength_score += 20
+        if ma_alignment["all_bullish"]: strength_score += 20
+        
+        # Add points for trend consistency
+        if trend_consistency == "bullish": strength_score += 20
+        elif trend_consistency == "sideways": strength_score += 10
+        
+        return {
+            "overall_strength": "strong" if strength_score >= 70 else "moderate" if strength_score >= 40 else "weak",
+            "price_position": price_position,
+            "ma_alignment": ma_alignment,
+            "trend_consistency": trend_consistency,
+            "strength_score": strength_score
+        }
+    
+    @staticmethod
+    def calculate_enhanced_support_resistance(data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Calculate enhanced support and resistance levels.
+        
+        Args:
+            data: DataFrame containing price data
+            
+        Returns:
+            Dict containing enhanced levels
+        """
+        # Dynamic support/resistance (recent swing points)
+        support_levels, resistance_levels = TechnicalIndicators.detect_support_resistance(data)
+        
+        # Fibonacci retracement levels
+        high = data['high'].max()
+        low = data['low'].min()
+        diff = high - low
+        fibonacci_levels = {
+            "0.236": low + 0.236 * diff,
+            "0.382": low + 0.382 * diff,
+            "0.500": low + 0.500 * diff,
+            "0.618": low + 0.618 * diff,
+            "0.786": low + 0.786 * diff
+        }
+        
+        # Pivot points
+        pivot_points = TechnicalIndicators.calculate_pivot_points(data)
+        
+        # Psychological levels (round numbers)
+        current_price = data['close'].iloc[-1]
+        psychological_levels = []
+        for i in range(-5, 6):
+            level = round(current_price / 100) * 100 + (i * 100)
+            if 0 < level < current_price * 2:  # Reasonable range
+                psychological_levels.append(level)
+        
+        return {
+            "dynamic_support": support_levels[:3] if len(support_levels) >= 3 else support_levels,
+            "dynamic_resistance": resistance_levels[:3] if len(resistance_levels) >= 3 else resistance_levels,
+            "fibonacci_levels": fibonacci_levels,
+            "pivot_points": pivot_points,
+            "psychological_levels": psychological_levels
+        }
+    
+    @staticmethod
     def calculate_all_indicators(data: pd.DataFrame) -> Dict[str, Any]:
         """
         Calculate all technical indicators.
@@ -691,7 +950,1015 @@ class TechnicalIndicators:
             'minus_di': float(minus_di.iloc[-1])
         }
         
+        # Calculate Enhanced Volatility Indicators
+        atr = TechnicalIndicators.calculate_atr(data)
+        atr_20 = atr.rolling(window=20).mean()
+        volatility_ratio = atr.iloc[-1] / atr_20.iloc[-1] if not pd.isna(atr_20.iloc[-1]) and atr_20.iloc[-1] != 0 else 1.0
+        
+        # Bollinger Band squeeze detection
+        bb_squeeze = bandwidth < 0.1  # Low bandwidth indicates squeeze
+        
+        # Historical volatility percentile (20-period)
+        volatility_percentile = (atr.iloc[-20:].rank().iloc[-1] / 20) * 100 if len(atr) >= 20 else 50
+        
+        indicators['volatility'] = {
+            'atr': float(atr.iloc[-1]),
+            'atr_20_avg': float(atr_20.iloc[-1]) if not pd.isna(atr_20.iloc[-1]) else None,
+            'volatility_ratio': float(volatility_ratio),
+            'bb_squeeze': bool(bb_squeeze),
+            'volatility_percentile': float(volatility_percentile),
+            'volatility_regime': 'high' if volatility_ratio > 1.5 else 'low' if volatility_ratio < 0.7 else 'normal'
+        }
+        
+        # Calculate Enhanced Volume Indicators
+        vwap = TechnicalIndicators.calculate_vwap(data)
+        mfi = TechnicalIndicators.calculate_money_flow_index(data)
+        
+        # Volume profile analysis
+        volume_profile = TechnicalIndicators.calculate_volume_profile(data)
+        
+        # Comprehensive volume analysis
+        enhanced_volume_analysis = TechnicalIndicators.calculate_enhanced_volume_analysis(data)
+        
+        indicators['enhanced_volume'] = {
+            'vwap': float(vwap.iloc[-1]) if not pd.isna(vwap.iloc[-1]) else None,
+            'mfi': float(mfi.iloc[-1]) if not pd.isna(mfi.iloc[-1]) else None,
+            'mfi_status': 'overbought' if mfi.iloc[-1] > 80 else 'oversold' if mfi.iloc[-1] < 20 else 'neutral',
+            'volume_profile': volume_profile,
+            'price_vs_vwap': float((current_price / vwap.iloc[-1] - 1) * 100) if not pd.isna(vwap.iloc[-1]) and vwap.iloc[-1] != 0 else 0.0,
+            'comprehensive_analysis': enhanced_volume_analysis
+        }
+        
+        # Calculate Enhanced Momentum Indicators
+        stochastic_k, stochastic_d = TechnicalIndicators.calculate_stochastic_oscillator(data)
+        williams_r = TechnicalIndicators.calculate_williams_r(data)
+        
+        # RSI divergence detection
+        rsi_divergence = TechnicalIndicators.detect_rsi_divergence(data['close'], rsi)
+        
+        indicators['enhanced_momentum'] = {
+            'stochastic_k': float(stochastic_k.iloc[-1]) if not pd.isna(stochastic_k.iloc[-1]) else None,
+            'stochastic_d': float(stochastic_d.iloc[-1]) if not pd.isna(stochastic_d.iloc[-1]) else None,
+            'stochastic_status': 'overbought' if stochastic_k.iloc[-1] > 80 else 'oversold' if stochastic_k.iloc[-1] < 20 else 'neutral',
+            'williams_r': float(williams_r.iloc[-1]) if not pd.isna(williams_r.iloc[-1]) else None,
+            'williams_r_status': 'overbought' if williams_r.iloc[-1] < -80 else 'oversold' if williams_r.iloc[-1] > -20 else 'neutral',
+            'rsi_divergence': rsi_divergence
+        }
+        
+        # Calculate Enhanced Trend Strength
+        trend_strength = TechnicalIndicators.calculate_trend_strength(data, sma_20, sma_50, sma_200)
+        indicators['trend_strength'] = trend_strength
+        
+        # Calculate Enhanced Support/Resistance
+        enhanced_levels = TechnicalIndicators.calculate_enhanced_support_resistance(data)
+        indicators['enhanced_levels'] = enhanced_levels
+        
+        # === PHASE 2 FEATURES ===
+        
+        # Calculate Multi-Timeframe Analysis
+        multi_timeframe = TechnicalIndicators.calculate_multi_timeframe_analysis(data)
+        indicators['multi_timeframe'] = multi_timeframe
+        
+        # Calculate Advanced Risk Metrics
+        advanced_risk = TechnicalIndicators.calculate_advanced_risk_metrics(data)
+        indicators['advanced_risk'] = advanced_risk
+        
+        # Calculate Phase 3 Advanced Risk Metrics
+        stress_testing = TechnicalIndicators.calculate_stress_testing_metrics(data)
+        scenario_analysis = TechnicalIndicators.calculate_scenario_analysis_metrics(data)
+        indicators['stress_testing'] = stress_testing
+        indicators['scenario_analysis'] = scenario_analysis
+        
         return indicators
+
+    @staticmethod
+    def calculate_enhanced_volume_analysis(data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Calculate comprehensive volume analysis including daily metrics and ratios.
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            
+        Returns:
+            Dict containing comprehensive volume analysis
+        """
+        if len(data) < 20:
+            return {"error": "insufficient_data"}
+        
+        # Basic volume metrics
+        current_volume = data['volume'].iloc[-1]
+        current_price = data['close'].iloc[-1]
+        
+        # Volume moving averages
+        volume_ma_5 = data['volume'].rolling(window=5).mean()
+        volume_ma_10 = data['volume'].rolling(window=10).mean()
+        volume_ma_20 = data['volume'].rolling(window=20).mean()
+        volume_ma_50 = data['volume'].rolling(window=50).mean()
+        
+        # Volume ratios
+        volume_ratio_5 = current_volume / volume_ma_5.iloc[-1] if volume_ma_5.iloc[-1] > 0 else 1.0
+        volume_ratio_10 = current_volume / volume_ma_10.iloc[-1] if volume_ma_10.iloc[-1] > 0 else 1.0
+        volume_ratio_20 = current_volume / volume_ma_20.iloc[-1] if volume_ma_20.iloc[-1] > 0 else 1.0
+        volume_ratio_50 = current_volume / volume_ma_50.iloc[-1] if volume_ma_50.iloc[-1] > 0 else 1.0
+        
+        # Volume trend analysis
+        volume_trend_5 = "up" if current_volume > volume_ma_5.iloc[-1] else "down"
+        volume_trend_10 = "up" if current_volume > volume_ma_10.iloc[-1] else "down"
+        volume_trend_20 = "up" if current_volume > volume_ma_20.iloc[-1] else "down"
+        volume_trend_50 = "up" if current_volume > volume_ma_50.iloc[-1] else "down"
+        
+        # Volume volatility
+        volume_std_20 = data['volume'].rolling(window=20).std()
+        volume_volatility = volume_std_20.iloc[-1] / volume_ma_20.iloc[-1] if volume_ma_20.iloc[-1] > 0 else 0.0
+        
+        # Volume anomaly detection
+        volume_anomalies = []
+        for i in range(20, len(data)):
+            vol_ma = volume_ma_20.iloc[i]
+            vol_std = volume_std_20.iloc[i]
+            current_vol = data['volume'].iloc[i]
+            
+            if current_vol > (vol_ma + 2 * vol_std):
+                anomaly = {
+                    "date": data.index[i].strftime('%Y-%m-%d'),
+                    "volume": float(current_vol),
+                    "avg_volume": float(vol_ma),
+                    "volume_ratio": float(current_vol / vol_ma),
+                    "price": float(data['close'].iloc[i]),
+                    "price_change": float(data['close'].iloc[i] - data['close'].iloc[i-1]),
+                    "anomaly_strength": "high" if current_vol > (vol_ma + 3 * vol_std) else "medium"
+                }
+                volume_anomalies.append(anomaly)
+        
+        # Recent volume anomalies (last 10 days)
+        recent_anomalies = [a for a in volume_anomalies if len(volume_anomalies) <= 10]
+        
+        # Volume price correlation
+        price_changes = data['close'].pct_change().dropna()
+        volume_changes = data['volume'].pct_change().dropna()
+        
+        # Align series
+        min_length = min(len(price_changes), len(volume_changes))
+        if min_length > 10:
+            correlation_20 = price_changes.iloc[-20:].corr(volume_changes.iloc[-20:])
+            correlation_50 = price_changes.iloc[-50:].corr(volume_changes.iloc[-50:]) if len(price_changes) >= 50 else correlation_20
+        else:
+            correlation_20 = correlation_50 = 0.0
+        
+        # Volume confirmation analysis
+        price_trend = "up" if data['close'].iloc[-1] > data['close'].iloc[-2] else "down"
+        volume_confirmation = "confirmed" if (price_trend == "up" and volume_trend_20 == "up") or (price_trend == "down" and volume_trend_20 == "up") else "diverging"
+        
+        # Volume accumulation/distribution
+        obv = TechnicalIndicators.calculate_obv(data)
+        obv_trend = "up" if obv.iloc[-1] > obv.iloc[-5] else "down"
+        
+        # Money Flow Index
+        mfi = TechnicalIndicators.calculate_money_flow_index(data)
+        mfi_status = "overbought" if mfi.iloc[-1] > 80 else "oversold" if mfi.iloc[-1] < 20 else "neutral"
+        
+        # VWAP analysis
+        vwap = TechnicalIndicators.calculate_vwap(data)
+        price_vs_vwap = ((current_price / vwap.iloc[-1] - 1) * 100) if vwap.iloc[-1] > 0 else 0.0
+        
+        # Volume profile analysis
+        volume_profile = TechnicalIndicators.calculate_volume_profile(data)
+        
+        # Volume strength scoring (0-100)
+        volume_strength = 0
+        if volume_ratio_20 > 1.5:
+            volume_strength += 30
+        elif volume_ratio_20 > 1.2:
+            volume_strength += 20
+        elif volume_ratio_20 > 0.8:
+            volume_strength += 10
+            
+        if volume_confirmation == "confirmed":
+            volume_strength += 25
+            
+        if obv_trend == "up":
+            volume_strength += 20
+            
+        if abs(correlation_20) > 0.3:
+            volume_strength += 15
+            
+        if mfi_status == "neutral":
+            volume_strength += 10
+            
+        volume_strength = min(volume_strength, 100)
+        
+        return {
+            "daily_metrics": {
+                "current_volume": float(current_volume),
+                "current_price": float(current_price),
+                "volume_price_ratio": float(current_volume / current_price) if current_price > 0 else 0.0
+            },
+            "volume_ratios": {
+                "ratio_5d": float(volume_ratio_5),
+                "ratio_10d": float(volume_ratio_10),
+                "ratio_20d": float(volume_ratio_20),
+                "ratio_50d": float(volume_ratio_50),
+                "primary_ratio": float(volume_ratio_20)  # Most commonly used
+            },
+            "volume_trends": {
+                "trend_5d": volume_trend_5,
+                "trend_10d": volume_trend_10,
+                "trend_20d": volume_trend_20,
+                "trend_50d": volume_trend_50,
+                "primary_trend": volume_trend_20
+            },
+            "volume_volatility": {
+                "volatility_ratio": float(volume_volatility),
+                "volatility_regime": "high" if volume_volatility > 0.5 else "low" if volume_volatility < 0.2 else "normal"
+            },
+            "volume_anomalies": {
+                "total_anomalies": len(volume_anomalies),
+                "recent_anomalies": len(recent_anomalies),
+                "anomaly_list": recent_anomalies,
+                "last_anomaly_date": volume_anomalies[-1]["date"] if volume_anomalies else None
+            },
+            "price_volume_correlation": {
+                "correlation_20d": float(correlation_20),
+                "correlation_50d": float(correlation_50),
+                "correlation_strength": "strong" if abs(correlation_20) > 0.5 else "moderate" if abs(correlation_20) > 0.3 else "weak"
+            },
+            "volume_confirmation": {
+                "price_trend": price_trend,
+                "volume_trend": volume_trend_20,
+                "confirmation_status": volume_confirmation,
+                "strength": "strong" if volume_ratio_20 > 1.5 and volume_confirmation == "confirmed" else "moderate" if volume_confirmation == "confirmed" else "weak"
+            },
+            "advanced_indicators": {
+                "obv": float(obv.iloc[-1]),
+                "obv_trend": obv_trend,
+                "mfi": float(mfi.iloc[-1]),
+                "mfi_status": mfi_status,
+                "vwap": float(vwap.iloc[-1]),
+                "price_vs_vwap_pct": float(price_vs_vwap)
+            },
+            "volume_profile": volume_profile,
+            "volume_strength_score": volume_strength,
+            "volume_quality": {
+                "data_quality": "good" if current_volume > 0 else "poor",
+                "reliability": "high" if volume_strength > 70 else "medium" if volume_strength > 40 else "low"
+            }
+        }
+
+    @staticmethod
+    def calculate_multi_timeframe_analysis(data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Calculate comprehensive multi-timeframe analysis.
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            
+        Returns:
+            Dict containing multi-timeframe analysis
+        """
+        if len(data) < 200:
+            return {"error": "insufficient_data_for_multi_timeframe"}
+        
+        # Define timeframes
+        timeframes = {
+            "short_term": {"periods": [5, 10, 20], "name": "Short-term (5-20 days)"},
+            "medium_term": {"periods": [50, 100, 200], "name": "Medium-term (50-200 days)"},
+            "long_term": {"periods": [200, 365], "name": "Long-term (200+ days)"}
+        }
+        
+        analysis = {}
+        
+        for tf_name, tf_config in timeframes.items():
+            tf_analysis = {}
+            
+            for period in tf_config["periods"]:
+                if len(data) >= period:
+                    # Calculate indicators for this period
+                    recent_data = data.tail(period)
+                    
+                    # Moving averages
+                    sma = TechnicalIndicators.calculate_sma(recent_data, 'close', 20)
+                    ema = TechnicalIndicators.calculate_ema(recent_data, 'close', 20)
+                    
+                    # RSI
+                    rsi = TechnicalIndicators.calculate_rsi(recent_data)
+                    
+                    # MACD
+                    macd_line, signal_line, histogram = TechnicalIndicators.calculate_macd(recent_data)
+                    
+                    # Bollinger Bands
+                    upper_bb, middle_bb, lower_bb = TechnicalIndicators.calculate_bollinger_bands(recent_data)
+                    
+                    # Current price analysis
+                    current_price = recent_data['close'].iloc[-1]
+                    price_position = {
+                        "above_sma": current_price > sma.iloc[-1],
+                        "above_ema": current_price > ema.iloc[-1],
+                        "bb_position": "upper" if current_price > upper_bb.iloc[-1] else "lower" if current_price < lower_bb.iloc[-1] else "middle",
+                        "rsi_zone": "overbought" if rsi.iloc[-1] > 70 else "oversold" if rsi.iloc[-1] < 30 else "neutral",
+                        "macd_signal": "bullish" if macd_line.iloc[-1] > signal_line.iloc[-1] else "bearish"
+                    }
+                    
+                    # Trend analysis
+                    trend_direction = "bullish" if sma.iloc[-1] > sma.iloc[-5] else "bearish" if sma.iloc[-1] < sma.iloc[-5] else "sideways"
+                    
+                    # Momentum analysis
+                    momentum = {
+                        "rsi_trend": "up" if rsi.iloc[-1] > rsi.iloc[-5] else "down",
+                        "macd_trend": "up" if macd_line.iloc[-1] > macd_line.iloc[-5] else "down",
+                        "volume_trend": "up" if recent_data['volume'].iloc[-5:].mean() > recent_data['volume'].iloc[-10:-5].mean() else "down"
+                    }
+                    
+                    tf_analysis[f"{period}d"] = {
+                        "price_position": price_position,
+                        "trend_direction": trend_direction,
+                        "momentum": momentum,
+                        "indicators": {
+                            "sma_20": float(sma.iloc[-1]),
+                            "ema_20": float(ema.iloc[-1]),
+                            "rsi": float(rsi.iloc[-1]),
+                            "macd": float(macd_line.iloc[-1]),
+                            "signal": float(signal_line.iloc[-1]),
+                            "bb_upper": float(upper_bb.iloc[-1]),
+                            "bb_lower": float(lower_bb.iloc[-1])
+                        }
+                    }
+            
+            # Timeframe consensus
+            if tf_analysis:
+                bullish_count = sum(1 for period_data in tf_analysis.values() 
+                                  if period_data["trend_direction"] == "bullish")
+                bearish_count = sum(1 for period_data in tf_analysis.values() 
+                                  if period_data["trend_direction"] == "bearish")
+                
+                total_periods = len(tf_analysis)
+                consensus = {
+                    "direction": "bullish" if bullish_count > bearish_count else "bearish" if bearish_count > bullish_count else "neutral",
+                    "strength": max(bullish_count, bearish_count) / total_periods * 100,
+                    "bullish_periods": bullish_count,
+                    "bearish_periods": bearish_count,
+                    "total_periods": total_periods
+                }
+                
+                analysis[tf_name] = {
+                    "name": tf_config["name"],
+                    "periods": tf_analysis,
+                    "consensus": consensus
+                }
+        
+        # Overall multi-timeframe consensus
+        if analysis:
+            short_consensus = analysis.get("short_term", {}).get("consensus", {})
+            medium_consensus = analysis.get("medium_term", {}).get("consensus", {})
+            long_consensus = analysis.get("long_term", {}).get("consensus", {})
+            
+            # Weighted consensus (short-term: 30%, medium-term: 40%, long-term: 30%)
+            weights = {"short_term": 0.3, "medium_term": 0.4, "long_term": 0.3}
+            
+            overall_score = 0
+            total_weight = 0
+            
+            for tf_name, weight in weights.items():
+                if tf_name in analysis:
+                    consensus = analysis[tf_name]["consensus"]
+                    if consensus["direction"] == "bullish":
+                        overall_score += consensus["strength"] * weight
+                    elif consensus["direction"] == "bearish":
+                        overall_score -= consensus["strength"] * weight
+                    total_weight += weight
+            
+            if total_weight > 0:
+                overall_score = overall_score / total_weight
+                overall_direction = "bullish" if overall_score > 10 else "bearish" if overall_score < -10 else "neutral"
+                overall_strength = abs(overall_score)
+            else:
+                overall_direction = "neutral"
+                overall_strength = 0
+            
+            analysis["overall_consensus"] = {
+                "direction": overall_direction,
+                "strength": overall_strength,
+                "score": overall_score,
+                "timeframe_alignment": {
+                    "short_term": short_consensus.get("direction", "neutral"),
+                    "medium_term": medium_consensus.get("direction", "neutral"),
+                    "long_term": long_consensus.get("direction", "neutral")
+                }
+            }
+        
+        return analysis
+
+    @staticmethod
+    def calculate_advanced_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Calculate advanced risk metrics and assessment.
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            
+        Returns:
+            Dict containing advanced risk analysis
+        """
+        if len(data) < 50:
+            return {"error": "insufficient_data_for_risk_analysis"}
+        
+        # Calculate returns
+        returns = data['close'].pct_change().dropna()
+        
+        # Basic risk metrics
+        volatility = returns.std()
+        annualized_volatility = volatility * np.sqrt(252)  # Assuming daily data
+        
+        # Value at Risk (VaR)
+        var_95 = np.percentile(returns, 5)  # 95% VaR
+        var_99 = np.percentile(returns, 1)  # 99% VaR
+        
+        # Expected Shortfall (Conditional VaR)
+        es_95 = returns[returns <= var_95].mean()
+        es_99 = returns[returns <= var_99].mean()
+        
+        # Maximum Drawdown
+        cumulative_returns = (1 + returns).cumprod()
+        rolling_max = cumulative_returns.expanding().max()
+        drawdown = (cumulative_returns - rolling_max) / rolling_max
+        max_drawdown = drawdown.min()
+        
+        # Sharpe Ratio (assuming risk-free rate of 0 for simplicity)
+        mean_return = returns.mean()
+        sharpe_ratio = mean_return / volatility if volatility > 0 else 0
+        
+        # Sortino Ratio
+        downside_returns = returns[returns < 0]
+        downside_deviation = downside_returns.std()
+        sortino_ratio = mean_return / downside_deviation if downside_deviation > 0 else 0
+        
+        # Calmar Ratio
+        calmar_ratio = (mean_return * 252) / abs(max_drawdown) if max_drawdown != 0 else 0
+        
+        # Skewness and Kurtosis
+        skewness = returns.skew()
+        kurtosis = returns.kurtosis()
+        
+        # Beta calculation (if market data available)
+        # This would need market index data for proper calculation
+        beta = 1.0  # Placeholder
+        
+        # Risk-adjusted returns
+        risk_adjusted_return = mean_return / annualized_volatility if annualized_volatility > 0 else 0
+        
+        # Volatility regime analysis
+        rolling_vol = returns.rolling(window=20).std()
+        current_vol = rolling_vol.iloc[-1]
+        vol_percentile = (rolling_vol.rank().iloc[-1] / len(rolling_vol)) * 100
+        
+        # Volatility regime classification
+        if vol_percentile > 80:
+            vol_regime = "high"
+        elif vol_percentile < 20:
+            vol_regime = "low"
+        else:
+            vol_regime = "normal"
+        
+        # Tail risk analysis
+        tail_events = len(returns[returns < var_95])
+        tail_frequency = tail_events / len(returns)
+        
+        # Correlation analysis (placeholder for market correlation)
+        market_correlation = 0.75  # Placeholder
+        
+        # Liquidity risk (if volume data available)
+        if 'volume' in data.columns:
+            avg_volume = data['volume'].mean()
+            volume_volatility = data['volume'].std() / avg_volume if avg_volume > 0 else 0
+            liquidity_score = min(100, max(0, 100 - volume_volatility * 100))
+        else:
+            liquidity_score = 50  # Neutral if no volume data
+        
+        # Overall risk score (0-100, higher = more risky)
+        risk_score = 0
+        
+        # Volatility component (30%)
+        vol_component = min(30, (annualized_volatility * 100))
+        risk_score += vol_component
+        
+        # Drawdown component (25%)
+        drawdown_component = min(25, abs(max_drawdown) * 100)
+        risk_score += drawdown_component
+        
+        # Tail risk component (20%)
+        tail_component = min(20, tail_frequency * 100)
+        risk_score += tail_component
+        
+        # Liquidity component (15%)
+        liquidity_component = (100 - liquidity_score) * 0.15
+        risk_score += liquidity_component
+        
+        # Correlation component (10%)
+        correlation_component = market_correlation * 10
+        risk_score += correlation_component
+        
+        # Risk level classification
+        if risk_score >= 70:
+            risk_level = "high"
+        elif risk_score >= 40:
+            risk_level = "medium"
+        else:
+            risk_level = "low"
+        
+        # Risk mitigation recommendations
+        mitigation_strategies = []
+        
+        if vol_component > 20:
+            mitigation_strategies.append("Consider volatility-based position sizing")
+            mitigation_strategies.append("Use wider stop-loss levels")
+        
+        if drawdown_component > 15:
+            mitigation_strategies.append("Implement strict risk management")
+            mitigation_strategies.append("Consider hedging strategies")
+        
+        if tail_component > 10:
+            mitigation_strategies.append("Prepare for extreme market moves")
+            mitigation_strategies.append("Diversify across uncorrelated assets")
+        
+        if liquidity_component > 10:
+            mitigation_strategies.append("Avoid large position sizes")
+            mitigation_strategies.append("Use limit orders for exits")
+        
+        return {
+            "basic_metrics": {
+                "volatility": float(volatility),
+                "annualized_volatility": float(annualized_volatility),
+                "mean_return": float(mean_return),
+                "annualized_return": float(mean_return * 252)
+            },
+            "var_metrics": {
+                "var_95": float(var_95),
+                "var_99": float(var_99),
+                "es_95": float(es_95),
+                "es_99": float(es_99)
+            },
+            "drawdown_metrics": {
+                "max_drawdown": float(max_drawdown),
+                "current_drawdown": float(drawdown.iloc[-1]),
+                "drawdown_duration": int((drawdown < 0).astype(int).rolling(window=len(drawdown)).sum().iloc[-1])
+            },
+            "risk_adjusted_metrics": {
+                "sharpe_ratio": float(sharpe_ratio),
+                "sortino_ratio": float(sortino_ratio),
+                "calmar_ratio": float(calmar_ratio),
+                "risk_adjusted_return": float(risk_adjusted_return)
+            },
+            "distribution_metrics": {
+                "skewness": float(skewness),
+                "kurtosis": float(kurtosis),
+                "tail_frequency": float(tail_frequency)
+            },
+            "volatility_analysis": {
+                "current_volatility": float(current_vol),
+                "volatility_percentile": float(vol_percentile),
+                "volatility_regime": vol_regime
+            },
+            "liquidity_analysis": {
+                "liquidity_score": float(liquidity_score),
+                "volume_volatility": float(volume_volatility) if 'volume' in data.columns else None
+            },
+            "correlation_analysis": {
+                "market_correlation": float(market_correlation),
+                "beta": float(beta)
+            },
+            "risk_assessment": {
+                "overall_risk_score": float(risk_score),
+                "risk_level": risk_level,
+                "risk_components": {
+                    "volatility_risk": float(vol_component),
+                    "drawdown_risk": float(drawdown_component),
+                    "tail_risk": float(tail_component),
+                    "liquidity_risk": float(liquidity_component),
+                    "correlation_risk": float(correlation_component)
+                },
+                "mitigation_strategies": mitigation_strategies
+            }
+        }
+
+    @staticmethod
+    def calculate_stress_testing_metrics(data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Calculate stress testing metrics for advanced risk assessment.
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            
+        Returns:
+            Dict containing stress testing analysis
+        """
+        if len(data) < 100:
+            return {"error": "insufficient_data_for_stress_testing"}
+        
+        # Calculate returns
+        returns = data['close'].pct_change().dropna()
+        
+        # Historical stress scenarios
+        stress_scenarios = {}
+        
+        # 1. Historical worst periods
+        rolling_20d = returns.rolling(window=20).sum()
+        rolling_60d = returns.rolling(window=60).sum()
+        rolling_252d = returns.rolling(window=252).sum()
+        
+        stress_scenarios["worst_20d"] = {
+            "return": float(rolling_20d.min()),
+            "date": str(rolling_20d.idxmin()) if rolling_20d.idxmin() else None,
+            "percentile": float((rolling_20d.rank().iloc[-1] / len(rolling_20d)) * 100)
+        }
+        
+        stress_scenarios["worst_60d"] = {
+            "return": float(rolling_60d.min()),
+            "date": str(rolling_60d.idxmin()) if rolling_60d.idxmin() else None,
+            "percentile": float((rolling_60d.rank().iloc[-1] / len(rolling_60d)) * 100)
+        }
+        
+        stress_scenarios["worst_252d"] = {
+            "return": float(rolling_252d.min()),
+            "date": str(rolling_252d.idxmin()) if rolling_252d.idxmin() else None,
+            "percentile": float((rolling_252d.rank().iloc[-1] / len(rolling_252d)) * 100)
+        }
+        
+        # 2. Volatility stress scenarios
+        rolling_vol = returns.rolling(window=20).std()
+        vol_stress = rolling_vol.quantile([0.95, 0.99])
+        
+        stress_scenarios["volatility_stress"] = {
+            "95th_percentile": float(vol_stress[0.95]),
+            "99th_percentile": float(vol_stress[0.99]),
+            "current_vol": float(rolling_vol.iloc[-1]),
+            "vol_percentile": float((rolling_vol.rank().iloc[-1] / len(rolling_vol)) * 100)
+        }
+        
+        # 3. Drawdown stress scenarios
+        cumulative_returns = (1 + returns).cumprod()
+        rolling_max = cumulative_returns.expanding().max()
+        drawdown = (cumulative_returns - rolling_max) / rolling_max
+        
+        stress_scenarios["drawdown_stress"] = {
+            "max_drawdown": float(drawdown.min()),
+            "current_drawdown": float(drawdown.iloc[-1]),
+            "avg_drawdown": float(drawdown[drawdown < 0].mean()),
+            "drawdown_frequency": float(len(drawdown[drawdown < -0.05]) / len(drawdown))
+        }
+        
+        # 4. Tail risk stress scenarios
+        tail_events_2std = len(returns[returns < -2 * returns.std()])
+        tail_events_3std = len(returns[returns < -3 * returns.std()])
+        
+        stress_scenarios["tail_risk_stress"] = {
+            "2std_events": tail_events_2std,
+            "3std_events": tail_events_3std,
+            "2std_frequency": float(tail_events_2std / len(returns)),
+            "3std_frequency": float(tail_events_3std / len(returns)),
+            "largest_daily_loss": float(returns.min()),
+            "largest_daily_gain": float(returns.max())
+        }
+        
+        # 5. Liquidity stress scenarios (if volume data available)
+        if 'volume' in data.columns:
+            volume = data['volume']
+            avg_volume = volume.mean()
+            volume_stress = volume.quantile([0.05, 0.01])
+            
+            stress_scenarios["liquidity_stress"] = {
+                "low_volume_periods": int(len(volume[volume < avg_volume * 0.5])),
+                "5th_percentile_volume": float(volume_stress[0.05]),
+                "1st_percentile_volume": float(volume_stress[0.01]),
+                "current_volume": float(volume.iloc[-1]),
+                "volume_percentile": float((volume.rank().iloc[-1] / len(volume)) * 100)
+            }
+        
+        # 6. Correlation stress scenarios (placeholder for market correlation)
+        stress_scenarios["correlation_stress"] = {
+            "market_correlation": 0.75,  # Placeholder
+            "correlation_regime": "high",  # high/medium/low
+            "correlation_impact": "moderate"  # high/moderate/low
+        }
+        
+        # 7. Scenario analysis
+        scenario_analysis = {}
+        
+        # Bear market scenario
+        bear_scenario = {
+            "market_decline": -0.20,  # 20% market decline
+            "correlation_increase": 0.9,  # Increased correlation
+            "volatility_increase": 2.0,  # Doubled volatility
+            "expected_return": float(returns.mean() - 0.20 * 0.75),  # Market impact
+            "expected_volatility": float(returns.std() * 2.0),
+            "var_95": float(returns.quantile(0.05) * 2.0),
+            "max_drawdown": float(drawdown.min() * 1.5)
+        }
+        scenario_analysis["bear_market"] = bear_scenario
+        
+        # Financial crisis scenario
+        crisis_scenario = {
+            "market_decline": -0.40,  # 40% market decline
+            "correlation_increase": 0.95,  # Very high correlation
+            "volatility_increase": 3.0,  # Tripled volatility
+            "liquidity_decrease": 0.3,  # 70% liquidity reduction
+            "expected_return": float(returns.mean() - 0.40 * 0.75),
+            "expected_volatility": float(returns.std() * 3.0),
+            "var_95": float(returns.quantile(0.05) * 3.0),
+            "max_drawdown": float(drawdown.min() * 2.0)
+        }
+        scenario_analysis["financial_crisis"] = crisis_scenario
+        
+        # Black swan scenario
+        black_swan_scenario = {
+            "market_decline": -0.60,  # 60% market decline
+            "correlation_increase": 0.98,  # Near perfect correlation
+            "volatility_increase": 5.0,  # 5x volatility
+            "liquidity_decrease": 0.1,  # 90% liquidity reduction
+            "expected_return": float(returns.mean() - 0.60 * 0.75),
+            "expected_volatility": float(returns.std() * 5.0),
+            "var_95": float(returns.quantile(0.05) * 5.0),
+            "max_drawdown": float(drawdown.min() * 3.0)
+        }
+        scenario_analysis["black_swan"] = black_swan_scenario
+        
+        # 8. Stress test summary
+        stress_summary = {
+            "overall_stress_score": 0,
+            "stress_level": "low",
+            "key_risk_factors": [],
+            "mitigation_recommendations": []
+        }
+        
+        # Calculate overall stress score
+        stress_score = 0
+        
+        # Volatility stress component
+        vol_percentile = stress_scenarios["volatility_stress"]["vol_percentile"]
+        if vol_percentile > 80:
+            stress_score += 25
+            stress_summary["key_risk_factors"].append("High current volatility")
+        elif vol_percentile > 60:
+            stress_score += 15
+        
+        # Drawdown stress component
+        current_dd = stress_scenarios["drawdown_stress"]["current_drawdown"]
+        if current_dd < -0.10:
+            stress_score += 25
+            stress_summary["key_risk_factors"].append("Significant current drawdown")
+        elif current_dd < -0.05:
+            stress_score += 15
+        
+        # Tail risk stress component
+        tail_freq = stress_scenarios["tail_risk_stress"]["2std_frequency"]
+        if tail_freq > 0.05:
+            stress_score += 20
+            stress_summary["key_risk_factors"].append("Frequent extreme events")
+        elif tail_freq > 0.025:
+            stress_score += 10
+        
+        # Liquidity stress component
+        if 'volume' in data.columns:
+            vol_percentile = stress_scenarios["liquidity_stress"]["volume_percentile"]
+            if vol_percentile < 20:
+                stress_score += 15
+                stress_summary["key_risk_factors"].append("Low current liquidity")
+            elif vol_percentile < 40:
+                stress_score += 10
+        
+        # Correlation stress component
+        stress_score += 15  # Base correlation risk
+        
+        # Determine stress level
+        if stress_score >= 70:
+            stress_summary["stress_level"] = "high"
+        elif stress_score >= 40:
+            stress_summary["stress_level"] = "medium"
+        else:
+            stress_summary["stress_level"] = "low"
+        
+        stress_summary["overall_stress_score"] = stress_score
+        
+        # Generate mitigation recommendations
+        if vol_percentile > 60:
+            stress_summary["mitigation_recommendations"].append("Implement volatility-based position sizing")
+            stress_summary["mitigation_recommendations"].append("Use wider stop-loss levels")
+        
+        if current_dd < -0.05:
+            stress_summary["mitigation_recommendations"].append("Reduce position sizes")
+            stress_summary["mitigation_recommendations"].append("Consider hedging strategies")
+        
+        if tail_freq > 0.025:
+            stress_summary["mitigation_recommendations"].append("Prepare for extreme market moves")
+            stress_summary["mitigation_recommendations"].append("Diversify across uncorrelated assets")
+        
+        if 'volume' in data.columns and vol_percentile < 40:
+            stress_summary["mitigation_recommendations"].append("Avoid large position sizes")
+            stress_summary["mitigation_recommendations"].append("Use limit orders for exits")
+        
+        return {
+            "stress_scenarios": stress_scenarios,
+            "scenario_analysis": scenario_analysis,
+            "stress_summary": stress_summary
+        }
+
+    @staticmethod
+    def calculate_scenario_analysis_metrics(data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Calculate comprehensive scenario analysis metrics.
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            
+        Returns:
+            Dict containing scenario analysis
+        """
+        if len(data) < 100:
+            return {"error": "insufficient_data_for_scenario_analysis"}
+        
+        # Calculate returns
+        returns = data['close'].pct_change().dropna()
+        
+        # Monte Carlo simulation parameters
+        n_simulations = 1000
+        n_days = 252  # One year
+        
+        # Historical parameters
+        mean_return = returns.mean()
+        std_return = returns.std()
+        
+        # Generate Monte Carlo simulations
+        np.random.seed(42)  # For reproducibility
+        simulations = np.random.normal(mean_return, std_return, (n_simulations, n_days))
+        
+        # Calculate cumulative returns for each simulation
+        cumulative_simulations = np.cumprod(1 + simulations, axis=1)
+        
+        # Scenario analysis results
+        scenario_results = {}
+        
+        # 1. Probability of different return scenarios
+        final_returns = cumulative_simulations[:, -1] - 1
+        
+        scenario_results["return_probabilities"] = {
+            "probability_positive_return": float(len(final_returns[final_returns > 0]) / n_simulations),
+            "probability_10_percent_gain": float(len(final_returns[final_returns > 0.10]) / n_simulations),
+            "probability_20_percent_gain": float(len(final_returns[final_returns > 0.20]) / n_simulations),
+            "probability_10_percent_loss": float(len(final_returns[final_returns < -0.10]) / n_simulations),
+            "probability_20_percent_loss": float(len(final_returns[final_returns < -0.20]) / n_simulations),
+            "probability_30_percent_loss": float(len(final_returns[final_returns < -0.30]) / n_simulations)
+        }
+        
+        # 2. Expected value analysis
+        scenario_results["expected_values"] = {
+            "expected_annual_return": float(np.mean(final_returns)),
+            "expected_annual_volatility": float(np.std(final_returns)),
+            "best_case_scenario": float(np.percentile(final_returns, 95)),
+            "worst_case_scenario": float(np.percentile(final_returns, 5)),
+            "median_scenario": float(np.percentile(final_returns, 50))
+        }
+        
+        # 3. Risk-adjusted scenario analysis
+        sharpe_ratios = final_returns / np.std(final_returns)
+        scenario_results["risk_adjusted_scenarios"] = {
+            "probability_positive_sharpe": float(len(sharpe_ratios[sharpe_ratios > 0]) / n_simulations),
+            "probability_sharpe_above_1": float(len(sharpe_ratios[sharpe_ratios > 1]) / n_simulations),
+            "probability_sharpe_above_2": float(len(sharpe_ratios[sharpe_ratios > 2]) / n_simulations),
+            "average_sharpe_ratio": float(np.mean(sharpe_ratios)),
+            "sharpe_ratio_95th_percentile": float(np.percentile(sharpe_ratios, 95))
+        }
+        
+        # 4. Drawdown analysis for scenarios
+        max_drawdowns = []
+        for sim in cumulative_simulations:
+            rolling_max = np.maximum.accumulate(sim)
+            drawdown = (sim - rolling_max) / rolling_max
+            max_drawdowns.append(np.min(drawdown))
+        
+        scenario_results["drawdown_scenarios"] = {
+            "probability_max_dd_less_10": float(len([dd for dd in max_drawdowns if dd > -0.10]) / n_simulations),
+            "probability_max_dd_less_20": float(len([dd for dd in max_drawdowns if dd > -0.20]) / n_simulations),
+            "probability_max_dd_less_30": float(len([dd for dd in max_drawdowns if dd > -0.30]) / n_simulations),
+            "expected_max_drawdown": float(np.mean(max_drawdowns)),
+            "worst_case_drawdown": float(np.percentile(max_drawdowns, 5))
+        }
+        
+        # 5. Time to recovery analysis
+        recovery_times = []
+        for sim in cumulative_simulations:
+            rolling_max = np.maximum.accumulate(sim)
+            drawdown = (sim - rolling_max) / rolling_max
+            # Find time to recover from maximum drawdown
+            max_dd_idx = np.argmin(drawdown)
+            if max_dd_idx < len(sim) - 1:
+                recovery_idx = max_dd_idx + np.argmax(sim[max_dd_idx:] >= rolling_max[max_dd_idx])
+                recovery_time = recovery_idx - max_dd_idx
+                recovery_times.append(recovery_time)
+        
+        if recovery_times:
+            scenario_results["recovery_analysis"] = {
+                "expected_recovery_time": float(np.mean(recovery_times)),
+                "median_recovery_time": float(np.median(recovery_times)),
+                "probability_recovery_within_30_days": float(len([rt for rt in recovery_times if rt <= 30]) / len(recovery_times)),
+                "probability_recovery_within_60_days": float(len([rt for rt in recovery_times if rt <= 60]) / len(recovery_times)),
+                "probability_recovery_within_90_days": float(len([rt for rt in recovery_times if rt <= 90]) / len(recovery_times))
+            }
+        else:
+            scenario_results["recovery_analysis"] = {
+                "expected_recovery_time": None,
+                "median_recovery_time": None,
+                "probability_recovery_within_30_days": None,
+                "probability_recovery_within_60_days": None,
+                "probability_recovery_within_90_days": None
+            }
+        
+        # 6. Volatility regime scenarios
+        volatility_scenarios = {
+            "low_volatility": std_return * 0.5,
+            "normal_volatility": std_return,
+            "high_volatility": std_return * 2.0,
+            "extreme_volatility": std_return * 3.0
+        }
+        
+        vol_scenario_results = {}
+        for vol_name, vol_level in volatility_scenarios.items():
+            vol_simulations = np.random.normal(mean_return, vol_level, (n_simulations, n_days))
+            vol_final_returns = np.cumprod(1 + vol_simulations, axis=1)[:, -1] - 1
+            
+            vol_scenario_results[vol_name] = {
+                "expected_return": float(np.mean(vol_final_returns)),
+                "expected_volatility": float(np.std(vol_final_returns)),
+                "probability_positive_return": float(len(vol_final_returns[vol_final_returns > 0]) / n_simulations),
+                "probability_20_percent_loss": float(len(vol_final_returns[vol_final_returns < -0.20]) / n_simulations)
+            }
+        
+        scenario_results["volatility_regime_scenarios"] = vol_scenario_results
+        
+        # 7. Correlation scenarios (placeholder for market correlation)
+        correlation_scenarios = {
+            "low_correlation": 0.3,
+            "normal_correlation": 0.6,
+            "high_correlation": 0.8,
+            "extreme_correlation": 0.95
+        }
+        
+        corr_scenario_results = {}
+        for corr_name, corr_level in correlation_scenarios.items():
+            # Simulate market impact based on correlation
+            market_return = -0.10  # 10% market decline
+            correlated_return = mean_return + corr_level * market_return
+            
+            corr_scenario_results[corr_name] = {
+                "expected_return": float(correlated_return),
+                "market_impact": float(corr_level * market_return),
+                "correlation_level": corr_level
+            }
+        
+        scenario_results["correlation_scenarios"] = corr_scenario_results
+        
+        # 8. Scenario summary and recommendations
+        scenario_summary = {
+            "overall_risk_level": "medium",
+            "key_scenario_insights": [],
+            "recommended_actions": []
+        }
+        
+        # Determine overall risk level
+        prob_20pct_loss = scenario_results["return_probabilities"]["probability_20_percent_loss"]
+        expected_max_dd = scenario_results["drawdown_scenarios"]["expected_max_drawdown"]
+        
+        if prob_20pct_loss > 0.15 or expected_max_dd < -0.25:
+            scenario_summary["overall_risk_level"] = "high"
+        elif prob_20pct_loss > 0.08 or expected_max_dd < -0.15:
+            scenario_summary["overall_risk_level"] = "medium"
+        else:
+            scenario_summary["overall_risk_level"] = "low"
+        
+        # Generate insights
+        if prob_20pct_loss > 0.10:
+            scenario_summary["key_scenario_insights"].append("Significant probability of large losses")
+        
+        if expected_max_dd < -0.20:
+            scenario_summary["key_scenario_insights"].append("Expected large maximum drawdowns")
+        
+        prob_positive = scenario_results["return_probabilities"]["probability_positive_return"]
+        if prob_positive < 0.6:
+            scenario_summary["key_scenario_insights"].append("Low probability of positive returns")
+        
+        # Generate recommendations
+        if scenario_summary["overall_risk_level"] == "high":
+            scenario_summary["recommended_actions"].append("Reduce position sizes significantly")
+            scenario_summary["recommended_actions"].append("Implement strict stop-loss levels")
+            scenario_summary["recommended_actions"].append("Consider hedging strategies")
+        elif scenario_summary["overall_risk_level"] == "medium":
+            scenario_summary["recommended_actions"].append("Moderate position sizing")
+            scenario_summary["recommended_actions"].append("Use standard risk management")
+        else:
+            scenario_summary["recommended_actions"].append("Normal position sizing acceptable")
+            scenario_summary["recommended_actions"].append("Standard risk management sufficient")
+        
+        return {
+            "scenario_results": scenario_results,
+            "scenario_summary": scenario_summary
+        }
 
 
 class IndicatorComparisonAnalyzer:
@@ -1018,40 +2285,111 @@ class IndicatorComparisonAnalyzer:
         # Analyze Volume
         volume_data = indicators['volume']
         
-        # Volume trend
-        if volume_data['volume_ratio'] > 1.5:
-            if bullish_signals > bearish_signals:
-                bullish_signals += 1
-                signal_details.append({
-                    'indicator': 'Volume',
-                    'signal': 'bullish',
-                    'strength': 'strong',
-                    'description': f"Volume is {volume_data['volume_ratio']:.2f}x average, confirming price movement"
-                })
-            elif bearish_signals > bullish_signals:
-                bearish_signals += 1
-                signal_details.append({
-                    'indicator': 'Volume',
-                    'signal': 'bearish',
-                    'strength': 'strong',
-                    'description': f"Volume is {volume_data['volume_ratio']:.2f}x average, confirming price movement"
-                })
-            else:
+        # Enhanced Volume Analysis
+        if 'enhanced_volume' in indicators and 'comprehensive_analysis' in indicators['enhanced_volume']:
+            vol_analysis = indicators['enhanced_volume']['comprehensive_analysis']
+            
+            # Primary volume ratio analysis
+            primary_ratio = vol_analysis['volume_ratios']['primary_ratio']
+            if primary_ratio > 1.5:
+                if bullish_signals > bearish_signals:
+                    bullish_signals += 1
+                    signal_details.append({
+                        'indicator': 'Volume',
+                        'signal': 'bullish',
+                        'strength': 'strong',
+                        'description': f"Volume is {primary_ratio:.2f}x average, confirming price movement"
+                    })
+                elif bearish_signals > bullish_signals:
+                    bearish_signals += 1
+                    signal_details.append({
+                        'indicator': 'Volume',
+                        'signal': 'bearish',
+                        'strength': 'strong',
+                        'description': f"Volume is {primary_ratio:.2f}x average, confirming price movement"
+                    })
+                else:
+                    neutral_signals += 1
+                    signal_details.append({
+                        'indicator': 'Volume',
+                        'signal': 'neutral',
+                        'strength': 'moderate',
+                        'description': f"Volume is {primary_ratio:.2f}x average, but price direction is unclear"
+                    })
+            elif primary_ratio < 0.5:
                 neutral_signals += 1
                 signal_details.append({
                     'indicator': 'Volume',
                     'signal': 'neutral',
-                    'strength': 'moderate',
-                    'description': f"Volume is {volume_data['volume_ratio']:.2f}x average, but price direction is unclear"
+                    'strength': 'weak',
+                    'description': f"Volume is low ({primary_ratio:.2f}x average), indicating lack of conviction"
                 })
-        elif volume_data['volume_ratio'] < 0.5:
-            neutral_signals += 1
-            signal_details.append({
-                'indicator': 'Volume',
-                'signal': 'neutral',
-                'strength': 'weak',
-                'description': f"Volume is low ({volume_data['volume_ratio']:.2f}x average), indicating lack of conviction"
-            })
+            
+            # Volume confirmation analysis
+            if vol_analysis['volume_confirmation']['confirmation_status'] == 'confirmed':
+                if vol_analysis['volume_confirmation']['strength'] == 'strong':
+                    if bullish_signals > bearish_signals:
+                        bullish_signals += 1
+                    elif bearish_signals > bullish_signals:
+                        bearish_signals += 1
+                    signal_details.append({
+                        'indicator': 'Volume Confirmation',
+                        'signal': 'bullish' if bullish_signals > bearish_signals else 'bearish',
+                        'strength': 'strong',
+                        'description': f"Strong volume confirmation with {primary_ratio:.2f}x average volume"
+                    })
+            
+            # Volume strength score
+            volume_strength = vol_analysis['volume_strength_score']
+            if volume_strength > 70:
+                signal_details.append({
+                    'indicator': 'Volume Strength',
+                    'signal': 'bullish' if bullish_signals > bearish_signals else 'bearish',
+                    'strength': 'strong',
+                    'description': f"High volume strength score ({volume_strength}/100) indicating strong conviction"
+                })
+            elif volume_strength < 30:
+                signal_details.append({
+                    'indicator': 'Volume Strength',
+                    'signal': 'neutral',
+                    'strength': 'weak',
+                    'description': f"Low volume strength score ({volume_strength}/100) indicating weak conviction"
+                })
+        else:
+            # Fallback to basic volume analysis
+            if volume_data['volume_ratio'] > 1.5:
+                if bullish_signals > bearish_signals:
+                    bullish_signals += 1
+                    signal_details.append({
+                        'indicator': 'Volume',
+                        'signal': 'bullish',
+                        'strength': 'strong',
+                        'description': f"Volume is {volume_data['volume_ratio']:.2f}x average, confirming price movement"
+                    })
+                elif bearish_signals > bullish_signals:
+                    bearish_signals += 1
+                    signal_details.append({
+                        'indicator': 'Volume',
+                        'signal': 'bearish',
+                        'strength': 'strong',
+                        'description': f"Volume is {volume_data['volume_ratio']:.2f}x average, confirming price movement"
+                    })
+                else:
+                    neutral_signals += 1
+                    signal_details.append({
+                        'indicator': 'Volume',
+                        'signal': 'neutral',
+                        'strength': 'moderate',
+                        'description': f"Volume is {volume_data['volume_ratio']:.2f}x average, but price direction is unclear"
+                    })
+            elif volume_data['volume_ratio'] < 0.5:
+                neutral_signals += 1
+                signal_details.append({
+                    'indicator': 'Volume',
+                    'signal': 'neutral',
+                    'strength': 'weak',
+                    'description': f"Volume is low ({volume_data['volume_ratio']:.2f}x average), indicating lack of conviction"
+                })
         
         # OBV trend
         if 'obv_trend' in volume_data:

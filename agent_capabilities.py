@@ -311,6 +311,66 @@ class StockAnalysisOrchestrator:
         chart_paths = None
         if output_dir is not None:
             chart_paths = self.create_visualizations(data, state.indicators, symbol, output_dir)
+            
+            # Add Phase 2 pattern visualizations
+            head_and_shoulders = PatternRecognition.detect_head_and_shoulders(data['close'])
+            inverse_head_and_shoulders = PatternRecognition.detect_inverse_head_and_shoulders(data['close'])
+            cup_and_handle = PatternRecognition.detect_cup_and_handle(data['close'])
+            
+            if head_and_shoulders:
+                PatternVisualizer.plot_head_and_shoulders_pattern(
+                    data, head_and_shoulders, 
+                    os.path.join(output_dir, 'head_and_shoulders.png')
+                )
+            
+            if inverse_head_and_shoulders:
+                PatternVisualizer.plot_inverse_head_and_shoulders_pattern(
+                    data, inverse_head_and_shoulders, 
+                    os.path.join(output_dir, 'inverse_head_and_shoulders.png')
+                )
+            
+            if cup_and_handle:
+                PatternVisualizer.plot_cup_and_handle_pattern(
+                    data, cup_and_handle, 
+                    os.path.join(output_dir, 'cup_and_handle.png')
+                )
+            
+            # Multi-timeframe analysis chart
+            if 'multi_timeframe' in state.indicators and 'error' not in state.indicators['multi_timeframe']:
+                PatternVisualizer.plot_multi_timeframe_analysis(
+                    data, state.indicators['multi_timeframe'], 
+                    os.path.join(output_dir, 'multi_timeframe_analysis.png')
+                )
+            
+            # Phase 3 complex pattern visualizations
+            triple_tops = PatternRecognition.detect_triple_top(data['close'])
+            triple_bottoms = PatternRecognition.detect_triple_bottom(data['close'])
+            wedge_patterns = PatternRecognition.detect_wedge_patterns(data['close'])
+            channel_patterns = PatternRecognition.detect_channel_patterns(data['close'])
+            
+            if triple_tops:
+                PatternVisualizer.plot_triple_top_pattern(
+                    data, triple_tops, 
+                    os.path.join(output_dir, 'triple_tops.png')
+                )
+            
+            if triple_bottoms:
+                PatternVisualizer.plot_triple_bottom_pattern(
+                    data, triple_bottoms, 
+                    os.path.join(output_dir, 'triple_bottoms.png')
+                )
+            
+            if wedge_patterns:
+                PatternVisualizer.plot_wedge_patterns(
+                    data, wedge_patterns, 
+                    os.path.join(output_dir, 'wedge_patterns.png')
+                )
+            
+            if channel_patterns:
+                PatternVisualizer.plot_channel_patterns(
+                    data, channel_patterns, 
+                    os.path.join(output_dir, 'channel_patterns.png')
+                )
 
         # Get AI analysis (async)
         ai_analysis, ind_summary_md, chart_insights_md = await self.analyze_with_ai(
@@ -366,6 +426,28 @@ class StockAnalysisOrchestrator:
             }
             for b1, b2 in double_bottoms
         ]
+
+        # --- ADVANCED PATTERNS (PHASE 2) ---
+        head_and_shoulders = PatternRecognition.detect_head_and_shoulders(data['close'])
+        inverse_head_and_shoulders = PatternRecognition.detect_inverse_head_and_shoulders(data['close'])
+        cup_and_handle = PatternRecognition.detect_cup_and_handle(data['close'])
+        
+        # --- COMPLEX PATTERNS (PHASE 3) ---
+        triple_tops = PatternRecognition.detect_triple_top(data['close'])
+        triple_bottoms = PatternRecognition.detect_triple_bottom(data['close'])
+        wedge_patterns = PatternRecognition.detect_wedge_patterns(data['close'])
+        channel_patterns = PatternRecognition.detect_channel_patterns(data['close'])
+        
+        # Format advanced patterns for output
+        advanced_patterns = {
+            "head_and_shoulders": head_and_shoulders,
+            "inverse_head_and_shoulders": inverse_head_and_shoulders,
+            "cup_and_handle": cup_and_handle,
+            "triple_tops": triple_tops,
+            "triple_bottoms": triple_bottoms,
+            "wedge_patterns": wedge_patterns,
+            "channel_patterns": channel_patterns
+        }
 
         # --- DIVERGENCES ---
         rsi = TechnicalIndicators.calculate_rsi(data)
@@ -446,8 +528,8 @@ class StockAnalysisOrchestrator:
             # Get market context
             market_context = self.market_context_provider.get_market_context(symbol)
             
-            # Get fundamental data
-            fundamental_data = self.market_context_provider.get_fundamental_data(symbol)
+            # Get technical context
+            technical_context = self.market_context_provider.get_technical_context(symbol)
             
             # Get news events for the analysis period
             date_range = [
@@ -463,7 +545,7 @@ class StockAnalysisOrchestrator:
             
             additional_context = {
                 "market_context": market_context,
-                "fundamental_data": fundamental_data,
+                "technical_context": technical_context,
                 "news_events": news_events,
                 "volume_price_correlation": volume_correlation,
                 "analysis_period": {
@@ -481,7 +563,7 @@ class StockAnalysisOrchestrator:
             return {
                 "error": f"Failed to gather additional context: {str(e)}",
                 "market_context": {},
-                "fundamental_data": {},
+                "technical_context": {},
                 "news_events": {},
                 "volume_price_correlation": {}
             }
