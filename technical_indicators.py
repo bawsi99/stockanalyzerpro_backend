@@ -5,12 +5,16 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from typing import Dict, List, Any, Tuple, Callable
 import matplotlib.dates as mdates
-
 import os
 
 # Add new imports for pattern modules
 from patterns.recognition import PatternRecognition
 from patterns.visualization import PatternVisualizer
+
+# Add new imports for configuration and optimization
+from config import Config
+from cache_manager import cached, monitor_performance
+from market_data_integration import get_market_metrics
 
 
 class TechnicalIndicators:
@@ -90,21 +94,32 @@ class TechnicalIndicators:
         return data[column].rolling(window=window).apply(lambda x: np.sum(weights * x) / weights.sum(), raw=True)
     
     @staticmethod
-    def calculate_macd(data: pd.DataFrame, column: str = 'close', fast_period: int = 12, 
-                      slow_period: int = 26, signal_period: int = 9) -> Tuple[pd.Series, pd.Series, pd.Series]:
+    @cached(ttl=600, key_prefix="macd")  # Cache for 10 minutes
+    @monitor_performance("calculate_macd")
+    def calculate_macd(data: pd.DataFrame, column: str = 'close', fast_period: int = None, 
+                      slow_period: int = None, signal_period: int = None) -> Tuple[pd.Series, pd.Series, pd.Series]:
         """
         Calculate MACD (Moving Average Convergence Divergence).
         
         Args:
             data: DataFrame containing price data
             column: Column name to use for calculation
-            fast_period: Fast EMA period
-            slow_period: Slow EMA period
-            signal_period: Signal line period
+            fast_period: Fast EMA period (uses config default if None)
+            slow_period: Slow EMA period (uses config default if None)
+            signal_period: Signal line period (uses config default if None)
             
         Returns:
             Tuple[pd.Series, pd.Series, pd.Series]: MACD line, signal line, and histogram
         """
+        # Use configuration defaults if not specified
+        macd_config = Config.get("technical_indicators", "macd", {})
+        if fast_period is None:
+            fast_period = macd_config.get("fast_period", 12)
+        if slow_period is None:
+            slow_period = macd_config.get("slow_period", 26)
+        if signal_period is None:
+            signal_period = macd_config.get("signal_period", 9)
+        
         fast_ema = TechnicalIndicators.calculate_ema(data, column, fast_period)
         slow_ema = TechnicalIndicators.calculate_ema(data, column, slow_period)
         
@@ -115,18 +130,24 @@ class TechnicalIndicators:
         return macd_line, signal_line, histogram
     
     @staticmethod
-    def calculate_rsi(data: pd.DataFrame, column: str = 'close', window: int = 14) -> pd.Series:
+    @cached(ttl=600, key_prefix="rsi")  # Cache for 10 minutes
+    @monitor_performance("calculate_rsi")
+    def calculate_rsi(data: pd.DataFrame, column: str = 'close', window: int = None) -> pd.Series:
         """
         Calculate Relative Strength Index.
         
         Args:
             data: DataFrame containing price data
             column: Column name to use for calculation
-            window: RSI period
+            window: RSI period (uses config default if None)
             
         Returns:
             pd.Series: RSI values
         """
+        # Use configuration default if window not specified
+        if window is None:
+            window = Config.get("technical_indicators", "rsi", {}).get("period", 14)
+        
         delta = data[column].diff()
         
         gain = delta.copy()
@@ -1398,22 +1419,28 @@ class TechnicalIndicators:
         skewness = returns.skew()
         kurtosis = returns.kurtosis()
         
-        # Beta calculation (if market data available)
-        # This would need market index data for proper calculation
-        beta = 1.0  # Placeholder
+        # Get real market data for beta and correlation
+        market_metrics = get_market_metrics(data)
+        beta = market_metrics["beta"]
+        market_correlation = market_metrics["correlation"]
+        risk_free_rate = market_metrics["risk_free_rate"]
         
-        # Risk-adjusted returns
-        risk_adjusted_return = mean_return / annualized_volatility if annualized_volatility > 0 else 0
+        # Risk-adjusted returns using real risk-free rate
+        risk_adjusted_return = (mean_return - risk_free_rate / 252) / annualized_volatility if annualized_volatility > 0 else 0
         
         # Volatility regime analysis
         rolling_vol = returns.rolling(window=20).std()
         current_vol = rolling_vol.iloc[-1]
         vol_percentile = (rolling_vol.rank().iloc[-1] / len(rolling_vol)) * 100
         
-        # Volatility regime classification
-        if vol_percentile > 80:
+        # Volatility regime classification using configurable thresholds
+        vol_thresholds = Config.get("risk", "stress_testing", {}).get("volatility_percentiles", [0.95, 0.99])
+        vol_high_threshold = vol_thresholds[0] * 100 if len(vol_thresholds) > 0 else 80
+        vol_low_threshold = (1 - vol_thresholds[0]) * 100 if len(vol_thresholds) > 0 else 20
+        
+        if vol_percentile > vol_high_threshold:
             vol_regime = "high"
-        elif vol_percentile < 20:
+        elif vol_percentile < vol_low_threshold:
             vol_regime = "low"
         else:
             vol_regime = "normal"
@@ -1421,9 +1448,6 @@ class TechnicalIndicators:
         # Tail risk analysis
         tail_events = len(returns[returns < var_95])
         tail_frequency = tail_events / len(returns)
-        
-        # Correlation analysis (placeholder for market correlation)
-        market_correlation = 0.75  # Placeholder
         
         # Liquidity risk (if volume data available)
         if 'volume' in data.columns:
@@ -1777,9 +1801,9 @@ class TechnicalIndicators:
         # Calculate returns
         returns = data['close'].pct_change().dropna()
         
-        # Monte Carlo simulation parameters
-        n_simulations = 1000
-        n_days = 252  # One year
+        # Monte Carlo simulation parameters from configuration
+        n_simulations = Config.get("performance", "monte_carlo_simulations", 1000)
+        n_days = Config.get("performance", "monte_carlo_days", 252)  # One year
         
         # Historical parameters
         mean_return = returns.mean()
