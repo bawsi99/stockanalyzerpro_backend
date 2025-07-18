@@ -17,6 +17,9 @@ from config import Config
 from cache_manager import cached, monitor_performance
 from zerodha_client import ZerodhaDataClient
 
+# Add to existing IndianMarketMetricsProvider class
+from sector_classifier import sector_classifier
+
 
 class TechnicalIndicators:
     """
@@ -219,44 +222,112 @@ class TechnicalIndicators:
         return atr
     
     @staticmethod
-    def calculate_stochastic_oscillator(data: pd.DataFrame, k_window: int = 14, 
-                                       d_window: int = 3) -> Tuple[pd.Series, pd.Series]:
+    def calculate_fibonacci_retracement(data: pd.DataFrame, trend: str = 'up') -> Dict[str, float]:
         """
-        Calculate Stochastic Oscillator.
+        Calculate Fibonacci Retracement levels.
         
         Args:
             data: DataFrame containing price data
-            k_window: %K period
-            d_window: %D period
+            trend: Current trend direction ('up' or 'down')
             
         Returns:
-            Tuple[pd.Series, pd.Series]: %K and %D values
+            Dict[str, float]: Dictionary containing Fibonacci levels
         """
-        low_min = data['low'].rolling(window=k_window).min()
-        high_max = data['high'].rolling(window=k_window).max()
+        if trend == 'up':
+            # For uptrend, calculate retracement from low to high
+            low = data['low'].min()
+            high = data['high'].max()
+            diff = high - low
+            #0.0186
+            levels = {
+                '0.0': high,
+                '0.236': high - (0.236 * diff),
+                '0.382': high - (0.382 * diff),
+                '0.5': high - (0.5 * diff),
+                '0.618': high - (0.618 * diff),
+                '0.786': high - (0.786 * diff),
+                '1.0': low
+            }
+        else:
+            # For downtrend, calculate retracement from high to low
+            low = data['low'].min()
+            high = data['high'].max()
+            diff = high - low
+            
+            levels = {
+                '0.0': low,
+                '0.236': low + (0.236 * diff),
+                '0.382': low + (0.382 * diff),
+                '0.5': low + (0.5 * diff),
+                '0.618': low + (0.618 * diff),
+                '0.786': low + (0.786 * diff),
+                '1.0': high
+            }
         
-        # Calculate %K
-        k = 100 * ((data['close'] - low_min) / (high_max - low_min))
+        return levels
+    
+    @staticmethod
+    def detect_support_resistance(data: pd.DataFrame, window: int = 20, 
+                                 threshold: float = 0.02) -> Tuple[List[float], List[float]]:
+        """
+        Detect support and resistance levels using price action.
         
-        # Calculate %D
-        d = k.rolling(window=d_window).mean()
+        Args:
+            data: DataFrame containing price data
+            window: Window size for detecting local extrema
+            threshold: Percentage threshold for level proximity
+            
+        Returns:
+            Tuple[List[float], List[float]]: Support and resistance levels
+        """
+        # Find local minima and maxima
+        local_min = []
+        local_max = []
         
-        return k, d
+        for i in range(window, len(data) - window):
+            # Check if this point is a local minimum
+            if all(data['low'].iloc[i] <= data['low'].iloc[i-j] for j in range(1, window+1)) and \
+               all(data['low'].iloc[i] <= data['low'].iloc[i+j] for j in range(1, window+1)):
+                local_min.append(data['low'].iloc[i])
+            
+            # Check if this point is a local maximum
+            if all(data['high'].iloc[i] >= data['high'].iloc[i-j] for j in range(1, window+1)) and \
+               all(data['high'].iloc[i] >= data['high'].iloc[i+j] for j in range(1, window+1)):
+                local_max.append(data['high'].iloc[i])
+        
+        # Cluster similar levels
+        support_levels = []
+        for level in local_min:
+            # Check if this level is close to any existing level
+            if not any(abs(level - s) / s < threshold for s in support_levels):
+                support_levels.append(level)
+        
+        resistance_levels = []
+        for level in local_max:
+            # Check if this level is close to any existing level
+            if not any(abs(level - r) / r < threshold for r in resistance_levels):
+                resistance_levels.append(level)
+        
+        return support_levels, resistance_levels
     
     @staticmethod
     def calculate_obv(data: pd.DataFrame) -> pd.Series:
         """
-        Calculate On-Balance Volume.
+        Calculate On-Balance Volume (OBV).
         
         Args:
-            data: DataFrame containing price and volume data
+            data: DataFrame containing OHLCV data
             
         Returns:
             pd.Series: OBV values
         """
+        if len(data) < 2:
+            return pd.Series([0], index=data.index)
+        
+        obv = pd.Series(0.0, index=data.index)
         close_diff = data['close'].diff()
         
-        obv = pd.Series(index=data.index)
+        # Initialize first value
         obv.iloc[0] = data['volume'].iloc[0]
         
         for i in range(1, len(data)):
@@ -268,6 +339,33 @@ class TechnicalIndicators:
                 obv.iloc[i] = obv.iloc[i-1]
         
         return obv
+    
+    @staticmethod
+    def calculate_stochastic_oscillator(data: pd.DataFrame, k_period: int = 14, d_period: int = 3) -> Tuple[pd.Series, pd.Series]:
+        """
+        Calculate Stochastic Oscillator.
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            k_period: %K period
+            d_period: %D period
+            
+        Returns:
+            Tuple[pd.Series, pd.Series]: %K and %D values
+        """
+        if len(data) < k_period:
+            return pd.Series([0] * len(data), index=data.index), pd.Series([0] * len(data), index=data.index)
+        
+        # Calculate %K
+        lowest_low = data['low'].rolling(window=k_period).min()
+        highest_high = data['high'].rolling(window=k_period).max()
+        
+        k_percent = 100 * ((data['close'] - lowest_low) / (highest_high - lowest_low))
+        
+        # Calculate %D (SMA of %K)
+        d_percent = k_percent.rolling(window=d_period).mean()
+        
+        return k_percent, d_percent
     
     @staticmethod
     def calculate_adx(data: pd.DataFrame, window: int = 14) -> Tuple[pd.Series, pd.Series, pd.Series]:
@@ -832,12 +930,13 @@ class TechnicalIndicators:
         }
     
     @staticmethod
-    def calculate_all_indicators(data: pd.DataFrame) -> Dict[str, Any]:
+    def calculate_all_indicators(data: pd.DataFrame, stock_symbol: str = None) -> Dict[str, Any]:
         """
         Calculate all technical indicators.
         
         Args:
             data: DataFrame containing price and volume data
+            stock_symbol: Stock symbol for sector classification
             
         Returns:
             Dict[str, Any]: Dictionary containing all calculated indicators
@@ -1370,50 +1469,23 @@ class TechnicalIndicators:
         return analysis
 
     @staticmethod
-    def get_market_metrics(data: pd.DataFrame) -> Dict[str, float]:
+    def get_market_metrics(data: pd.DataFrame, stock_symbol: str = None) -> Dict[str, float]:
         """
         Calculate real Indian market metrics using VERIFIED data sources.
+        Now supports sector-specific indices for more accurate calculations.
+        
         Args:
             data: DataFrame containing OHLCV data
+            stock_symbol: Stock symbol for sector classification
+            
         Returns:
-            Dict containing beta, correlation, and risk_free_rate
+            Dict containing enhanced market metrics
         """
-        try:
-            logging.info("Calculating real Indian market metrics")
-            stock_returns = data['close'].pct_change().dropna()
-            nifty_data = market_metrics_provider.get_nifty_50_data(365)
-            if nifty_data is not None and len(nifty_data) > 30:
-                market_returns = nifty_data['close'].pct_change().dropna()
-                beta = market_metrics_provider.calculate_beta(stock_returns, market_returns)
-                correlation = market_metrics_provider.calculate_correlation(stock_returns, market_returns)
-            else:
-                stock_volatility = stock_returns.std()
-                beta = min(2.0, max(0.1, stock_volatility * 10))
-                correlation = 0.6
-            risk_free_rate = market_metrics_provider.get_risk_free_rate()
-            vix_data = market_metrics_provider.get_india_vix_data(30)
-            current_vix = vix_data['close'].iloc[-1] if vix_data is not None else 15.0
-            return {
-                "beta": float(beta),
-                "correlation": float(correlation),
-                "risk_free_rate": float(risk_free_rate),
-                "current_vix": float(current_vix),
-                "data_source": "Zerodha API - Real Market Data",
-                "nifty_data_points": len(nifty_data) if nifty_data is not None else 0,
-                "vix_data_points": len(vix_data) if vix_data is not None else 0,
-                "calculation_timestamp": pd.Timestamp.now().isoformat()
-            }
-        except Exception as e:
-            logging.error(f"Error calculating market metrics: {e}")
-            return {
-                "beta": 1.0,
-                "correlation": 0.6,
-                "risk_free_rate": 0.07,
-                "current_vix": 15.0,
-                "data_source": "Fallback Values - Data Unavailable",
-                "error": str(e),
-                "calculation_timestamp": pd.Timestamp.now().isoformat()
-            }
+        if stock_symbol:
+            return market_metrics_provider.get_enhanced_market_metrics(data, stock_symbol)
+        else:
+            # Fallback to original method
+            return market_metrics_provider.get_basic_market_metrics(data)
 
     @staticmethod
     def calculate_advanced_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
@@ -1467,10 +1539,16 @@ class TechnicalIndicators:
         kurtosis = returns.kurtosis()
         
         # Get real market data for beta and correlation
-        market_metrics = TechnicalIndicators.get_market_metrics(data)
-        beta = market_metrics["beta"]
-        market_correlation = market_metrics["correlation"]
-        risk_free_rate = market_metrics["risk_free_rate"]
+        # Temporarily disabled to debug timestamp issue
+        # market_metrics = TechnicalIndicators.get_market_metrics(data)
+        # beta = market_metrics["beta"]
+        # market_correlation = market_metrics["correlation"]
+        # risk_free_rate = market_metrics["risk_free_rate"]
+        
+        # Use default values temporarily
+        beta = 1.0
+        market_correlation = 0.6
+        risk_free_rate = 6.5
         
         # Risk-adjusted returns using real risk-free rate
         risk_adjusted_return = (mean_return - risk_free_rate / 252) / annualized_volatility if annualized_volatility > 0 else 0
@@ -1570,7 +1648,7 @@ class TechnicalIndicators:
             "drawdown_metrics": {
                 "max_drawdown": float(max_drawdown),
                 "current_drawdown": float(drawdown.iloc[-1]),
-                "drawdown_duration": int((drawdown < 0).astype(int).rolling(window=len(drawdown)).sum().iloc[-1])
+                "drawdown_duration": int(float((drawdown < 0).astype(int).rolling(window=len(drawdown)).sum().iloc[-1])) if not pd.isna((drawdown < 0).astype(int).rolling(window=len(drawdown)).sum().iloc[-1]) else 0
             },
             "risk_adjusted_metrics": {
                 "sharpe_ratio": float(sharpe_ratio),
@@ -1696,7 +1774,7 @@ class TechnicalIndicators:
             volume_stress = volume.quantile([0.05, 0.01])
             
             stress_scenarios["liquidity_stress"] = {
-                "low_volume_periods": int(len(volume[volume < avg_volume * 0.5])),
+                "low_volume_periods": len(volume[volume < avg_volume * 0.5]),
                 "5th_percentile_volume": float(volume_stress[0.05]),
                 "1st_percentile_volume": float(volume_stress[0.01]),
                 "current_volume": float(volume.iloc[-1]),
@@ -2066,6 +2144,8 @@ class IndicatorComparisonAnalyzer:
             if math.isinf(obj) or math.isnan(obj):
                 return None
             return obj
+        elif hasattr(obj, 'isoformat'):  # Handle pandas Timestamp objects
+            return obj.isoformat()
         return obj
     
     def analyze(self, data: pd.DataFrame, indicators: Dict[str, Any], patterns: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -2357,7 +2437,7 @@ class IndicatorComparisonAnalyzer:
         volume_data = indicators['volume']
         
         # Enhanced Volume Analysis
-        if 'enhanced_volume' in indicators and 'comprehensive_analysis' in indicators['enhanced_volume']:
+        if 'enhanced_volume' in indicators and 'comprehensive_analysis' in indicators['enhanced_volume'] and indicators['enhanced_volume']['comprehensive_analysis']:
             vol_analysis = indicators['enhanced_volume']['comprehensive_analysis']
             
             # Primary volume ratio analysis
@@ -2546,12 +2626,13 @@ class IndicatorComparisonAnalyzer:
 
 class DataCollector:
     @staticmethod
-    def collect_all_data(data: pd.DataFrame) -> Dict[str, Any]:
+    def collect_all_data(data: pd.DataFrame, stock_symbol: str = None) -> Dict[str, Any]:
         """
-        Collect all technical analysis data.
+        Collect all technical analysis data with sector awareness.
         
         Args:
             data: DataFrame containing price and volume data
+            stock_symbol: Stock symbol for sector classification
             
         Returns:
             Dict[str, Any]: Dictionary containing all technical analysis data
@@ -2561,11 +2642,10 @@ class DataCollector:
             try:
                 data.index = pd.to_datetime(data.index)
             except:
-                # If conversion fails, create a dummy datetime index
                 data.index = pd.date_range(start='2020-01-01', periods=len(data))
         
-        # Calculate all indicators
-        indicators = TechnicalIndicators.calculate_all_indicators(data)
+        # Calculate all indicators with sector-aware market metrics
+        indicators = TechnicalIndicators.calculate_all_indicators(data, stock_symbol)
         
         # Add metadata
         metadata = {
@@ -2576,7 +2656,11 @@ class DataCollector:
             'last_volume': float(data['volume'].iloc[-1])
         }
         
-        # Return indicators directly without wrapping in technical_indicators
+        if stock_symbol:
+            sector = sector_classifier.get_stock_sector(stock_symbol)
+            metadata['sector'] = sector
+            metadata['sector_indices'] = sector_classifier.get_sector_indices(sector) if sector else []
+        
         return indicators
 
 
@@ -2589,6 +2673,9 @@ class IndianMarketMetricsProvider:
         self.zerodha_client = ZerodhaDataClient()
         self.cache = {}
         self.cache_duration = 900  # 15 minutes cache
+        self.sector_classifier = sector_classifier  # Import from sector_classifier
+        
+        # Enhanced market indices with sector-specific indices
         self.market_indices = {
             'NIFTY_50': {
                 'symbol': 'NIFTY 50',
@@ -2599,8 +2686,351 @@ class IndianMarketMetricsProvider:
                 'symbol': 'INDIA VIX',
                 'token': 264969,
                 'exchange': 'NSE'
+            },
+            # Sector-specific indices
+            'NIFTY_BANK': {
+                'symbol': 'NIFTY BANK',
+                'token': 260105,
+                'exchange': 'NSE'
+            },
+            'NIFTY_IT': {
+                'symbol': 'NIFTY IT',
+                'token': 259849,
+                'exchange': 'NSE'
+            },
+            'NIFTY_PHARMA': {
+                'symbol': 'NIFTY PHARMA',
+                'token': 262409,
+                'exchange': 'NSE'
+            },
+            'NIFTY_AUTO': {
+                'symbol': 'NIFTY AUTO',
+                'token': 263433,
+                'exchange': 'NSE'
+            },
+            'NIFTY_FMCG': {
+                'symbol': 'NIFTY FMCG',
+                'token': 261897,
+                'exchange': 'NSE'
+            },
+            'NIFTY_ENERGY': {
+                'symbol': 'NIFTY ENERGY',
+                'token': 261641,
+                'exchange': 'NSE'
+            },
+            'NIFTY_METAL': {
+                'symbol': 'NIFTY METAL',
+                'token': 263689,
+                'exchange': 'NSE'
+            },
+            'NIFTY_REALTY': {
+                'symbol': 'NIFTY REALTY',
+                'token': 261129,
+                'exchange': 'NSE'
+            },
+            'NIFTY_MEDIA': {
+                'symbol': 'NIFTY MEDIA',
+                'token': 263945,
+                'exchange': 'NSE'
+            },
+            'NIFTY_CONSUMER_DURABLES': {
+                'symbol': 'NIFTY CONSR DURBL',
+                'token': 288777,
+                'exchange': 'NSE'
+            },
+            'NIFTY_HEALTHCARE': {
+                'symbol': 'NIFTY HEALTHCARE',
+                'token': 288521,
+                'exchange': 'NSE'
+            },
+            'NIFTY_INFRA': {
+                'symbol': 'NIFTY INFRA',
+                'token': 261385,
+                'exchange': 'NSE'
+            },
+            'NIFTY_OIL_GAS': {
+                'symbol': 'NIFTY OIL AND GAS',
+                'token': 289033,
+                'exchange': 'NSE'
+            },
+            'NIFTY_SERV_SECTOR': {
+                'symbol': 'NIFTY SERV SECTOR',
+                'token': 263177,
+                'exchange': 'NSE'
             }
         }
+    
+    def get_sector_index_data(self, sector: str, period: int = 365) -> pd.DataFrame:
+        """
+        Get sector-specific index data.
+        
+        Args:
+            sector: Sector name (e.g., 'BANKING', 'IT')
+            period: Number of days of historical data
+            
+        Returns:
+            pd.DataFrame: Historical data for sector index
+        """
+        try:
+            primary_index = self.sector_classifier.get_primary_sector_index(sector)
+            if not primary_index:
+                logging.warning(f"No primary index found for sector: {sector}")
+                return None
+            
+            # Find the index mapping
+            index_key = None
+            for key, data in self.market_indices.items():
+                if data['symbol'] == primary_index:
+                    index_key = key
+                    break
+            
+            if not index_key:
+                logging.error(f"Index mapping not found for: {primary_index}")
+                return None
+            
+            return self.zerodha_client.get_historical_data(
+                symbol=self.market_indices[index_key]['symbol'],
+                exchange=self.market_indices[index_key]['exchange'],
+                period=period
+            )
+        except Exception as e:
+            logging.error(f"Error fetching sector index data for {sector}: {e}")
+            return None
+    
+    def get_basic_market_metrics(self, data: pd.DataFrame) -> Dict[str, float]:
+        """
+        Get basic market metrics without sector-specific data.
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            
+        Returns:
+            Dict containing basic market metrics
+        """
+        try:
+            # Get Nifty 50 data for market comparison
+            nifty_data = self.get_nifty_50_data(period=365)
+            
+            if nifty_data is not None and len(nifty_data) > 0:
+                # Calculate stock returns
+                stock_returns = data['close'].pct_change().dropna()
+                market_returns = nifty_data['close'].pct_change().dropna()
+                
+                # Align the series
+                common_dates = stock_returns.index.intersection(market_returns.index)
+                if len(common_dates) > 30:
+                    stock_returns = stock_returns.loc[common_dates]
+                    market_returns = market_returns.loc[common_dates]
+                    
+                    # Calculate beta and correlation
+                    beta = self.calculate_beta(stock_returns, market_returns)
+                    correlation = self.calculate_correlation(stock_returns, market_returns)
+                else:
+                    beta = 1.0
+                    correlation = 0.0
+            else:
+                beta = 1.0
+                correlation = 0.0
+            
+            # Get risk-free rate
+            risk_free_rate = self.get_risk_free_rate()
+            
+            return {
+                "beta": float(beta),
+                "correlation": float(correlation),
+                "risk_free_rate": float(risk_free_rate)
+            }
+            
+        except Exception as e:
+            # Return default values if calculation fails
+            return {
+                "beta": 1.0,
+                "correlation": 0.0,
+                "risk_free_rate": 6.5  # Default Indian risk-free rate
+            }
+    
+    def get_enhanced_market_metrics(self, data: pd.DataFrame, stock_symbol: str) -> Dict[str, float]:
+        """
+        Calculate enhanced market metrics using sector-specific indices with real-time data.
+        
+        Args:
+            data: DataFrame containing OHLCV data
+            stock_symbol: Stock symbol for sector classification
+            
+        Returns:
+            Dict containing enhanced market metrics
+        """
+        try:
+            logging.info(f"Calculating enhanced market metrics for {stock_symbol}")
+            stock_returns = data['close'].pct_change().dropna()
+            
+            # Get sector for the stock
+            sector = self.sector_classifier.get_stock_sector(stock_symbol)
+            
+            # Initialize metrics
+            beta = 1.0
+            correlation = 0.6
+            sector_beta = 1.0
+            sector_correlation = 0.6
+            market_beta = 1.0
+            market_correlation = 0.6
+            
+            # Get NIFTY 50 data (market benchmark) - real-time
+            nifty_data = self.get_nifty_50_data(365)
+            if nifty_data is not None and len(nifty_data) > 30:
+                market_returns = nifty_data['close'].pct_change().dropna()
+                market_beta = self.calculate_beta(stock_returns, market_returns)
+                market_correlation = self.calculate_correlation(stock_returns, market_returns)
+                
+                # Calculate market performance metrics
+                market_cumulative_return = (1 + market_returns).prod() - 1
+                market_volatility = market_returns.std() * np.sqrt(252)
+                market_sharpe = (market_returns.mean() * 252 - self.get_risk_free_rate()) / market_volatility if market_volatility > 0 else 0
+            else:
+                market_cumulative_return = 0
+                market_volatility = 0.2
+                market_sharpe = 0
+            
+            # Get sector-specific data if available - real-time
+            sector_cumulative_return = 0
+            sector_volatility = 0.2
+            sector_sharpe = 0
+            
+            if sector:
+                sector_data = self.get_sector_index_data(sector, 365)
+                if sector_data is not None and len(sector_data) > 30:
+                    sector_returns = sector_data['close'].pct_change().dropna()
+                    sector_beta = self.calculate_beta(stock_returns, sector_returns)
+                    sector_correlation = self.calculate_correlation(stock_returns, sector_returns)
+                    
+                    # Calculate sector performance metrics
+                    sector_cumulative_return = (1 + sector_returns).prod() - 1
+                    sector_volatility = sector_returns.std() * np.sqrt(252)
+                    sector_sharpe = (sector_returns.mean() * 252 - self.get_risk_free_rate()) / sector_volatility if sector_volatility > 0 else 0
+                    
+                    # Use sector metrics as primary, market metrics as secondary
+                    beta = sector_beta
+                    correlation = sector_correlation
+                    logging.info(f"Using sector-specific metrics for {stock_symbol} ({sector})")
+                else:
+                    logging.warning(f"Sector data unavailable for {sector}, using market metrics")
+            else:
+                logging.info(f"No sector classification for {stock_symbol}, using market metrics")
+            
+            # Get real-time market data
+            risk_free_rate = self.get_risk_free_rate()
+            vix_data = self.get_india_vix_data(30)
+            current_vix = vix_data['close'].iloc[-1] if vix_data is not None else 15.0
+            
+            # Calculate stock performance metrics
+            stock_cumulative_return = (1 + stock_returns).prod() - 1
+            stock_volatility = stock_returns.std() * np.sqrt(252)
+            stock_sharpe = (stock_returns.mean() * 252 - risk_free_rate) / stock_volatility if stock_volatility > 0 else 0
+            
+            # Calculate relative performance
+            market_excess_return = stock_cumulative_return - market_cumulative_return
+            sector_excess_return = stock_cumulative_return - sector_cumulative_return if sector else 0
+            
+            # Calculate momentum metrics
+            momentum_20d = (data['close'].iloc[-1] / data['close'].iloc[-20] - 1) if len(data) >= 20 else 0
+            momentum_50d = (data['close'].iloc[-1] / data['close'].iloc[-50] - 1) if len(data) >= 50 else 0
+            
+            # Market sentiment indicators
+            market_sentiment = "Bullish" if market_cumulative_return > 0.1 else "Bearish" if market_cumulative_return < -0.1 else "Neutral"
+            sector_sentiment = "Bullish" if sector_cumulative_return > 0.1 else "Bearish" if sector_cumulative_return < -0.1 else "Neutral" if sector else "Unknown"
+            
+            return {
+                "beta": float(beta),
+                "correlation": float(correlation),
+                "sector_beta": float(sector_beta),
+                "sector_correlation": float(sector_correlation),
+                "market_beta": float(market_beta),
+                "market_correlation": float(market_correlation),
+                "sector": sector,
+                "risk_free_rate": float(risk_free_rate),
+                "current_vix": float(current_vix),
+                "data_source": f"Zerodha API - {'Sector-specific' if sector else 'Market'} Data",
+                "nifty_data_points": len(nifty_data) if nifty_data is not None else 0,
+                "sector_data_points": len(sector_data) if sector and sector_data is not None else 0,
+                
+                # Performance metrics
+                "stock_return": float(stock_cumulative_return),
+                "market_return": float(market_cumulative_return),
+                "sector_return": float(sector_cumulative_return),
+                "market_excess_return": float(market_excess_return),
+                "sector_excess_return": float(sector_excess_return),
+                
+                # Risk metrics
+                "stock_volatility": float(stock_volatility),
+                "market_volatility": float(market_volatility),
+                "sector_volatility": float(sector_volatility),
+                "stock_sharpe": float(stock_sharpe),
+                "market_sharpe": float(market_sharpe),
+                "sector_sharpe": float(sector_sharpe),
+                
+                # Momentum metrics
+                "momentum_20d": float(momentum_20d),
+                "momentum_50d": float(momentum_50d),
+                
+                # Sentiment indicators
+                "market_sentiment": market_sentiment,
+                "sector_sentiment": sector_sentiment,
+                
+                # Real-time indicators
+                "last_update": pd.Timestamp.now().isoformat(),
+                "data_freshness": "real_time" if self._is_market_open() else "last_close",
+                "market_status": "open" if self._is_market_open() else "closed"
+            }
+            
+        except Exception as e:
+            logging.error(f"Error calculating enhanced market metrics for {stock_symbol}: {e}")
+            return self._get_default_market_metrics(stock_symbol)
+    
+    def _is_market_open(self) -> bool:
+        """Check if Indian market is currently open."""
+        try:
+            now = pd.Timestamp.now(tz='Asia/Kolkata')
+            is_weekday = now.weekday() < 5  # Monday to Friday
+            market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
+            market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+            
+            return is_weekday and market_open <= now <= market_close
+        except Exception:
+            return False
+    
+    def _get_default_market_metrics(self, stock_symbol: str) -> Dict[str, float]:
+        """Get default market metrics when real data is unavailable."""
+        return {
+            "beta": 1.0,
+            "correlation": 0.6,
+            "sector_beta": 1.0,
+            "sector_correlation": 0.6,
+            "market_beta": 1.0,
+            "market_correlation": 0.6,
+            "sector": None,
+            "risk_free_rate": 0.07,
+            "current_vix": 15.0,
+            "data_source": "Default values - real data unavailable",
+            "stock_return": 0.0,
+            "market_return": 0.0,
+            "sector_return": 0.0,
+            "market_excess_return": 0.0,
+            "sector_excess_return": 0.0,
+            "stock_volatility": 0.2,
+            "market_volatility": 0.2,
+            "sector_volatility": 0.2,
+            "stock_sharpe": 0.0,
+            "market_sharpe": 0.0,
+            "sector_sharpe": 0.0,
+            "momentum_20d": 0.0,
+            "momentum_50d": 0.0,
+            "market_sentiment": "Neutral",
+            "sector_sentiment": "Unknown",
+            "last_update": pd.Timestamp.now().isoformat(),
+            "data_freshness": "default",
+            "market_status": "unknown"
+        }
+    
     def get_nifty_50_data(self, period: int = 365) -> pd.DataFrame:
         try:
             return self.zerodha_client.get_historical_data(

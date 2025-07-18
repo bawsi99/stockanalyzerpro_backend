@@ -15,6 +15,7 @@ from technical_indicators import (
 )
 from patterns.recognition import PatternRecognition
 from patterns.visualization import PatternVisualizer, ChartVisualizer
+from sector_benchmarking import sector_benchmarking_provider
 
 import asyncio
 
@@ -148,7 +149,7 @@ class StockAnalysisOrchestrator:
         
         return data
     
-    def calculate_indicators(self, data: pd.DataFrame) -> Dict[str, Any]:
+    def calculate_indicators(self, data: pd.DataFrame, stock_symbol: str = None) -> Dict[str, Any]:
         """
         Calculate all technical indicators for the given data.
         
@@ -162,7 +163,7 @@ class StockAnalysisOrchestrator:
         
         # Calculate indicators using DataCollector
         data_collector = DataCollector()
-        indicators = data_collector.collect_all_data(data)
+        indicators = data_collector.collect_all_data(data, stock_symbol)
         
         logger.info(f"Calculated comprehensive technical analysis with {len(indicators)} indicator groups")
         
@@ -250,26 +251,73 @@ class StockAnalysisOrchestrator:
     
     @staticmethod
     def serialize_indicators(indicators: Dict[str, Any]) -> Dict[str, Any]:
+        """Serialize indicators to JSON-serializable format."""
+        def convert_numpy_types(obj):
+            """Convert NumPy types to JSON-serializable Python types."""
+            if isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, np.bool_):
+                return bool(obj)
+            elif isinstance(obj, dict):
+                return {key: convert_numpy_types(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy_types(item) for item in obj]
+            elif isinstance(obj, pd.DataFrame):
+                return obj.to_dict(orient='records')
+            else:
+                return obj
+        
         serializable = {}
         for key, value in indicators.items():
-            if isinstance(value, pd.DataFrame):
-                serializable[key] = value.to_dict(orient='records')
-            else:
-                serializable[key] = value
+            serializable[key] = convert_numpy_types(value)
         return serializable
     
     async def orchestrate_llm_analysis(self, symbol: str, indicators: dict, chart_paths: dict, period: int, interval: str, knowledge_context: str = "") -> tuple:
         result, ind_summary_md, chart_insights_md = await self.gemini_client.analyze_stock(symbol, indicators, chart_paths, period, interval, knowledge_context)
         return result, ind_summary_md, chart_insights_md
 
-    async def analyze_with_ai(self, stock_data, indicators, charts, period, interval, knowledge_context: str = "") -> tuple:
-        result, ind_summary_md, chart_insights_md = await self.orchestrate_llm_analysis(stock_data['symbol'], indicators, charts, period, interval, knowledge_context)
+    async def analyze_with_ai(self, stock_data, indicators, charts, period, interval, knowledge_context: str = "", sector_context: dict = None) -> tuple:
+        # Add sector context to knowledge context if available
+        enhanced_knowledge_context = knowledge_context
+        if sector_context:
+            sector_info = sector_context.get('sector_info', {})
+            market_benchmarking = sector_context.get('market_benchmarking', {})
+            sector_benchmarking = sector_context.get('sector_benchmarking', {})
+            sector_analysis = sector_context.get('analysis_summary', {})
+            
+            sector_context_str = f"""
+SECTOR CONTEXT:
+- Sector: {sector_info.get('sector_name', 'Unknown')} ({sector_info.get('sector', 'Unknown')})
+- Sector Index: {sector_info.get('sector_index', 'N/A')}
+- Sector Stocks: {sector_info.get('sector_stocks_count', 0)} stocks
+
+SECTOR PERFORMANCE:
+- Market Outperformance: {float(market_benchmarking.get('excess_return', 0)):.2%}
+- Sector Outperformance: {f"{float(sector_benchmarking.get('sector_excess_return', 0)):.2%}" if sector_benchmarking else 'N/A'}
+- Sector Beta: {f"{sector_benchmarking.get('sector_beta', 1.0):.2f}" if sector_benchmarking else '1.00'}
+
+SECTOR ANALYSIS:
+- {sector_analysis.get('market_performance', 'Market performance analysis not available')}
+- {sector_analysis.get('sector_performance', 'Sector performance analysis not available')}
+- {sector_analysis.get('risk_assessment', 'Risk assessment not available')}
+
+Consider this sector context when analyzing the stock's technical indicators and patterns.
+"""
+            enhanced_knowledge_context = knowledge_context + "\n" + sector_context_str
+        
+        result, ind_summary_md, chart_insights_md = await self.orchestrate_llm_analysis(stock_data['symbol'], indicators, charts, period, interval, enhanced_knowledge_context)
         return result, ind_summary_md, chart_insights_md
     
     async def analyze_stock(self, symbol: str, exchange: str = "NSE",
-                     period: int = 365, interval: str = "day", output_dir: str = None, knowledge_context: str = "") -> tuple:
+                     period: int = 365, interval: str = "day", output_dir: str = None, 
+                     knowledge_context: str = "", sector: str = None) -> tuple:
         """
         Analyze a stock using all available data and methods.
+        Now supports sector-specific analysis.
         """
         state = self._get_or_create_state(symbol, exchange)
         data = self.retrieve_stock_data(symbol, exchange, interval, period)
@@ -278,7 +326,9 @@ class StockAnalysisOrchestrator:
 
         # Calculate indicators if not already done or if data has changed
         if state.indicators is None or not state.is_valid():
-            state.update(indicators=self.calculate_indicators(data))
+            # Pass stock symbol for sector-aware calculations
+            indicators = self.calculate_indicators(data, symbol)
+            state.update(indicators=indicators)
             state.consensus = None
 
         # Get indicator consensus (cached if possible)
@@ -316,26 +366,26 @@ class StockAnalysisOrchestrator:
             cup_and_handle = PatternRecognition.detect_cup_and_handle(data['close'])
             
             if head_and_shoulders:
-                PatternVisualizer.plot_head_and_shoulders_pattern(
+                ChartVisualizer.plot_head_and_shoulders_pattern(
                     data, head_and_shoulders, 
                     os.path.join(output_dir, 'head_and_shoulders.png')
                 )
             
             if inverse_head_and_shoulders:
-                PatternVisualizer.plot_inverse_head_and_shoulders_pattern(
+                ChartVisualizer.plot_inverse_head_and_shoulders_pattern(
                     data, inverse_head_and_shoulders, 
                     os.path.join(output_dir, 'inverse_head_and_shoulders.png')
                 )
             
             if cup_and_handle:
-                PatternVisualizer.plot_cup_and_handle_pattern(
+                ChartVisualizer.plot_cup_and_handle_pattern(
                     data, cup_and_handle, 
                     os.path.join(output_dir, 'cup_and_handle.png')
                 )
             
             # Multi-timeframe analysis chart
             if 'multi_timeframe' in state.indicators and 'error' not in state.indicators['multi_timeframe']:
-                PatternVisualizer.plot_multi_timeframe_analysis(
+                ChartVisualizer.plot_multi_timeframe_analysis(
                     data, state.indicators['multi_timeframe'], 
                     os.path.join(output_dir, 'multi_timeframe_analysis.png')
                 )
@@ -347,32 +397,45 @@ class StockAnalysisOrchestrator:
             channel_patterns = PatternRecognition.detect_channel_patterns(data['close'])
             
             if triple_tops:
-                PatternVisualizer.plot_triple_top_pattern(
+                ChartVisualizer.plot_triple_top_pattern(
                     data, triple_tops, 
                     os.path.join(output_dir, 'triple_tops.png')
                 )
             
             if triple_bottoms:
-                PatternVisualizer.plot_triple_bottom_pattern(
+                ChartVisualizer.plot_triple_bottom_pattern(
                     data, triple_bottoms, 
                     os.path.join(output_dir, 'triple_bottoms.png')
                 )
             
             if wedge_patterns:
-                PatternVisualizer.plot_wedge_patterns(
+                ChartVisualizer.plot_wedge_patterns(
                     data, wedge_patterns, 
                     os.path.join(output_dir, 'wedge_patterns.png')
                 )
             
             if channel_patterns:
-                PatternVisualizer.plot_channel_patterns(
+                ChartVisualizer.plot_channel_patterns(
                     data, channel_patterns, 
                     os.path.join(output_dir, 'channel_patterns.png')
                 )
 
-        # Get AI analysis (async)
+        # Get hybrid sector analysis (optimized + comprehensive inter-sector relationships)
+        hybrid_sector_analysis = sector_benchmarking_provider.get_hybrid_stock_analysis(symbol, data)
+        
+        # Extract components for backward compatibility
+        sector_benchmarking = hybrid_sector_analysis.get('stock_specific_analysis', {}) if hybrid_sector_analysis else {}
+        sector_rotation = hybrid_sector_analysis.get('comprehensive_sector_context', {}).get('sector_rotation_context', {}) if hybrid_sector_analysis else {}
+        sector_correlation = hybrid_sector_analysis.get('comprehensive_sector_context', {}).get('correlation_insights', {}) if hybrid_sector_analysis else {}
+        
+        # Enhanced sector context for LLM
+        enhanced_sector_context = self._build_enhanced_sector_context(
+            sector, sector_benchmarking, sector_rotation, sector_correlation
+        )
+
+        # Get AI analysis (async) - now with sector context
         ai_analysis, ind_summary_md, chart_insights_md = await self.analyze_with_ai(
-            stock_data, state.indicators, chart_paths, period, interval, knowledge_context
+            stock_data, state.indicators, chart_paths, period, interval, knowledge_context, enhanced_sector_context
         )
 
         # Convert indicators to serializable format
@@ -495,6 +558,7 @@ class StockAnalysisOrchestrator:
             'ai_analysis': ai_analysis,
             'indicator_summary_md': ind_summary_md,
             'chart_insights': chart_insights_md,
+            'sector_benchmarking': sector_benchmarking,
             'summary': {
                 'overall_signal': consensus['overall_signal'],
                 'signal_strength': consensus['signal_strength'],
@@ -505,6 +569,88 @@ class StockAnalysisOrchestrator:
         }
         state.update(analysis_results=analysis_results)
         return analysis_results, data
+
+    def _build_enhanced_sector_context(self, sector: str, sector_benchmarking: Dict, 
+                                     sector_rotation: Dict, sector_correlation: Dict) -> Dict[str, Any]:
+        """Build enhanced sector context combining all sector analysis data."""
+        try:
+            enhanced_context = {
+                'sector': sector,
+                'benchmarking': sector_benchmarking,
+                'rotation_insights': {},
+                'correlation_insights': {},
+                'trading_recommendations': []
+            }
+            
+            # Add sector rotation insights
+            if sector_rotation:
+                enhanced_context['rotation_insights'] = {
+                    'sector_rank': None,
+                    'sector_performance': None,
+                    'rotation_strength': sector_rotation.get('rotation_patterns', {}).get('rotation_strength', 'unknown'),
+                    'leading_sectors': sector_rotation.get('rotation_patterns', {}).get('leading_sectors', []),
+                    'lagging_sectors': sector_rotation.get('rotation_patterns', {}).get('lagging_sectors', []),
+                    'recommendations': sector_rotation.get('recommendations', [])
+                }
+                
+                # Find current sector's rank and performance
+                sector_rankings = sector_rotation.get('sector_rankings', {})
+                if sector in sector_rankings:
+                    enhanced_context['rotation_insights']['sector_rank'] = sector_rankings[sector]['rank']
+                    enhanced_context['rotation_insights']['sector_performance'] = sector_rankings[sector]['performance']
+                
+                # Add rotation-based trading recommendations
+                for rec in sector_rotation.get('recommendations', []):
+                    if rec.get('sector') == sector:
+                        enhanced_context['trading_recommendations'].append({
+                            'type': 'rotation',
+                            'recommendation': rec.get('type', ''),
+                            'reason': rec.get('reason', ''),
+                            'confidence': rec.get('confidence', 'medium')
+                        })
+            
+            # Add correlation insights
+            if sector_correlation:
+                enhanced_context['correlation_insights'] = {
+                    'average_correlation': sector_correlation.get('average_correlation', 0),
+                    'diversification_quality': sector_correlation.get('diversification_insights', {}).get('diversification_quality', 'unknown'),
+                    'sector_volatility': sector_correlation.get('sector_volatility', {}).get(sector, 0),
+                    'high_correlation_sectors': [],
+                    'low_correlation_sectors': []
+                }
+                
+                # Find sectors highly correlated with current sector
+                correlation_matrix = sector_correlation.get('correlation_matrix', {})
+                if sector in correlation_matrix:
+                    sector_correlations = correlation_matrix[sector]
+                    for other_sector, corr in sector_correlations.items():
+                        if other_sector != sector:
+                            if corr > 0.7:
+                                enhanced_context['correlation_insights']['high_correlation_sectors'].append({
+                                    'sector': other_sector,
+                                    'correlation': corr
+                                })
+                            elif corr < 0.3:
+                                enhanced_context['correlation_insights']['low_correlation_sectors'].append({
+                                    'sector': other_sector,
+                                    'correlation': corr
+                                })
+                
+                # Add correlation-based recommendations
+                diversification_insights = sector_correlation.get('diversification_insights', {})
+                for rec in diversification_insights.get('recommendations', []):
+                    enhanced_context['trading_recommendations'].append({
+                        'type': 'diversification',
+                        'recommendation': rec.get('type', ''),
+                        'message': rec.get('message', ''),
+                        'priority': rec.get('priority', 'medium')
+                    })
+            
+            return enhanced_context
+            
+        except Exception as e:
+            logging.error(f"Error building enhanced sector context: {e}")
+            return {'sector': sector, 'benchmarking': sector_benchmarking}
 
 # Utility to clean NaN/Infinity for JSON
 def clean_for_json(obj):

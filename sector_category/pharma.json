@@ -1,0 +1,35 @@
+{
+  "sector_code": "PHARMA",
+  "display_name": "Pharmaceuticals",
+  "indices": [
+    "NIFTY PHARMA"
+  ],
+  "primary_index": "NIFTY PHARMA",
+  "stocks": [
+    "ALEMBICLTD",
+    "CADILAHC",
+    "CIPLA",
+    "DIVISLAB",
+    "DRREDDY",
+    "GENCON-BE",
+    "GLENMARK",
+    "INDSWFTLAB-BE",
+    "IPCALAB",
+    "JYOTHYLAB",
+    "LALPATHLAB",
+    "LASA-BE",
+    "LAURUSLABS",
+    "LYKALABS",
+    "NATCOPHARM",
+    "NEULANDLAB",
+    "PHARMABEES",
+    "QUESTLAB-SM",
+    "SUNPHARMA",
+    "UNICHEMLAB",
+    "VALIANTLAB",
+    "VIMTALABS",
+    "VINEETLAB-BE",
+    "ZIMLAB"
+  ],
+  "description": "Pharmaceutical companies including drug manufacturers, healthcare services, and medical research (24 stocks)"
+}

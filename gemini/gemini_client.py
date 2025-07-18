@@ -1,5 +1,6 @@
 from typing import Dict, Any, List
 import json
+import numpy as np
 from .gemini_core import GeminiCore
 from .prompt_manager import PromptManager
 from .image_utils import ImageUtils
@@ -13,6 +14,31 @@ class GeminiClient:
     Client for interacting with Google's Gemini API for AI-powered analysis.
     This class handles API authentication, prompt generation, and response parsing.
     """
+    
+    @staticmethod
+    def convert_numpy_types(obj):
+        """Convert NumPy types to JSON-serializable Python types."""
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, dict):
+            return {key: GeminiClient.convert_numpy_types(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [GeminiClient.convert_numpy_types(item) for item in obj]
+        elif hasattr(obj, 'isoformat'):  # Handle pandas Timestamp objects
+            return obj.isoformat()
+        elif hasattr(obj, 'tolist'):  # Handle pandas Series and other array-like objects
+            return obj.tolist()
+        elif hasattr(obj, 'to_dict'):  # Handle pandas DataFrame objects
+            return obj.to_dict('records')
+        else:
+            return obj
+    
     def __init__(self, api_key: str = None):
         self.core = GeminiCore(api_key)
         self.prompt_manager = PromptManager()
@@ -22,12 +48,13 @@ class GeminiClient:
     async def build_indicators_summary(self, symbol, indicators, period, interval, knowledge_context=None):
         # print("[DEBUG] Entering build_indicators_summary")
         try:
-            raw_indicators_json = json.dumps(indicators, indent=2)
+            # Convert NumPy types to JSON-serializable types
+            serializable_indicators = self.convert_numpy_types(indicators)
+            raw_indicators_json = json.dumps(serializable_indicators, indent=2)
             # print(f"[DEBUG] raw_indicators_json: {raw_indicators_json}")
         except Exception as ex:
-            # print(f"[DEBUG-ERROR] Exception during json.dumps(indicators): {ex}")
+            print(f"[DEBUG-ERROR] Exception during json.dumps(indicators): {ex}")
             import traceback; traceback.print_exc()
-            # print(f"[DEBUG-ERROR] indicators: {repr(indicators)}")
             raise
         timeframe = f"{period} days, {interval}"
         
@@ -163,7 +190,7 @@ class GeminiClient:
         # 3. Final decision prompt
         decision_prompt = self.prompt_manager.format_prompt(
             "final_stock_decision",
-            indicator_json=json.dumps(ind_json, indent=2),
+            indicator_json=json.dumps(self.convert_numpy_types(ind_json), indent=2),
             chart_insights=chart_insights_md
         )
         try:

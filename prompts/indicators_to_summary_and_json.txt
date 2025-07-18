@@ -3,16 +3,54 @@ You are a professional technical analyst. Your job is to analyze the following t
 IMPORTANT: Current Price Context
 The current price in the indicator data is from the last available trading data. During market hours (9:15 AM - 3:30 PM IST, Mon-Fri), this may be real-time. Outside market hours, this is the last closing price. This is normal and expected behavior for stock analysis systems - DO NOT flag this as missing data.
 
+SECTOR CONTEXT INTEGRATION:
+If sector context is provided, use it to enhance your analysis:
+- Compare stock performance against sector benchmarks
+- Consider sector-specific volatility and risk characteristics
+- Factor in sector momentum and trends
+- Assess sector rotation patterns and timing
+- Evaluate sector correlation for portfolio diversification
+- Consider sector-specific market conditions
+
+SECTOR ROTATION ANALYSIS:
+If sector rotation data is available:
+- Identify if the stock's sector is leading or lagging the market
+- Consider sector momentum and rotation strength
+- Factor in sector ranking and relative performance
+- Use rotation recommendations for timing decisions
+- Assess sector-specific market sentiment
+
+SECTOR CORRELATION INSIGHTS:
+If correlation data is available:
+- Consider sector volatility vs market average
+- Factor in diversification quality
+- Identify concentration risks from high correlations
+- Use low correlation sectors for diversification opportunities
+- Assess portfolio risk based on sector relationships
+
+TRADING RECOMMENDATIONS:
+If sector-based recommendations are provided:
+- Consider rotation-based timing signals
+- Factor in diversification recommendations
+- Assess confidence levels of recommendations
+- Combine with technical analysis for final decision
+
 Instructions:
-Step 1: Carefully review the stock symbol, timeframe, knowledge context, and raw indicator data provided.
+Step 1: Carefully review the stock symbol, timeframe, knowledge context (including sector data), and raw indicator data provided.
 Step 2: Note the current price data source - this is NOT missing data, but normal market timing behavior.
-Step 3: Identify any truly missing, ambiguous, or contradictory data. If any, mention them in your summary and in the JSON under "warnings".
-Step 4: Write a concise markdown summary (1-2 paragraphs) of the technical outlook, including notable signals, trends, actionable entry/exit points, and warnings. Clearly state your reasoning for each insight.
-Step 5: Output a JSON object (in a code block) with the following structure, filling in all fields and providing a confidence score (0-100) for each signal and for the overall trend. If any field cannot be filled due to missing data, state "unknown" and explain in "warnings".
-Step 6: Use python for making any calculations or comparing values
-Step 7: Consider enhanced indicators including volatility analysis, volume profile, momentum divergences, and trend strength
-Step 8: Assess pattern reliability and risk factors for any detected patterns
-Step 9: Pay special attention to volume analysis including:
+Step 3: If sector context is available, integrate sector performance, beta, and correlation into your analysis.
+Step 4: Identify any truly missing, ambiguous, or contradictory data. If any, mention them in your summary and in the JSON under "warnings".
+Step 5: Write a concise markdown summary (1-2 paragraphs) of the technical outlook, including:
+   - Notable signals and trends
+   - Sector performance context (if available)
+   - Actionable entry/exit points
+   - Sector-specific risks and opportunities
+   - Warnings and limitations
+Step 6: Output a JSON object (in a code block) with the following structure, filling in all fields and providing a confidence score (0-100) for each signal and for the overall trend. If any field cannot be filled due to missing data, state "unknown" and explain in "warnings".
+Step 7: Use python for making any calculations or comparing values
+Step 8: Consider enhanced indicators including volatility analysis, volume profile, momentum divergences, and trend strength
+Step 9: Assess pattern reliability and risk factors for any detected patterns
+Step 10: Pay special attention to volume analysis including:
 - Daily volume metrics and volume/price ratios
 - Volume ratios vs multiple moving averages (5d, 10d, 20d, 50d)
 - Volume trends and confirmation with price movements
@@ -21,9 +59,20 @@ Step 9: Pay special attention to volume analysis including:
 - Volume anomalies and their significance
 - Advanced volume indicators (MFI, OBV, VWAP)
 - Volume volatility analysis
+Step 11: If sector context is provided, include sector-specific analysis:
+- Sector performance vs market performance
+- Sector beta and correlation implications
+- Sector-specific risk factors
+- Sector momentum and trend alignment
 {{
   "trend": "Bullish | Bearish | Neutral | Unknown",
   "strength": 0-100,
+  "sector_context": {{
+    "sector_performance": "Outperforming | Underperforming | In-line",
+    "sector_beta_impact": "High | Medium | Low",
+    "sector_risk_factors": ["List sector-specific risks"],
+    "sector_opportunities": ["List sector-specific opportunities"]
+  }},
   "signals": {{
     "rsi": {{"value": ..., "signal": "...", "confidence": 0-100}},
     "macd": {{"value": ..., "signal": "...", "confidence": 0-100}},
@@ -33,13 +82,14 @@ Step 9: Pay special attention to volume analysis including:
     "entry": "...",
     "exit": "...",
     "stop_loss": "...",
+    "sector_considerations": ["Sector-specific trading considerations"],
     "warnings": ["...", ...]
   }}
 }}
 
 Stock symbol: {symbol}
 Timeframe: {timeframe}
-Knowledge context (if any): {knowledge_context}
+Knowledge context (including sector data): {knowledge_context}
 
 Raw indicator data:
 {raw_indicators}

@@ -429,6 +429,8 @@ class PatternRecognition:
             # Find the lowest point between shoulders for neckline
             neckline_low = prices.iloc[neckline_start:neckline_end + 1].min()
             neckline_idx = prices.iloc[neckline_start:neckline_end + 1].idxmin()
+            # Convert Timestamp to integer index
+            neckline_idx_int = prices.index.get_loc(neckline_idx)
             
             # 4. Calculate pattern metrics
             head_height = head_price - neckline_low
@@ -478,8 +480,8 @@ class PatternRecognition:
                 },
                 "neckline": {
                     "level": float(neckline_low),
-                    "index": int(neckline_idx),
-                    "date": str(prices.index[neckline_idx]) if hasattr(prices.index, 'strftime') else str(neckline_idx)
+                    "index": int(neckline_idx_int),
+                    "date": str(prices.index[neckline_idx_int]) if hasattr(prices.index, 'strftime') else str(neckline_idx_int)
                 },
                 "target": float(neckline_low - head_height),  # Measured move target
                 "quality_score": quality_score,
@@ -538,6 +540,8 @@ class PatternRecognition:
             # Find the highest point between shoulders for neckline
             neckline_high = prices.iloc[neckline_start:neckline_end + 1].max()
             neckline_idx = prices.iloc[neckline_start:neckline_end + 1].idxmax()
+            # Convert Timestamp to integer index
+            neckline_idx_int = prices.index.get_loc(neckline_idx)
             
             # 4. Calculate pattern metrics
             head_depth = neckline_high - head_price
@@ -582,8 +586,8 @@ class PatternRecognition:
                 },
                 "neckline": {
                     "level": float(neckline_high),
-                    "index": int(neckline_idx),
-                    "date": str(prices.index[neckline_idx]) if hasattr(prices.index, 'strftime') else str(neckline_idx)
+                    "index": int(neckline_idx_int),
+                    "date": str(prices.index[neckline_idx_int]) if hasattr(prices.index, 'strftime') else str(neckline_idx_int)
                 },
                 "target": float(neckline_high + head_depth),  # Measured move target
                 "quality_score": quality_score,
@@ -628,6 +632,8 @@ class PatternRecognition:
                 cup_end_price = cup_data.iloc[-1]
                 cup_low = cup_data.min()
                 cup_low_idx = cup_data.idxmin()
+                # Convert Timestamp to integer index if needed
+                cup_low_idx_int = cup_data.index.get_loc(cup_low_idx)
                 
                 # Cup should have similar start and end prices
                 price_diff = abs(cup_start_price - cup_end_price) / cup_start_price
@@ -705,7 +711,7 @@ class PatternRecognition:
                         "start_price": float(cup_start_price),
                         "end_price": float(cup_end_price),
                         "low_price": float(cup_low),
-                        "low_index": int(cup_low_idx),
+                        "low_index": int(cup_low_idx_int),
                         "depth": float(cup_depth),
                         "duration": cup_duration
                     },
