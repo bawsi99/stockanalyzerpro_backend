@@ -6,19 +6,16 @@ Technical-indicator JSON:
 Chart-pattern insights:
 {chart_insights}
 
-Additional Context (Market):
-{additional_context}
-
 IMPORTANT: Current Price Context
 The current price provided is from the last available trading data. During market hours (9:15 AM - 3:30 PM IST, Mon-Fri), this may be real-time. Outside market hours, this is the last closing price. This is normal and expected behavior for stock analysis systems.
 
 Instructions:
-Step 1: Carefully review the technical-indicator JSON, chart-pattern insights, and additional context provided.
+Step 1: Carefully review the technical-indicator JSON and chart-pattern insights provided.
 Step 2: Note the current price data freshness and market status - this is NOT missing data, but normal market timing behavior.
 Step 3: Identify any truly missing, ambiguous, or contradictory data. If any, mention them in the rationale fields and in "risks".
-Step 4: For each recommendation (entry, stop, targets), provide a brief rationale, referencing indicators, chart patterns, and additional context.
+Step 4: For each recommendation (entry, stop, targets), provide a brief rationale, referencing indicators and chart patterns.
 Step 5: Use all available data, and highlight any contradictions or uncertainties.
-Step 6: Incorporate market context, technical patterns, and news events into your analysis where relevant.
+Step 6: Focus on technical patterns and indicators for your analysis.
 step 7: Use python for making any calculations, comparing values
 Step 8: CRITICAL: Output ONLY a valid JSON object with the following schema. NO PROSE, NO NARRATIVE TEXT, NO EXPLANATIONS OUTSIDE THE JSON. The response must be parseable JSON.
 
@@ -30,14 +27,14 @@ Step 8: CRITICAL: Output ONLY a valid JSON object with the following schema. NO 
 "entry_range": [min, max],
 "stop_loss": float,
 "targets": [t1, t2],
-"rationale": "Explain why these levels were chosen, referencing indicators, chart patterns, and additional context."
+"rationale": "Explain why these levels were chosen, referencing indicators and chart patterns."
 }},
 "medium_term": {{
 "horizon_days": 10-60,
 "entry_range": [min, max],
 "stop_loss": float,
 "targets": [t1, t2, t3],
-"rationale": "Explain why these levels were chosen, referencing indicators, chart patterns, and additional context."
+"rationale": "Explain why these levels were chosen, referencing indicators and chart patterns."
 }},
 "long_term": {{
 "horizon_days": 60-365,
@@ -59,6 +56,6 @@ CRITICAL REQUIREMENTS:
 - If you cannot provide certain values, use "Unknown" for strings or null for numbers
 - All rationale explanations should be inside the JSON fields, not as separate text
 - Do not include any narrative analysis or commentary outside the JSON structure
-- The chart insights and additional context are for reference - incorporate their key findings into your JSON rationale fields
+- The chart insights are for reference - incorporate their key findings into your JSON rationale fields
 - DO NOT flag current price as missing data - it's normal market timing behavior 
 - Do Not mention any technical issues, words like 'JSON' in the final json.

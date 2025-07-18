@@ -15,7 +15,6 @@ from technical_indicators import (
 )
 from patterns.recognition import PatternRecognition
 from patterns.visualization import PatternVisualizer, ChartVisualizer
-from market_context import MarketContextProvider
 
 import asyncio
 
@@ -57,7 +56,6 @@ class StockAnalysisOrchestrator:
     def __init__(self):
         self.data_client = ZerodhaDataClient()
         self.gemini_client = GeminiClient()
-        self.market_context_provider = MarketContextProvider()
         self.analyzer = IndicatorComparisonAnalyzer()
         self.state_cache = {}
         
@@ -507,108 +505,6 @@ class StockAnalysisOrchestrator:
         }
         state.update(analysis_results=analysis_results)
         return analysis_results, data
-
-    def gather_additional_context(self, symbol: str, data: pd.DataFrame, 
-                                 volume_anomalies: List[Dict] = None) -> Dict[str, Any]:
-        """
-        Gather additional market context, fundamental data, and news events
-        that the LLM explicitly requested for better analysis.
-        
-        Args:
-            symbol: Stock symbol
-            data: Price and volume data
-            volume_anomalies: List of detected volume anomalies
-            
-        Returns:
-            Dict containing additional context data
-        """
-        logger.info(f"Gathering additional context for {symbol}")
-        
-        try:
-            # Get market context
-            market_context = self.market_context_provider.get_market_context(symbol)
-            
-            # Get technical context
-            technical_context = self.market_context_provider.get_technical_context(symbol)
-            
-            # Get news events for the analysis period
-            date_range = [
-                data.index[0].strftime('%Y-%m-%d'),
-                data.index[-1].strftime('%Y-%m-%d')
-            ]
-            news_events = self.market_context_provider.get_news_events(symbol, date_range)
-            
-            # Get volume-price correlation analysis
-            volume_correlation = self.market_context_provider.get_volume_price_correlation(
-                data, volume_anomalies or []
-            )
-            
-            additional_context = {
-                "market_context": market_context,
-                "technical_context": technical_context,
-                "news_events": news_events,
-                "volume_price_correlation": volume_correlation,
-                "analysis_period": {
-                    "start_date": date_range[0],
-                    "end_date": date_range[1],
-                    "total_days": len(data)
-                }
-            }
-            
-            logger.info(f"Successfully gathered additional context for {symbol}")
-            return additional_context
-            
-        except Exception as e:
-            logger.error(f"Error gathering additional context for {symbol}: {e}")
-            return {
-                "error": f"Failed to gather additional context: {str(e)}",
-                "market_context": {},
-                "technical_context": {},
-                "news_events": {},
-                "volume_price_correlation": {}
-            }
-    
-    def extract_volume_anomalies(self, data: pd.DataFrame) -> List[Dict]:
-        """
-        Extract volume anomalies from the data for correlation analysis.
-        
-        Args:
-            data: Price and volume data
-            
-        Returns:
-            List of volume anomalies
-        """
-        try:
-            # Calculate volume moving average
-            volume_ma = data['volume'].rolling(window=20).mean()
-            volume_std = data['volume'].rolling(window=20).std()
-            
-            # Identify anomalies (volume > 2 standard deviations above mean)
-            anomalies = []
-            for i in range(len(data)):
-                if i < 20:  # Skip first 20 days for moving average calculation
-                    continue
-                    
-                current_volume = data['volume'].iloc[i]
-                avg_volume = volume_ma.iloc[i]
-                std_volume = volume_std.iloc[i]
-                
-                if current_volume > (avg_volume + 2 * std_volume):
-                    anomaly = {
-                        "date": data.index[i].strftime('%Y-%m-%d'),
-                        "volume": float(current_volume),
-                        "avg_volume": float(avg_volume),
-                        "volume_ratio": float(current_volume / avg_volume),
-                        "price": float(data['close'].iloc[i]),
-                        "price_change": float(data['close'].iloc[i] - data['close'].iloc[i-1])
-                    }
-                    anomalies.append(anomaly)
-            
-            return anomalies
-            
-        except Exception as e:
-            logger.error(f"Error extracting volume anomalies: {e}")
-            return []
 
 # Utility to clean NaN/Infinity for JSON
 def clean_for_json(obj):

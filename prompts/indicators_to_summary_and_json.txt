@@ -4,7 +4,7 @@ IMPORTANT: Current Price Context
 The current price in the indicator data is from the last available trading data. During market hours (9:15 AM - 3:30 PM IST, Mon-Fri), this may be real-time. Outside market hours, this is the last closing price. This is normal and expected behavior for stock analysis systems - DO NOT flag this as missing data.
 
 Instructions:
-Step 1: Carefully review the stock symbol, timeframe, knowledge context, raw indicator data, and additional context provided.
+Step 1: Carefully review the stock symbol, timeframe, knowledge context, and raw indicator data provided.
 Step 2: Note the current price data source - this is NOT missing data, but normal market timing behavior.
 Step 3: Identify any truly missing, ambiguous, or contradictory data. If any, mention them in your summary and in the JSON under "warnings".
 Step 4: Write a concise markdown summary (1-2 paragraphs) of the technical outlook, including notable signals, trends, actionable entry/exit points, and warnings. Clearly state your reasoning for each insight.
@@ -43,8 +43,5 @@ Knowledge context (if any): {knowledge_context}
 
 Raw indicator data:
 {raw_indicators}
-
-Additional context (if any):
-{additional_context}
 
 First, write the markdown summary. Then, on a new line, output the JSON object in a ```json code block. 

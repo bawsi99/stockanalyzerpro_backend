@@ -31,10 +31,6 @@ class GeminiClient:
             raise
         timeframe = f"{period} days, {interval}"
         
-        # Extract additional context if available
-        additional_context = indicators.get('additional_context', {})
-        additional_context_json = json.dumps(additional_context, indent=2) if additional_context else "{}"
-        
         # print("[DEBUG] About to call self.prompt_manager.format_prompt")
         try:
             prompt = self.prompt_manager.format_prompt(
@@ -42,8 +38,7 @@ class GeminiClient:
                 symbol=symbol,
                 timeframe=timeframe,
                 knowledge_context=knowledge_context or "",
-                raw_indicators=raw_indicators_json,
-                additional_context=additional_context_json
+                raw_indicators=raw_indicators_json
             )
         except Exception as ex:
             # print(f"[DEBUG-ERROR] Exception during format_prompt: {ex}")
@@ -165,15 +160,11 @@ class GeminiClient:
         
         chart_insights_md = "\n\n".join(chart_insights_list) if chart_insights_list else ""
 
-        # 3. Final decision prompt (now includes chart_insights and additional context)
-        # Check if additional context is available in indicators
-        additional_context = indicators.get('additional_context', {})
-        
+        # 3. Final decision prompt
         decision_prompt = self.prompt_manager.format_prompt(
             "final_stock_decision",
             indicator_json=json.dumps(ind_json, indent=2),
-            chart_insights=chart_insights_md,
-            additional_context=json.dumps(additional_context, indent=2) if additional_context else "{}"
+            chart_insights=chart_insights_md
         )
         try:
             decision_response = self.core.call_llm(decision_prompt)
