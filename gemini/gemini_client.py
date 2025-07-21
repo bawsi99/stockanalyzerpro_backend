@@ -8,6 +8,9 @@ from .error_utils import ErrorUtils
 
 import asyncio
 
+# --- Import clean_for_json ---
+from utils import clean_for_json
+
 
 class GeminiClient:
     """
@@ -48,8 +51,8 @@ class GeminiClient:
     async def build_indicators_summary(self, symbol, indicators, period, interval, knowledge_context=None):
         # print("[DEBUG] Entering build_indicators_summary")
         try:
-            # Convert NumPy types to JSON-serializable types
-            serializable_indicators = self.convert_numpy_types(indicators)
+            # Convert NumPy types to JSON-serializable types and clean for JSON
+            serializable_indicators = clean_for_json(self.convert_numpy_types(indicators))
             raw_indicators_json = json.dumps(serializable_indicators, indent=2)
             # print(f"[DEBUG] raw_indicators_json: {raw_indicators_json}")
         except Exception as ex:

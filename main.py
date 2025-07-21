@@ -4,6 +4,7 @@ import sys
 import argparse
 from agent_capabilities import StockAnalysisOrchestrator
 import asyncio
+from utils import clean_for_json
 
 
 def main():
@@ -83,7 +84,7 @@ def main():
                             pass
             debug_print_types(results)
             with open(f"{output}/results.json", "w") as f:
-                json.dump(results, f)
+                json.dump(clean_for_json(results), f)
 
             # Print the markdown summary if present
             if 'indicator_summary_md' in results:

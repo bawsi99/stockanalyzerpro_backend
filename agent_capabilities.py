@@ -15,8 +15,9 @@ from technical_indicators import (
 from patterns.recognition import PatternRecognition
 from patterns.visualization import PatternVisualizer, ChartVisualizer
 from sector_benchmarking import sector_benchmarking_provider
-
 import asyncio
+# --- MTF Analysis Import ---
+from mtf_analysis_utils import multi_timeframe_analysis
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -261,7 +262,7 @@ class StockAnalysisOrchestrator:
         result, ind_summary_md, chart_insights_md = await self.gemini_client.analyze_stock(symbol, indicators, chart_paths, period, interval, knowledge_context)
         return result, ind_summary_md, chart_insights_md
 
-    async def analyze_with_ai(self, symbol: str, stock_data, indicators, charts, period, interval, knowledge_context: str = "", sector_context: dict = None) -> tuple:
+    async def analyze_with_ai(self, symbol: str, indicators: dict, chart_paths: dict, period: int, interval: str, knowledge_context: str = "", sector_context: dict = None) -> tuple:
         # Add sector context to knowledge context if available
         enhanced_knowledge_context = knowledge_context
         if sector_context:
@@ -290,7 +291,7 @@ Consider this sector context when analyzing the stock's technical indicators and
 """
             enhanced_knowledge_context = knowledge_context + "\n" + sector_context_str
         
-        result, ind_summary_md, chart_insights_md = await self.orchestrate_llm_analysis(symbol, indicators, charts, period, interval, enhanced_knowledge_context)
+        result, ind_summary_md, chart_insights_md = await self.orchestrate_llm_analysis(symbol, indicators, chart_paths, period, interval, enhanced_knowledge_context)
         return result, ind_summary_md, chart_insights_md
     
     async def analyze_stock(self, symbol: str, exchange: str = "NSE",
@@ -320,6 +321,18 @@ Consider this sector context when analyzing the stock's technical indicators and
             if stock_data.empty:
                 return None, None, f"No data available for {symbol}"
             
+            # --- MTF/LONG-TERM ANALYSIS ---
+            # Map interval to base_interval for MTF utility
+            interval_map = {
+                'minute': 'minute', '3minute': 'minute', '5minute': 'minute', '10minute': 'minute', '15minute': 'minute', '30minute': 'minute', '60minute': 'hour',
+                'day': 'day', 'week': 'week', 'month': 'month'
+            }
+            base_interval = interval_map.get(interval, 'day')
+            try:
+                mtf_result = multi_timeframe_analysis(stock_data, base_interval=base_interval)
+            except Exception as e:
+                mtf_result = {'messages': [f"Error in multi-timeframe analysis: {e}"]}
+            
             # Calculate technical indicators (for AI analysis, not consensus)
             state.indicators = self.calculate_indicators(stock_data, symbol)
             
@@ -348,7 +361,7 @@ Consider this sector context when analyzing the stock's technical indicators and
             
             # Get AI analysis (primary analysis method)
             ai_analysis, ind_summary_md, chart_insights_md = await self.analyze_with_ai(
-                symbol, stock_data, state.indicators, chart_paths, period, interval, knowledge_context, enhanced_sector_context
+                symbol, state.indicators, chart_paths, period, interval, knowledge_context, enhanced_sector_context
             )
             
             # Convert indicators to serializable format
@@ -365,6 +378,7 @@ Consider this sector context when analyzing the stock's technical indicators and
                 'indicator_summary_md': ind_summary_md,
                 'chart_insights': chart_insights_md,
                 'sector_benchmarking': sector_benchmarking,
+                'multi_timeframe_analysis': mtf_result,
                 'summary': {
                     'overall_signal': ai_analysis.get('trend', 'Unknown'),
                     'confidence': ai_analysis.get('confidence_pct', 0),
@@ -625,15 +639,7 @@ Consider this sector context when analyzing the stock's technical indicators and
             return {'sector': sector, 'benchmarking': sector_benchmarking}
 
 # Utility to clean NaN/Infinity for JSON
-def clean_for_json(obj):
-    if isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
-        return None
-    elif isinstance(obj, dict):
-        return {k: clean_for_json(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [clean_for_json(v) for v in obj]
-    else:
-        return obj
+from utils import clean_for_json
 
 # Example usage
 if __name__ == "__main__":
