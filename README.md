@@ -1,122 +1,50 @@
-## Usage
+# Stock Analysis System
 
-### Basic Usage
+A comprehensive stock analysis system that provides AI-powered technical analysis, pattern recognition, and trading insights.
 
-Run the agent with a specific stock symbol:
+## 🚀 **Key Features**
 
-```bash
-python main.py --stock RELIANCE
-```
+- **AI-Powered Analysis**: Advanced analysis using Google's Gemini LLM
+- **Technical Indicators**: Comprehensive technical indicator calculations
+- **Pattern Recognition**: Advanced chart pattern detection
+- **Sector Analysis**: Sector-specific benchmarking and analysis
+- **Real-time Data**: Live market data integration via Zerodha API
+- **Visualization**: Advanced chart generation and pattern visualization
 
-### Advanced Usage
+## 🏗️ **Architecture**
 
-```bash
-python main.py --stock RELIANCE --exchange NSE --period 365 --interval 60minute        
-```
+### **Core Components**
 
-### Command Line Arguments
+- **StockAnalysisOrchestrator**: Main orchestrator for analysis workflow
+- **TechnicalIndicators**: Technical indicator calculations
+- **GeminiClient**: AI-powered analysis using Google's Gemini LLM
+- **PatternRecognition**: Advanced pattern detection algorithms
+- **SectorBenchmarking**: Sector-specific analysis and benchmarking
 
-- `--stock`: Stock symbol to analyze (required)
-- `--exchange`: Stock exchange (default: NSE)
-- `--period`: Analysis period in days (default: 365)
-- `--output`: Output directory (default: ./output)
-- `--interval`: period of each unit data
+### **Analysis Flow**
 
----
+1. **Data Retrieval**: Fetch historical data from Zerodha API
+2. **Technical Analysis**: Calculate comprehensive technical indicators
+3. **Pattern Recognition**: Detect chart patterns and formations
+4. **AI Analysis**: Generate AI-powered insights and trading recommendations
+5. **Sector Context**: Apply sector-specific analysis and benchmarking
+6. **Results Assembly**: Compile comprehensive analysis results
 
-## Architecture & Structure (2024 Update)
+## 📊 **API Response Structure**
 
-- **Main Orchestrator:**
-  - The core workflow is managed by `StockAnalysisOrchestrator` (in `agent_capabilities.py`).
-  - Coordinates data retrieval, indicator calculation, pattern recognition, visualization, async LLM/AI analysis, and report generation.
-  - Uses a stateful cache (`AnalysisState`) for efficient repeated analysis and incremental updates.
+The system returns comprehensive analysis results including:
 
-- **Technical Indicators & Visualization:**
-  - All technical indicator calculations are in `technical_indicators.py` (`TechnicalIndicators`).
-  - Indicator consensus and aggregation logic is in `IndicatorComparisonAnalyzer`.
-  - All charting and visualization logic is in `patterns/visualization.py` (`PatternVisualizer`, `ChartVisualizer`).
+- `ai_analysis`: AI-powered analysis with confidence levels and trading strategies
+- `indicators`: Technical indicator calculations and values
+- `overlays`: Chart patterns and technical overlays
+- `indicator_summary_md`: Markdown summary of technical indicators
+- `chart_insights`: AI-generated chart pattern insights
+- `summary`: Overall analysis summary with signals and recommendations
+- `trading_guidance`: Specific trading strategies and risk management
+- `sector_benchmarking`: Sector-specific analysis and comparisons
+- `metadata`: Analysis metadata and timestamps
 
-- **Pattern Recognition:**
-  - All pattern detection logic (peaks/lows, divergences, double tops/bottoms, triangles, flags, support/resistance, volume anomalies) is in `patterns/recognition.py` (`PatternRecognition`).
-  - Visualization of these patterns is handled by `PatternVisualizer` and `ChartVisualizer`.
-
-- **LLM/AI Analysis (Async, Multi-modal):**
-  - All LLM-powered analysis is handled by `GeminiClient` (in `gemini/gemini_client.py`), orchestrated asynchronously.
-  - The main LLM analysis method, `GeminiClient.analyze_stock`, returns a tuple: `(result, ind_summary_md, chart_insights_md)`.
-    - `result`: Parsed LLM JSON (final recommendation, targets, risk, etc.)
-    - `ind_summary_md`: Markdown summary of technical indicator analysis (for reporting/UI/context)
-    - `chart_insights_md`: Markdown insights from image-based chart analysis
-  - Multi-modal (text + image) analysis is supported via async calls to Gemini LLM.
-  - Prompt templates are managed in `prompts/` and loaded by `PromptManager`.
-
-- **Data Client:**
-  - `ZerodhaDataClient` (in `zerodha_client.py`) handles authentication and historical data retrieval from Zerodha's KiteConnect API.
-  - `CacheManager` provides market-aware caching of historical data.
-
-- **RAG (Retrieval-Augmented Generation) Ready:**
-  - `rag_milvus.py` provides SBERT-based embedding and Milvus-powered retrieval for knowledge-augmented LLM analysis (not yet deeply integrated).
-
-- **Output Structure:**
-  - Each stock analyzed gets its own output directory (e.g., `output/RELIANCE/`), containing:
-    - PNG charts for each pattern/indicator
-    - `results.json` with only the fields required by the frontend (see API Response Fields below)
-
----
-
-## Extensibility
-
-- **Adding New Indicators or Visualizations:**
-  - Add calculation logic in `technical_indicators.py` (or a new module if appropriate).
-  - Register new indicators in the indicator registry.
-  - Use plotting helpers in `patterns/visualization.py` for consistent charting.
-  - Use centralized constants for thresholds to ensure consistency.
-
-- **Adding New Patterns:**
-  - Add detection logic to `PatternRecognition`.
-  - Add visualization logic to `PatternVisualizer`.
-
-- **Prompt Engineering:**
-  - Add or modify prompt templates in the `prompts/` directory.
-  - Use `PromptManager` to load and format prompts for LLM calls.
-
----
-
-## Logging
-
-- Logging is used throughout for error and warning cases, especially in chart generation, data conversion, and LLM calls.
-
----
-
-
-## API Usage
-
-- The FastAPI server (see `api.py`) exposes a `/analyze` endpoint for programmatic access.
-- Returns JSON with only the fields required by the frontend, including base64-encoded chart images and serializable data.
-
-### API Response Fields
-
-The `/analyze` endpoint returns only the following fields (and their nested subfields):
-
-- `success`: boolean
-- `stock_symbol`: string
-- `exchange`: string
-- `analysis_period`: string
-- `interval`: string
-- `timestamp`: string
-- `results`: object (see below)
-- `data`: array of OHLCV records
-
-#### `results` object includes:
-- `consensus`, `indicators`, `charts`, `ai_analysis`, `indicator_summary_md`, `summary`, `overlays`
-- Optional: `support_levels`, `resistance_levels`, `triangle_patterns`, `flag_patterns`, `volume_anomalies_detailed`
-
-#### `data` array:
-Each entry contains: `date`, `open`, `high`, `low`, `close`, `volume`
-
-All other fields are omitted for efficiency.
-
-#### Example API Response
-
+### **Example Response Structure**
 ```json
 {
   "success": true,
@@ -124,34 +52,151 @@ All other fields are omitted for efficiency.
   "exchange": "NSE",
   "analysis_period": "365 days",
   "interval": "day",
-  "timestamp": "2025-07-11T12:34:56.789Z",
+  "timestamp": "2024-01-15T10:30:00",
+  "message": "AI analysis completed for RELIANCE. Signal: Bullish (Confidence: 85%)",
   "results": {
-    "consensus": { /* ... */ },
-    "indicators": { /* ... */ },
-    "charts": { /* ... */ },
-    "ai_analysis": { /* ... */ },
-    "indicator_summary_md": "...",
-    "summary": { /* ... */ },
-    "overlays": { /* ... */ },
-    "support_levels": [/* ... */],
-    "resistance_levels": [/* ... */]
-  },
-  "data": [
-    {"date": "2025-07-10", "open": 100, "high": 110, "low": 95, "close": 108, "volume": 123456},
-    // ...
-  ]
+    "ai_analysis": {
+      "trend": "Bullish",
+      "confidence_pct": 85,
+      "short_term": {
+        "entry_range": [2500, 2550],
+        "stop_loss": 2450,
+        "targets": [2600, 2650],
+        "rationale": "Strong momentum with volume confirmation"
+      }
+    },
+    "summary": {
+      "overall_signal": "Bullish",
+      "confidence": 85,
+      "analysis_method": "AI-Powered Analysis",
+      "risk_level": "Low",
+      "recommendation": "Strong Buy"
+    },
+    "trading_guidance": {
+      "short_term": { /* trading strategy */ },
+      "medium_term": { /* trading strategy */ },
+      "long_term": { /* trading strategy */ },
+      "risk_management": [ /* risk factors */ ],
+      "key_levels": [ /* important price levels */ ]
+    }
+  }
 }
 ```
 
----
+## 🔧 **Installation & Setup**
 
-## Notes on Extensibility & Reporting
+### **Prerequisites**
+- Python 3.8+
+- Zerodha API credentials
+- Google Gemini API key
 
-- The LLM/AI analysis step provides both a structured result and markdown summaries for easy integration into reports, dashboards, or further LLM prompts.
-- The codebase is highly modular and easy to extend for new indicators, patterns, or AI workflows.
+### **Installation**
+```bash
+pip install -r requirements.txt
+```
 
----
+### **Configuration**
+1. Set up Zerodha API credentials in `config.py`
+2. Configure Google Gemini API key
+3. Set up sector classification data
 
-For a detailed call tree and relationships, see `tree.md` in the repository.
+## 🚀 **Usage**
+
+### **API Endpoints**
+
+#### **Analyze Stock**
+```bash
+POST /analyze
+{
+  "stock": "RELIANCE",
+  "exchange": "NSE",
+  "period": 365,
+  "interval": "day",
+  "sector": "energy"
+}
+```
+
+#### **Sector Benchmarking**
+```bash
+POST /sector/benchmark
+{
+  "stock": "RELIANCE",
+  "sector": "energy"
+}
+```
+
+#### **Sector Comparison**
+```bash
+POST /sector/compare
+{
+  "sectors": ["energy", "technology", "banking"]
+}
+```
+
+## 🎯 **AI-Powered Analysis**
+
+The system uses Google's Gemini LLM for sophisticated analysis:
+
+- **Multi-modal Analysis**: Combines technical indicators, chart patterns, and market context
+- **Confidence Scoring**: Provides confidence levels for all recommendations
+- **Conflict Resolution**: Intelligent handling of conflicting signals
+- **Market Context**: Considers broader market conditions and sector dynamics
+- **Risk Management**: Built-in risk assessment and management recommendations
+
+## 📈 **Technical Indicators**
+
+Comprehensive technical analysis including:
+
+- **Moving Averages**: SMA, EMA, WMA with multiple timeframes
+- **Momentum Indicators**: RSI, MACD, Stochastic, Williams %R
+- **Volatility Indicators**: Bollinger Bands, ATR, Keltner Channels
+- **Volume Analysis**: OBV, Volume Profile, Volume Ratios
+- **Trend Indicators**: ADX, Ichimoku, Parabolic SAR
+- **Support/Resistance**: Dynamic level detection and analysis
+
+## 🎨 **Pattern Recognition**
+
+Advanced pattern detection algorithms:
+
+- **Reversal Patterns**: Head & Shoulders, Double Tops/Bottoms, Triple Tops/Bottoms
+- **Continuation Patterns**: Triangles, Flags, Pennants, Wedges
+- **Candlestick Patterns**: Doji, Hammer, Shooting Star, Engulfing
+- **Divergence Detection**: Price-Volume and Price-Indicator divergences
+- **Volume Anomalies**: Unusual volume patterns and spikes
+
+## 🏭 **Sector Analysis**
+
+Comprehensive sector-specific analysis:
+
+- **Sector Benchmarking**: Performance comparison within sectors
+- **Sector Rotation**: Analysis of sector rotation patterns
+- **Correlation Analysis**: Inter-sector correlation insights
+- **Sector-Specific Metrics**: Tailored analysis for different sectors
+
+## 🔒 **Security & Performance**
+
+- **API Rate Limiting**: Built-in rate limiting for external APIs
+- **Caching**: Intelligent caching for performance optimization
+- **Error Handling**: Comprehensive error handling and recovery
+- **Data Validation**: Robust data validation and sanitization
+
+## 📝 **Documentation**
+
+- **API Documentation**: Comprehensive API endpoint documentation
+- **Analysis Guides**: Detailed guides for interpreting analysis results
+- **Best Practices**: Trading and analysis best practices
+- **Troubleshooting**: Common issues and solutions
+
+## 🤝 **Contributing**
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## 📄 **License**
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 

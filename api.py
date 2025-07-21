@@ -95,14 +95,15 @@ def convert_charts_to_base64(charts_dict: dict) -> dict:
 def validate_analysis_results(results: dict) -> dict:
     """Validate and ensure all required fields are present in analysis results."""
     required_fields = {
-        'consensus': {},
-        'indicators': {},
-        'charts': {},
         'ai_analysis': {},
+        'indicators': {},
+        'overlays': {},
         'indicator_summary_md': '',
         'chart_insights': '',
         'summary': {},
-        'sector_benchmarking': {}
+        'trading_guidance': {},
+        'sector_benchmarking': {},
+        'metadata': {}
     }
     
     validated_results = {}
@@ -156,7 +157,7 @@ async def analyze(request: AnalysisRequest):
             raise HTTPException(status_code=401, detail="Failed to authenticate with Zerodha API")
 
         # Analyze stock with sector awareness
-        results, data = await orchestrator.analyze_stock(
+        results, success_message, error_message = await orchestrator.analyze_stock(
             symbol=request.stock,
             exchange=request.exchange,
             period=request.period,
@@ -164,13 +165,12 @@ async def analyze(request: AnalysisRequest):
             output_dir=output_dir,
             sector=request.sector  # Pass sector information
         )
-
-        # Convert data to JSON-serializable format
-        data_dict = data.reset_index().to_dict(orient="records") if data is not None else []
+        
+        if error_message:
+            raise HTTPException(status_code=500, detail=error_message)
 
         # Make all data JSON serializable
         serialized_results = make_json_serializable(results)
-        serialized_data = make_json_serializable(data_dict)
 
         # Clean, efficient response
         response = {
@@ -180,8 +180,8 @@ async def analyze(request: AnalysisRequest):
             "analysis_period": f"{request.period} days",
             "interval": request.interval,
             "timestamp": pd.Timestamp.now().isoformat(),
-            "results": serialized_results,
-            "data": serialized_data
+            "message": success_message,
+            "results": serialized_results
         }
 
         return JSONResponse(content=response)

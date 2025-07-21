@@ -830,85 +830,115 @@ class ChartVisualizer:
         
         # Plot 1: Short-term analysis
         ax1 = axes[0, 0]
-        if "short_term" in mtf_analysis:
-            short_term = mtf_analysis["short_term"]
-            consensus = short_term["consensus"]
+        short_term = mtf_analysis.get("short_term", {})
+        if short_term:
+            periods = list(short_term.keys())
+            bullish_periods = [short_term[p].get("bullish", 0) for p in periods]
+            bearish_periods = [short_term[p].get("bearish", 0) for p in periods]
             
-            ax1.plot(data.index, data['close'], 'b-', linewidth=1, alpha=0.7)
-            ax1.set_title(f'Short-term Analysis\nConsensus: {consensus["direction"].title()} ({consensus["strength"]:.0f}%)', 
-                         fontsize=12, fontweight='bold')
-            ax1.set_ylabel('Price')
+            x = np.arange(len(periods))
+            width = 0.35
+            
+            ax1.bar(x - width/2, bullish_periods, width, label='Bullish', color='green', alpha=0.7)
+            ax1.bar(x + width/2, bearish_periods, width, label='Bearish', color='red', alpha=0.7)
+            
+            ax1.set_xlabel('Time Periods')
+            ax1.set_ylabel('Signal Strength')
+            ax1.set_title(f'Short-term Analysis\nAI Confidence: {short_term.get("ai_confidence", 0):.0f}%')
+            ax1.set_xticks(x)
+            ax1.set_xticklabels(periods, rotation=45)
+            ax1.legend()
             ax1.grid(True, alpha=0.3)
             
-            # Add consensus info
-            ax1.text(0.02, 0.98, f'Bullish: {consensus["bullish_periods"]}\nBearish: {consensus["bearish_periods"]}', 
+            # Add AI analysis info
+            ax1.text(0.02, 0.98, f'AI Trend: {short_term.get("ai_trend", "Unknown")}\nConfidence: {short_term.get("ai_confidence", 0):.0f}%',
                     transform=ax1.transAxes, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
+                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
         
         # Plot 2: Medium-term analysis
         ax2 = axes[0, 1]
-        if "medium_term" in mtf_analysis:
-            medium_term = mtf_analysis["medium_term"]
-            consensus = medium_term["consensus"]
+        medium_term = mtf_analysis.get("medium_term", {})
+        if medium_term:
+            periods = list(medium_term.keys())
+            bullish_periods = [medium_term[p].get("bullish", 0) for p in periods]
+            bearish_periods = [medium_term[p].get("bearish", 0) for p in periods]
             
-            ax2.plot(data.index, data['close'], 'g-', linewidth=1, alpha=0.7)
-            ax2.set_title(f'Medium-term Analysis\nConsensus: {consensus["direction"].title()} ({consensus["strength"]:.0f}%)', 
-                         fontsize=12, fontweight='bold')
-            ax2.set_ylabel('Price')
+            x = np.arange(len(periods))
+            width = 0.35
+            
+            ax2.bar(x - width/2, bullish_periods, width, label='Bullish', color='green', alpha=0.7)
+            ax2.bar(x + width/2, bearish_periods, width, label='Bearish', color='red', alpha=0.7)
+            
+            ax2.set_xlabel('Time Periods')
+            ax2.set_ylabel('Signal Strength')
+            ax2.set_title(f'Medium-term Analysis\nAI Confidence: {medium_term.get("ai_confidence", 0):.0f}%')
+            ax2.set_xticks(x)
+            ax2.set_xticklabels(periods, rotation=45)
+            ax2.legend()
             ax2.grid(True, alpha=0.3)
             
-            # Add consensus info
-            ax2.text(0.02, 0.98, f'Bullish: {consensus["bullish_periods"]}\nBearish: {consensus["bearish_periods"]}', 
+            # Add AI analysis info
+            ax2.text(0.02, 0.98, f'AI Trend: {medium_term.get("ai_trend", "Unknown")}\nConfidence: {medium_term.get("ai_confidence", 0):.0f}%',
                     transform=ax2.transAxes, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.8))
+                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
         
         # Plot 3: Long-term analysis
         ax3 = axes[1, 0]
-        if "long_term" in mtf_analysis:
-            long_term = mtf_analysis["long_term"]
-            consensus = long_term["consensus"]
+        long_term = mtf_analysis.get("long_term", {})
+        if long_term:
+            periods = list(long_term.keys())
+            bullish_periods = [long_term[p].get("bullish", 0) for p in periods]
+            bearish_periods = [long_term[p].get("bearish", 0) for p in periods]
             
-            ax3.plot(data.index, data['close'], 'r-', linewidth=1, alpha=0.7)
-            ax3.set_title(f'Long-term Analysis\nConsensus: {consensus["direction"].title()} ({consensus["strength"]:.0f}%)', 
-                         fontsize=12, fontweight='bold')
-            ax3.set_xlabel('Date')
-            ax3.set_ylabel('Price')
+            x = np.arange(len(periods))
+            width = 0.35
+            
+            ax3.bar(x - width/2, bullish_periods, width, label='Bullish', color='green', alpha=0.7)
+            ax3.bar(x + width/2, bearish_periods, width, label='Bearish', color='red', alpha=0.7)
+            
+            ax3.set_xlabel('Time Periods')
+            ax3.set_ylabel('Signal Strength')
+            ax3.set_title(f'Long-term Analysis\nAI Confidence: {long_term.get("ai_confidence", 0):.0f}%')
+            ax3.set_xticks(x)
+            ax3.set_xticklabels(periods, rotation=45)
+            ax3.legend()
             ax3.grid(True, alpha=0.3)
             
-            # Add consensus info
-            ax3.text(0.02, 0.98, f'Bullish: {consensus["bullish_periods"]}\nBearish: {consensus["bearish_periods"]}', 
+            # Add AI analysis info
+            ax3.text(0.02, 0.98, f'AI Trend: {long_term.get("ai_trend", "Unknown")}\nConfidence: {long_term.get("ai_confidence", 0):.0f}%',
                     transform=ax3.transAxes, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='lightcoral', alpha=0.8))
+                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
         
-        # Plot 4: Overall consensus
+        # Plot 4: Overall AI analysis
         ax4 = axes[1, 1]
-        if "overall_consensus" in mtf_analysis:
-            overall = mtf_analysis["overall_consensus"]
-            alignment = overall["timeframe_alignment"]
+        
+        if "overall_ai_analysis" in mtf_analysis:
+            overall = mtf_analysis["overall_ai_analysis"]
             
-            # Create alignment visualization
-            timeframes = list(alignment.keys())
-            directions = [alignment[tf] for tf in timeframes]
+            # Create a summary chart
+            categories = ['Short-term', 'Medium-term', 'Long-term']
+            ai_confidence = [
+                mtf_analysis.get("short_term", {}).get("ai_confidence", 0),
+                mtf_analysis.get("medium_term", {}).get("ai_confidence", 0),
+                mtf_analysis.get("long_term", {}).get("ai_confidence", 0)
+            ]
             
-            colors = []
-            for direction in directions:
-                if direction == "bullish":
-                    colors.append('green')
-                elif direction == "bearish":
-                    colors.append('red')
-                else:
-                    colors.append('gray')
+            colors = ['lightblue', 'lightgreen', 'lightcoral']
+            ax4.bar(categories, ai_confidence, color=colors, alpha=0.7)
             
-            bars = ax4.bar(timeframes, [1, 1, 1], color=colors, alpha=0.7)
-            ax4.set_title(f'Overall Consensus\nDirection: {overall["direction"].title()} ({overall["strength"]:.0f}%)', 
-                         fontsize=12, fontweight='bold')
-            ax4.set_ylabel('Alignment')
-            ax4.set_ylim(0, 1.2)
+            ax4.set_ylabel('AI Confidence (%)')
+            ax4.set_title(f'Overall AI Analysis\nPrimary Trend: {overall.get("primary_trend", "Unknown")}')
+            ax4.set_ylim(0, 100)
+            ax4.grid(True, alpha=0.3)
             
-            # Add score info
-            ax4.text(0.02, 0.98, f'Score: {overall["score"]:.1f}', 
+            # Add value labels on bars
+            for i, v in enumerate(ai_confidence):
+                ax4.text(i, v + 1, f'{v:.0f}%', ha='center', va='bottom')
+            
+            # Add overall analysis info
+            ax4.text(0.02, 0.98, f'Primary Trend: {overall.get("primary_trend", "Unknown")}\nConfidence: {overall.get("confidence", 0):.0f}%',
                     transform=ax4.transAxes, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
+                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
         
         plt.tight_layout()
         

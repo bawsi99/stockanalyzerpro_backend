@@ -122,10 +122,10 @@ class Config:
             "medium_term": {"periods": [50, 100, 200], "weight": 0.4},
             "long_term": {"periods": [200, 365], "weight": 0.3}
         },
-        "consensus_thresholds": {
-            "strong": 10,
-            "moderate": 5,
-            "weak": 2
+        "ai_confidence_thresholds": {
+            "high": 80,
+            "medium": 60,
+            "low": 40
         }
     }
     

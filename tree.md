@@ -1,195 +1,166 @@
-# Codebase Call Tree & Architecture (Updated)
+# Call Tree and Architecture Overview
 
----
+## Main Orchestrator (agent_capabilities.py)
 
-## Entry Points
-
-- **main.py**: CLI entry point for stock analysis.
-- **api.py**: FastAPI HTTP endpoint for programmatic access.
-
----
-
-## Core Orchestrator: `StockAnalysisOrchestrator` (agent_capabilities.py)
-
-- **__init__**: Sets up ZerodhaDataClient, GeminiClient, TechnicalIndicators, PatternVisualizer, IndicatorComparisonAnalyzer, DataCollector, and state cache.
+### StockAnalysisOrchestrator
+- **__init__**: Sets up ZerodhaDataClient, GeminiClient, TechnicalIndicators, PatternVisualizer, DataCollector, and state cache.
 - **authenticate**: Authenticates with Zerodha API.
-- **_get_or_create_state**: Manages per-stock/exchange state (AnalysisState dataclass).
-- **retrieve_stock_data**: Fetches historical data (with market-hours logic).
-- **calculate_indicators**: Uses DataCollector to compute all technical indicators.
-- **create_visualizations**: Generates and saves all pattern/indicator charts using PatternVisualizer and ChartVisualizer.
-- **compare_indicators**: Aggregates indicator signals into a consensus using IndicatorComparisonAnalyzer.
-- **serialize_indicators**: Converts pandas/numpy objects to JSON-serializable format.
-- **orchestrate_llm_analysis (async)**: Coordinates LLM analysis via GeminiClient (returns result, indicator summary markdown, chart insights markdown).
-- **analyze_with_ai (async)**: Wrapper for orchestrate_llm_analysis.
-- **analyze_stock (async)**: Main orchestrator method. Calls all above, returns full analysis and data.
-- **AnalysisState (dataclass)**: Caches indicators, consensus, results, last_updated.
+- **retrieve_stock_data**: Fetches historical stock data with market timing awareness.
+- **calculate_indicators**: Calculates all technical indicators using TechnicalIndicators class.
+- **create_visualizations**: Generates chart visualizations using PatternVisualizer.
+- **serialize_indicators**: Converts indicators to JSON-serializable format.
+- **orchestrate_llm_analysis**: Coordinates AI analysis using GeminiClient.
+- **analyze_with_ai**: Performs AI-powered analysis with sector context.
+- **analyze_stock**: Main analysis method that orchestrates the entire workflow.
 
----
+### AnalysisState (dataclass)
+- Caches indicators, analysis_results, last_updated.
+- **is_valid**: Checks if cached data is still valid.
+- **update**: Updates state with new data.
 
-## Technical Indicators (technical_indicators.py)
+## Technical Analysis (technical_indicators.py)
 
-- **TechnicalIndicators**: Static methods for all major indicators (SMA, EMA, MACD, RSI, Bollinger Bands, ATR, OBV, ADX, Ichimoku, Fibonacci, Pivot Points, Support/Resistance).
-- **IndicatorComparisonAnalyzer**: Aggregates indicator signals into a consensus (bullish/bearish/neutral, with strength and percentages).
-- **DataCollector**: Gathers all indicator data for a given DataFrame.
+### TechnicalIndicators
+- **calculate_all_indicators**: Main method that calculates all technical indicators.
+- **calculate_sma/ema/wma**: Moving average calculations.
+- **calculate_macd**: MACD indicator calculation.
+- **calculate_rsi**: RSI indicator calculation.
+- **calculate_bollinger_bands**: Bollinger Bands calculation.
+- **calculate_adx**: ADX trend strength calculation.
+- **calculate_enhanced_volume_analysis**: Advanced volume analysis.
+- **calculate_multi_timeframe_analysis**: Multi-timeframe analysis.
+- **get_market_metrics**: Market-specific metrics calculation.
 
----
+### DataCollector
+- **collect_all_data**: Collects and organizes all technical data.
 
-## Pattern Recognition & Visualization (patterns/)
+### IndianMarketMetricsProvider
+- **get_sector_index_data**: Retrieves sector index data.
+- **get_basic_market_metrics**: Calculates basic market metrics.
+- **get_enhanced_market_metrics**: Calculates enhanced market metrics.
 
-- **PatternRecognition**: Detects peaks/lows, divergences, double tops/bottoms, triangles, flags, support/resistance, and volume anomalies.
-- **PatternVisualizer**: Plots all detected patterns and technical features.
-- **ChartVisualizer**: Specialized for multi-panel and comparison charts.
+## Pattern Recognition (patterns/recognition.py)
 
----
+### PatternRecognition
+- **detect_triangle**: Detects triangle patterns.
+- **detect_flag**: Detects flag patterns.
+- **detect_double_top/bottom**: Detects double top/bottom patterns.
+- **detect_head_and_shoulders**: Detects head and shoulders patterns.
+- **detect_divergence**: Detects price-indicator divergences.
+- **detect_volume_anomalies**: Detects unusual volume patterns.
+
+## Visualization (patterns/visualization.py)
+
+### PatternVisualizer
+- **plot_triangle_pattern**: Visualizes triangle patterns.
+- **plot_flag_pattern**: Visualizes flag patterns.
+- **plot_double_top_pattern**: Visualizes double top patterns.
+- **plot_head_and_shoulders_pattern**: Visualizes head and shoulders patterns.
+
+### ChartVisualizer
+- **plot_comparison_chart**: Creates comprehensive comparison charts.
+- **plot_volume_analysis**: Creates volume analysis charts.
+- **plot_pattern_charts**: Creates pattern-specific charts.
+
+## AI Analysis (gemini/gemini_client.py)
+
+### GeminiClient
+- **build_indicators_summary**: Creates indicator summary for AI analysis.
+- **analyze_stock**: Performs comprehensive AI analysis.
+- **analyze_comprehensive_overview**: Analyzes comprehensive chart overview.
+- **analyze_volume_comprehensive**: Analyzes volume patterns.
+- **analyze_reversal_patterns**: Analyzes reversal patterns.
+- **analyze_continuation_levels**: Analyzes continuation patterns.
+
+## Sector Analysis (sector_benchmarking.py)
+
+### sector_benchmarking_provider
+- **get_comprehensive_benchmarking**: Provides comprehensive sector benchmarking.
+- **get_sector_rotation_analysis**: Analyzes sector rotation patterns.
+- **get_sector_correlation_analysis**: Analyzes sector correlations.
 
 ## Data Client (zerodha_client.py)
 
-- **ZerodhaDataClient**: Handles authentication, token management, and data retrieval from Zerodha's KiteConnect API.
-- **CacheManager**: Caches historical data to avoid redundant API calls, with market-hours awareness.
+### ZerodhaDataClient
+- **authenticate**: Authenticates with Zerodha API.
+- **get_historical_data**: Retrieves historical stock data.
+- **get_instruments**: Retrieves instrument information.
 
----
+## API Server (api.py)
 
-## LLM Integration (gemini/)
+### FastAPI Endpoints
+- **POST /analyze**: Main analysis endpoint.
+- **POST /sector/benchmark**: Sector benchmarking endpoint.
+- **GET /sector/list**: List available sectors.
+- **GET /sector/{sector_name}/stocks**: Get stocks in a sector.
+- **GET /sector/{sector_name}/performance**: Get sector performance.
+- **POST /sector/compare**: Compare multiple sectors.
+- **GET /stock/{symbol}/sector**: Get stock's sector.
+- **GET /health**: Health check endpoint.
+- **GET /stock/{symbol}/info**: Get stock information.
 
-- **GeminiClient**: Handles prompt construction, LLM calls, and response parsing. Optimized chart analysis with 4 logical groups.
-- **GeminiCore**: Manages API key, rate limiting, and actual LLM calls (text and multi-modal with images).
-- **PromptManager**: Loads and formats prompt templates from the prompts/ directory.
-- **ImageUtils/ErrorUtils**: Helpers for image conversion and error handling.
+## Call Flow
 
----
+### Main Analysis Flow
+1. **StockAnalysisOrchestrator.analyze_stock()**
+   ├─ retrieve_stock_data()
+   ├─ calculate_indicators()
+   ├─ create_visualizations()
+   ├─ analyze_with_ai()
+   │  ├─ build_indicators_summary()
+   │  ├─ analyze_comprehensive_overview()
+   │  ├─ analyze_volume_comprehensive()
+   │  ├─ analyze_reversal_patterns()
+   │  └─ analyze_continuation_levels()
+   └─ _create_overlays()
 
-## RAG (Retrieval-Augmented Generation) (rag_milvus.py)
+### Technical Analysis Flow
+1. **TechnicalIndicators.calculate_all_indicators()**
+   ├─ calculate_sma/ema/wma()
+   ├─ calculate_macd()
+   ├─ calculate_rsi()
+   ├─ calculate_bollinger_bands()
+   ├─ calculate_adx()
+   ├─ calculate_enhanced_volume_analysis()
+   └─ calculate_multi_timeframe_analysis()
 
-- **SBERTEmbedding**: Embeds documents/queries for vector search.
-- **RAGRetriever**: Loads, splits, indexes, and retrieves knowledge documents using Milvus and LangChain.
+### Pattern Recognition Flow
+1. **PatternRecognition.detect_*()**
+   ├─ detect_triangle()
+   ├─ detect_flag()
+   ├─ detect_double_top/bottom()
+   ├─ detect_head_and_shoulders()
+   ├─ detect_divergence()
+   └─ detect_volume_anomalies()
 
----
+### AI Analysis Flow
+1. **GeminiClient.analyze_stock()**
+   ├─ build_indicators_summary()
+   ├─ analyze_comprehensive_overview()
+   ├─ analyze_volume_comprehensive()
+   ├─ analyze_reversal_patterns()
+   └─ analyze_continuation_levels()
 
-## Output Structure
+## Data Flow
 
-- **Per-stock output directories** (e.g., output/RELIANCE/) contain:
-  - PNG charts for each pattern/indicator.
-  - results.json with only the fields required by the frontend (see README.md for the exact schema). All extra fields (e.g., debug, recommendation, chart_insights) are omitted for efficiency and frontend compatibility.
+### Input Data
+- Stock symbol and exchange
+- Analysis period and interval
+- Optional sector information
 
----
+### Processing Steps
+1. **Data Retrieval**: Fetch historical OHLCV data
+2. **Technical Analysis**: Calculate all technical indicators
+3. **Pattern Recognition**: Detect chart patterns
+4. **Visualization**: Generate chart images
+5. **AI Analysis**: Perform AI-powered analysis
+6. **Sector Analysis**: Apply sector-specific context
+7. **Results Assembly**: Compile comprehensive results
 
-## Prompt Templates (prompts/)
-
-- Templates for each LLM prompt type (indicator summary, image analysis, final decision, etc.), loaded dynamically by PromptManager.
-- Optimized for 4 chart analysis groups: comprehensive overview, volume analysis, reversal patterns, continuation & levels.
-
----
-
-# Call Tree (Indented)
-
-main.py
-  └─ main()
-      └─ StockAnalysisOrchestrator
-          ├─ authenticate()
-          └─ analyze_stock() [async]
-              ├─ retrieve_stock_data()
-              ├─ calculate_indicators()
-              ├─ create_visualizations()
-              ├─ compare_indicators()
-              └─ analyze_with_ai() [async]
-                  └─ orchestrate_llm_analysis() [async]
-                      └─ GeminiClient.analyze_stock() [async]
-                          ├─ build_indicators_summary() [async]
-                          │   └─ PromptManager.format_prompt()
-                          │   └─ GeminiCore.call_llm()
-                          ├─ analyze_comprehensive_overview() [async]
-                          ├─ analyze_volume_comprehensive() [async]
-                          ├─ analyze_reversal_patterns() [async]
-                          ├─ analyze_continuation_levels() [async]
-                          └─ PromptManager.format_prompt() (final decision)
-                          └─ GeminiCore.call_llm()
-              └─ serialize_indicators()
-
-api.py
-  └─ analyze() [POST /analyze]
-      └─ StockAnalysisOrchestrator
-          ├─ authenticate()
-          └─ analyze_stock() [async]
-      └─ make_json_serializable()
-
-agent_capabilities.py
-  └─ StockAnalysisOrchestrator
-      ├─ __init__()
-      ├─ authenticate()
-      ├─ _get_or_create_state()
-      ├─ retrieve_stock_data()
-      ├─ calculate_indicators()
-      ├─ create_visualizations()
-      ├─ compare_indicators()
-      ├─ serialize_indicators()
-      ├─ orchestrate_llm_analysis() [async]
-      ├─ analyze_with_ai() [async]
-      └─ analyze_stock() [async]
-  └─ AnalysisState (dataclass)
-
-technical_indicators.py
-  ├─ TechnicalIndicators
-  ├─ IndicatorComparisonAnalyzer
-  └─ DataCollector
-
-patterns/recognition.py
-  └─ PatternRecognition
-
-patterns/visualization.py
-  ├─ PatternVisualizer
-  └─ ChartVisualizer
-
-zerodha_client.py
-  ├─ ZerodhaDataClient
-  └─ CacheManager
-
-gemini/gemini_client.py
-  └─ GeminiClient
-      ├─ build_indicators_summary() [async]
-      ├─ analyze_stock() [async]
-      ├─ analyze_comprehensive_overview() [async]
-      ├─ analyze_volume_comprehensive() [async]
-      ├─ analyze_reversal_patterns() [async]
-      └─ analyze_continuation_levels() [async]
-
-gemini/gemini_core.py
-  └─ GeminiCore
-
-gemini/prompt_manager.py
-  └─ PromptManager
-
-rag_milvus.py
-  ├─ SBERTEmbedding
-  └─ RAGRetriever
-
-output/
-  └─ [STOCK]/
-      ├─ *_comparison_chart.png
-      ├─ *_divergence.png
-      ├─ *_double_tops_bottoms.png
-      ├─ *_support_resistance.png
-      ├─ *_triangles_flags.png
-      ├─ *_volume_anomalies.png
-      ├─ *_price_volume_correlation.png
-      ├─ *_candlestick_volume.png
-      └─ results.json
-
-prompts/
-  ├─ image_analysis_comprehensive_overview.txt
-  ├─ image_analysis_volume_comprehensive.txt
-  ├─ image_analysis_reversal_patterns.txt
-  ├─ image_analysis_continuation_levels.txt
-  ├─ indicators_to_summary_and_json.txt
-  ├─ final_stock_decision.txt
-  └─ meta_prompt.txt
-
----
-
-# Architectural Highlights
-
-- **Async LLM Pipeline:** All AI/LLM analysis is async, allowing for efficient multi-modal (text + image) analysis.
-- **Optimized Chart Analysis:** 8 charts grouped into 4 logical analysis groups for better efficiency and insights.
-- **Extensible Patterns:** Pattern recognition and visualization are modular, supporting easy addition of new patterns.
-- **Stateful Orchestration:** Caching and state management allow for efficient repeated analysis and incremental updates.
-- **Separation of Concerns:** Data retrieval, indicator calculation, pattern recognition, visualization, and LLM analysis are cleanly separated.
-- **RAG Ready:** RAG logic is present but not yet deeply integrated into the main orchestrator.
+### Output Data
+- AI analysis with confidence levels
+- Technical indicators and values
+- Chart patterns and overlays
+- Trading strategies and recommendations
+- Risk management guidance
+- Sector benchmarking data

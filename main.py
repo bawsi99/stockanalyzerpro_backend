@@ -48,13 +48,17 @@ def main():
         
         # Analyze stock  
         try:
-            results, data = asyncio.run(orchestrator.analyze_stock( #ignore data for api
+            results, success_message, error_message = asyncio.run(orchestrator.analyze_stock(
                 symbol=args.stock,
                 exchange=args.exchange,
                 period=args.period,
                 interval=args.interval,
                 output_dir=output
             ))
+            
+            if error_message:
+                print(f"Error during analysis: {error_message}")
+                return
             # print(f"[DEBUG-POST] analyze_stock returned: results type={type(results)}, data type={type(data)}")
 
             # DEBUG: Print all keys and types in results before serialization, with exception handling
