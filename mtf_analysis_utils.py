@@ -102,10 +102,10 @@ def multi_timeframe_analysis(
     timeframes[base_interval] = compute_indicators(df)
     # Determine which higher timeframes to compute
     resample_map = {
-        'minute': [('hour', 'H'), ('day', 'D'), ('week', 'W'), ('month', 'M')],
-        'hour': [('day', 'D'), ('week', 'W'), ('month', 'M')],
-        'day': [('week', 'W'), ('month', 'M')],
-        'week': [('month', 'M')],
+        'minute': [('hour', 'H'), ('day', 'D'), ('week', 'W'), ('month', 'ME')],
+        'hour': [('day', 'D'), ('week', 'W'), ('month', 'ME')],
+        'day': [('week', 'W'), ('month', 'ME')],
+        'week': [('month', 'ME')],
     }
     if base_interval in resample_map:
         for tf_name, rule in resample_map[base_interval]:

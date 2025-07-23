@@ -15,9 +15,21 @@ IMPORTANT: When analyzing the data, pay special attention to potential conflicts
 
 4. **Timeframe Considerations**: Different signals may be valid for different timeframes - clarify this
 
+## REQUIRED MATHEMATICAL CALCULATIONS:
+
+You MUST perform the following calculations using Python code and include the results in your analysis:
+
+1. **Price-Volume Correlation**: Calculate the Pearson correlation coefficient between price and volume data
+2. **RSI Validation**: Count the number of oversold (<30) and overbought (>70) periods, calculate average RSI
+3. **Trend Strength**: Calculate linear regression slope and R-squared value for price trend
+4. **Volatility Analysis**: Calculate standard deviation and coefficient of variation for price movements
+5. **Moving Average Analysis**: Calculate the percentage of price data above/below key moving averages
+6. **MACD Signal Strength**: Calculate the average MACD histogram values and signal line crossovers
+7. **Support/Resistance Levels**: Use statistical methods to identify significant price levels
+
 ## Required Output Format:
 
-Provide your analysis in the following JSON format:
+Provide your analysis in the following JSON format. **CRITICAL: Ensure the JSON is perfectly valid - no trailing commas, proper quotes, and complete structure.**
 
 ```json
 {{
@@ -143,6 +155,40 @@ Provide your analysis in the following JSON format:
       }}
     ],
     "weekly_reviews": ["list of weekly review items"]
+  }},
+  "mathematical_validation": {{
+    "price_volume_correlation": {{
+      "correlation_coefficient": 0.0-1.0,
+      "p_value": 0.0-1.0,
+      "significance": "high|medium|low"
+    }},
+    "rsi_analysis": {{
+      "oversold_periods": 0-100,
+      "overbought_periods": 0-100,
+      "average_rsi": 0-100,
+      "signal_strength": "strong|moderate|weak"
+    }},
+    "trend_strength": {{
+      "linear_regression_slope": -1.0-1.0,
+      "r_squared": 0.0-1.0,
+      "trend_reliability": "high|medium|low"
+    }},
+    "volatility_metrics": {{
+      "standard_deviation": 0.0-100.0,
+      "coefficient_of_variation": 0.0-1.0,
+      "volatility_level": "high|medium|low"
+    }},
+    "moving_average_analysis": {{
+      "price_above_sma20": 0-100,
+      "price_above_sma50": 0-100,
+      "price_above_sma200": 0-100,
+      "ma_alignment": "bullish|bearish|neutral"
+    }},
+    "macd_analysis": {{
+      "average_histogram": -1.0-1.0,
+      "signal_crossovers": 0-100,
+      "momentum_strength": "strong|moderate|weak"
+    }}
   }}
 }}
 ```
@@ -165,5 +211,19 @@ Provide your analysis in the following JSON format:
 4. **Risk Awareness**: Always include risk management considerations
 5. **Actionable Insights**: Provide specific, actionable trading/investment guidance
 6. **Timeframe Clarity**: Distinguish between short-term, medium-term, and long-term signals
+7. **Mathematical Validation**: Use Python code to perform all required calculations and include results in the mathematical_validation section
 
-Remember: The goal is to provide clear, actionable guidance that helps users make informed decisions while being transparent about uncertainties and conflicts in the analysis. 
+Remember: The goal is to provide clear, actionable guidance that helps users make informed decisions while being transparent about uncertainties and conflicts in the analysis.
+
+**IMPORTANT JSON FORMATTING RULES:**
+- Use double quotes for all strings and keys
+- No trailing commas before closing braces or brackets
+- Ensure all arrays and objects are properly closed
+- Use null for missing values, not undefined
+- Validate your JSON before providing it
+
+**CODE EXECUTION REQUIREMENTS:**
+- Perform all mathematical calculations using Python code
+- Include the calculation results in the mathematical_validation section
+- Show your work and explain the significance of each calculation
+- Use statistical methods to validate your analysis 

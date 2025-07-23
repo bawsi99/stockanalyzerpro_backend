@@ -1,14 +1,13 @@
 # Call Tree and Architecture Overview
 
-## Main Orchestrator (agent_capabilities.py)
+## Main Orchestrator (`agent_capabilities.py`)
 
 ### StockAnalysisOrchestrator
-- **__init__**: Sets up ZerodhaDataClient, GeminiClient, TechnicalIndicators, PatternVisualizer, DataCollector, and state cache.
+- **__init__**: Sets up ZerodhaDataClient, GeminiClient, TechnicalIndicators, PatternVisualizer, and state cache.
 - **authenticate**: Authenticates with Zerodha API.
 - **retrieve_stock_data**: Fetches historical stock data with market timing awareness.
 - **calculate_indicators**: Calculates all technical indicators using TechnicalIndicators class.
 - **create_visualizations**: Generates chart visualizations using PatternVisualizer.
-- **serialize_indicators**: Converts indicators to JSON-serializable format.
 - **orchestrate_llm_analysis**: Coordinates AI analysis using GeminiClient.
 - **analyze_with_ai**: Performs AI-powered analysis with sector context.
 - **analyze_stock**: Main analysis method that orchestrates the entire workflow.
@@ -18,17 +17,13 @@
 - **is_valid**: Checks if cached data is still valid.
 - **update**: Updates state with new data.
 
-## Technical Analysis (technical_indicators.py)
+---
+
+## Technical Analysis (`technical_indicators.py`)
 
 ### TechnicalIndicators
-- **calculate_all_indicators**: Main method that calculates all technical indicators.
-- **calculate_sma/ema/wma**: Moving average calculations.
-- **calculate_macd**: MACD indicator calculation.
-- **calculate_rsi**: RSI indicator calculation.
-- **calculate_bollinger_bands**: Bollinger Bands calculation.
-- **calculate_adx**: ADX trend strength calculation.
-- **calculate_enhanced_volume_analysis**: Advanced volume analysis.
-- **calculate_multi_timeframe_analysis**: Multi-timeframe analysis.
+- **calculate_all_indicators**: Calculates all technical indicators (SMA, EMA, MACD, RSI, Bollinger Bands, ADX, etc.).
+- **calculate_multi_timeframe_analysis**: Multi-timeframe analysis for AI input.
 - **get_market_metrics**: Market-specific metrics calculation.
 
 ### DataCollector
@@ -39,7 +34,9 @@
 - **get_basic_market_metrics**: Calculates basic market metrics.
 - **get_enhanced_market_metrics**: Calculates enhanced market metrics.
 
-## Pattern Recognition (patterns/recognition.py)
+---
+
+## Pattern Recognition (`patterns/recognition.py`)
 
 ### PatternRecognition
 - **detect_triangle**: Detects triangle patterns.
@@ -49,7 +46,9 @@
 - **detect_divergence**: Detects price-indicator divergences.
 - **detect_volume_anomalies**: Detects unusual volume patterns.
 
-## Visualization (patterns/visualization.py)
+---
+
+## Visualization (`patterns/visualization.py`)
 
 ### PatternVisualizer
 - **plot_triangle_pattern**: Visualizes triangle patterns.
@@ -62,42 +61,68 @@
 - **plot_volume_analysis**: Creates volume analysis charts.
 - **plot_pattern_charts**: Creates pattern-specific charts.
 
-## AI Analysis (gemini/gemini_client.py)
+---
+
+## AI Analysis (`gemini/gemini_client.py`)
 
 ### GeminiClient
 - **build_indicators_summary**: Creates indicator summary for AI analysis.
-- **analyze_stock**: Performs comprehensive AI analysis.
+- **analyze_stock**: Performs comprehensive AI analysis (single source of truth).
 - **analyze_comprehensive_overview**: Analyzes comprehensive chart overview.
 - **analyze_volume_comprehensive**: Analyzes volume patterns.
 - **analyze_reversal_patterns**: Analyzes reversal patterns.
 - **analyze_continuation_levels**: Analyzes continuation patterns.
 
-## Sector Analysis (sector_benchmarking.py)
+---
 
-### sector_benchmarking_provider
-- **get_comprehensive_benchmarking**: Provides comprehensive sector benchmarking.
-- **get_sector_rotation_analysis**: Analyzes sector rotation patterns.
+## Sector Analysis (`sector_benchmarking.py`)
+
+### SectorBenchmarkingProvider
+- **get_comprehensive_benchmarking**: Provides comprehensive sector benchmarking (hybrid approach).
+- **get_sector_rotation_analysis**: Analyzes sector rotation patterns (cached for performance).
 - **get_sector_correlation_analysis**: Analyzes sector correlations.
 
-## Data Client (zerodha_client.py)
+---
+
+## Data Client (`zerodha_client.py`)
 
 ### ZerodhaDataClient
 - **authenticate**: Authenticates with Zerodha API.
 - **get_historical_data**: Retrieves historical stock data.
 - **get_instruments**: Retrieves instrument information.
 
-## API Server (api.py)
+---
+
+## Sector Classification
+
+### SectorClassifier / EnhancedSectorClassifier
+- Classifies stocks into sectors using JSON-driven mappings and advanced filtering.
+
+---
+
+## Real-Time Data (`zerodha_ws_client.py`, `api.py`)
+
+### LiveDataPubSub
+- Real-time data pub/sub for WebSocket streaming.
+- Efficient, filterable pub/sub system for streaming to multiple clients.
+
+---
+
+## API Server (`api.py`)
 
 ### FastAPI Endpoints
-- **POST /analyze**: Main analysis endpoint.
+- **POST /analyze**: Main AI-powered analysis endpoint.
 - **POST /sector/benchmark**: Sector benchmarking endpoint.
+- **POST /sector/compare**: Compare multiple sectors.
 - **GET /sector/list**: List available sectors.
 - **GET /sector/{sector_name}/stocks**: Get stocks in a sector.
 - **GET /sector/{sector_name}/performance**: Get sector performance.
-- **POST /sector/compare**: Compare multiple sectors.
 - **GET /stock/{symbol}/sector**: Get stock's sector.
-- **GET /health**: Health check endpoint.
 - **GET /stock/{symbol}/info**: Get stock information.
+- **GET /health**: Health check endpoint.
+- **GET /ws/stream**: WebSocket endpoint for real-time data streaming.
+
+---
 
 ## Call Flow
 
@@ -141,6 +166,8 @@
    ├─ analyze_reversal_patterns()
    └─ analyze_continuation_levels()
 
+---
+
 ## Data Flow
 
 ### Input Data
@@ -151,10 +178,10 @@
 ### Processing Steps
 1. **Data Retrieval**: Fetch historical OHLCV data
 2. **Technical Analysis**: Calculate all technical indicators
-3. **Pattern Recognition**: Detect chart patterns
+3. **Pattern Recognition**: Detect chart and volume patterns
 4. **Visualization**: Generate chart images
-5. **AI Analysis**: Perform AI-powered analysis
-6. **Sector Analysis**: Apply sector-specific context
+5. **AI Analysis**: Perform AI-powered analysis (Gemini LLM)
+6. **Sector Analysis**: Apply hybrid sector benchmarking and context
 7. **Results Assembly**: Compile comprehensive results
 
 ### Output Data

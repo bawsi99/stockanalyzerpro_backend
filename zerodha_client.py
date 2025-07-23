@@ -116,6 +116,23 @@ class CacheManager:
         
         return ist_time.time() < market_open or ist_time.time() > market_close
 
+def auto_refresh_token(func):
+    def wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        except TokenException as e:
+            logger.warning(f"Token expired or invalid in {func.__name__}: {e}. Attempting to re-authenticate...")
+            if self.authenticate():
+                try:
+                    return func(self, *args, **kwargs)
+                except Exception as e2:
+                    logger.error(f"Failed after re-authentication in {func.__name__}: {e2}")
+                    return None
+            else:
+                logger.error(f"Re-authentication failed in {func.__name__}.")
+                return None
+    return wrapper
+
 class ZerodhaDataClient:
     """
     Client for fetching real stock data from Zerodha using the official KiteConnect API.
@@ -391,6 +408,7 @@ class ZerodhaDataClient:
             logger.error(f"Error getting instruments: {str(e)}")
             return None
     
+    @auto_refresh_token
     def get_instruments(self, exchange: str = None) -> Optional[pd.DataFrame]:
         """
         Get all instruments available for trading.
@@ -403,6 +421,7 @@ class ZerodhaDataClient:
         """
         return self._load_all_instruments(exchange)
     
+    @auto_refresh_token
     def get_instrument_token(self, symbol: str, exchange: str = "NSE") -> Optional[int]:
         """
         Get the instrument token for a given symbol.
@@ -438,6 +457,42 @@ class ZerodhaDataClient:
             logger.error(f"Error getting instrument token: {str(e)}")
             return None
     
+    @auto_refresh_token
+    def get_symbol_from_token(self, token: int, exchange: str = "NSE") -> Optional[str]:
+        """
+        Get the symbol for a given instrument token.
+        
+        Args:
+            token: Instrument token
+            exchange: Exchange code (default: "NSE")
+            
+        Returns:
+            str: Trading symbol if found, None otherwise
+        """
+        try:
+            # Load all instruments if not already loaded
+            instruments = self._load_all_instruments(exchange)
+
+            if instruments is None:
+                logger.error("Failed to get instruments")
+                return None
+            
+            # Find the instrument with matching token and exchange
+            instrument = instruments[(instruments['instrument_token'] == token) & 
+                                    (instruments['exchange'] == exchange)]
+            
+            if len(instrument) == 0:
+                logger.warning(f"Instrument not found for token: {token} on {exchange}")
+                return None
+            
+            # Get the trading symbol
+            symbol = instrument.iloc[0]['tradingsymbol']
+            return symbol
+            
+        except Exception as e:
+            logger.error(f"Error getting symbol from token: {str(e)}")
+            return None
+    
     def _wait_for_rate_limit(self):
         """Implement rate limiting between API calls."""
         now = datetime.now()
@@ -447,6 +502,7 @@ class ZerodhaDataClient:
             time.sleep(sleep_time)
         self.last_request_time = datetime.now()
 
+    @auto_refresh_token
     def get_historical_data(
         self, 
         symbol: str, 
@@ -552,6 +608,7 @@ class ZerodhaDataClient:
             logger.error(f"Error getting historical data: {str(e)}")
             return None
     
+    @auto_refresh_token
     def get_quote(self, symbol: str, exchange: str = "NSE") -> Optional[Dict]:
         """
         Get current market quote for a symbol.
@@ -593,6 +650,7 @@ class ZerodhaDataClient:
             print(f"Error getting quote: {str(e)}")
             return None
     
+    @auto_refresh_token
     def get_market_status(self) -> Optional[Dict]:
         """
         Infer current market status based on time and quotes.

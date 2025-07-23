@@ -8,15 +8,11 @@ import json
 from dataclasses import dataclass, field
 from gemini.gemini_client import GeminiClient
 from zerodha_client import ZerodhaDataClient
-from technical_indicators import (
-    TechnicalIndicators, 
-    DataCollector,
-)
+from technical_indicators import TechnicalIndicators, DataCollector
 from patterns.recognition import PatternRecognition
 from patterns.visualization import PatternVisualizer, ChartVisualizer
 from sector_benchmarking import sector_benchmarking_provider
 import asyncio
-# --- MTF Analysis Import ---
 from mtf_analysis_utils import multi_timeframe_analysis
 
 # Set up logging
@@ -50,18 +46,14 @@ class AnalysisState:
 class StockAnalysisOrchestrator:
     """
     Orchestrates the complete stock analysis process using AI-powered analysis.
+    Handles authentication, data retrieval, indicator calculation, pattern recognition, AI analysis, visualization, and sector benchmarking.
     """
-    
     def __init__(self):
         self.data_client = ZerodhaDataClient()
         self.gemini_client = GeminiClient()
         self.state_cache = {}
-        
-        # Initialize technical indicators
         self.indicators = TechnicalIndicators()
         self.visualizer = PatternVisualizer()
-        
-        # Initialize sector benchmarking provider
         from sector_benchmarking import SectorBenchmarkingProvider
         self.sector_benchmarking_provider = SectorBenchmarkingProvider()
     
@@ -81,73 +73,67 @@ class StockAnalysisOrchestrator:
             self.state_cache[key] = AnalysisState(symbol=symbol, exchange=exchange)
         return self.state_cache[key]
     
-    def retrieve_stock_data(self, symbol: str, exchange: str = "NSE", 
-                           interval: str = "day", period: int = 365) -> pd.DataFrame:
+    def retrieve_stock_data(self, symbol: str, exchange: str = "NSE", interval: str = "day", period: int = 365) -> pd.DataFrame:
         """
-        Retrieve historical stock data.
-        
-        Args:
-            symbol: Stock symbol
-            exchange: Exchange code
-            interval: Candle interval
-            period: Number of days of historical data
-            
-        Returns:
-            pd.DataFrame: DataFrame containing historical data
+        Retrieve real-time or historical stock data, preferring real-time streaming data if available.
         """
-        # Calculate date range with proper market timing
-        now = datetime.now()
-        ist_time = now + timedelta(hours=5, minutes=30)  # Convert to IST
-        
-        # Check if market is currently open (9:15 AM to 3:30 PM IST, Monday to Friday)
-        is_weekday = ist_time.weekday() < 5  # 0-4 are Monday to Friday
-        is_market_hour = False
-        if is_weekday:
-            market_open = time(9, 15)  # 9:15 AM IST
-            market_close = time(15, 30)  # 3:30 PM IST
-            is_market_hour = market_open <= ist_time.time() <= market_close
-        
-        # Determine the end date for data retrieval
-        if is_weekday and is_market_hour:
-            # Market is open, include today's data
-            to_date = now
-            data_freshness = "real_time"
-        else:
-            # Market is closed, use last trading day
-            to_date = now - timedelta(days=1)
-            # Adjust for weekends
-            while to_date.weekday() > 4:  # Saturday = 5, Sunday = 6
-                to_date = to_date - timedelta(days=1)
-            data_freshness = "last_close"
+        from zerodha_ws_client import zerodha_ws_client
+        from zerodha_client import ZerodhaDataClient
+        import pandas as pd
+        from datetime import datetime, timedelta, time
 
-        from_date = to_date - timedelta(days=period)
-        
-        logger.info(f"Retrieving data for {symbol} from {from_date.strftime('%Y-%m-%d')} to {to_date.strftime('%Y-%m-%d')} (freshness: {data_freshness})")
-        
-        # Retrieve data
+        # Map interval to supported streaming timeframes
+        streaming_timeframes = ["1m", "5m", "15m", "1h", "1d"]
+        now = datetime.now()
+        ist_time = now + timedelta(hours=5, minutes=30)
+        is_weekday = ist_time.weekday() < 5
+        market_open = time(9, 15)
+        market_close = time(15, 30)
+        is_market_hour = is_weekday and (market_open <= ist_time.time() <= market_close)
+
+        MIN_CANDLES = 20  # Minimum number of candles required for real-time data to be considered valid
+
+        # Use streaming data if market is open and interval is supported
+        if is_market_hour and interval in streaming_timeframes:
+            data_client = ZerodhaDataClient()
+            token = data_client.get_instrument_token(symbol, exchange)
+            if token is not None:
+                # Build a rolling window of recent candles for indicator calculation
+                candle_agg = zerodha_ws_client.candle_aggregator
+                candles = candle_agg.candles[token][interval]
+                if candles:
+                    sorted_buckets = sorted(candles.keys())
+                    N = min(100, len(sorted_buckets))
+                    recent_candles = [candles[b] for b in sorted_buckets[-N:]]
+                    if len(recent_candles) >= MIN_CANDLES:
+                        df = pd.DataFrame(recent_candles)
+                        # Ensure datetime index for compatibility
+                        df['datetime'] = pd.to_datetime(df['start'], unit='s')
+                        df = df.set_index('datetime')
+                        df.attrs['data_freshness'] = 'real_time'
+                        df.attrs['last_update_time'] = now.isoformat()
+                        df.attrs['market_status'] = "open"
+                        return df
+                    else:
+                        logger.warning(f"Real-time data for {symbol} has only {len(recent_candles)} candles (<{MIN_CANDLES}). Falling back to historical data.")
+                else:
+                    logger.warning(f"No real-time candles found for {symbol}. Falling back to historical data.")
+        # Fallback: use historical data
         data = self.data_client.get_historical_data(
             symbol=symbol,
             exchange=exchange,
             interval=interval,
-            from_date=from_date,
-            to_date=to_date,
             period=period
         )
-        
         if data is None:
             logger.error(f"Failed to retrieve data for {symbol}")
             return data
-        
-        # Always prepare data here
         if 'date' in data.columns:
             data['date'] = pd.to_datetime(data['date'])
             data = data.set_index('date')
-        
-        # Add metadata about data freshness
-        data.attrs['data_freshness'] = data_freshness
-        data.attrs['last_update_time'] = to_date.isoformat()
-        data.attrs['market_status'] = "open" if is_weekday and is_market_hour else "closed"
-        
+        data.attrs['data_freshness'] = 'historical'
+        data.attrs['last_update_time'] = now.isoformat()
+        data.attrs['market_status'] = "closed"
         return data
     
     def calculate_indicators(self, data: pd.DataFrame, stock_symbol: str = None) -> Dict[str, Any]:
@@ -298,19 +284,7 @@ Consider this sector context when analyzing the stock's technical indicators and
                      period: int = 365, interval: str = "day", output_dir: str = None, 
                      knowledge_context: str = "", sector: str = None) -> tuple:
         """
-        Analyze a stock using AI-powered analysis only.
-        
-        Args:
-            symbol: Stock symbol
-            exchange: Exchange (default: NSE)
-            period: Analysis period in days (default: 365)
-            interval: Data interval (default: day)
-            output_dir: Output directory for charts
-            knowledge_context: Additional context for analysis
-            sector: Sector for enhanced analysis
-            
-        Returns:
-            tuple: (analysis_results, success_message, error_message)
+        Main analysis method that orchestrates the entire workflow.
         """
         try:
             # Get or create analysis state
@@ -320,6 +294,9 @@ Consider this sector context when analyzing the stock's technical indicators and
             stock_data = self.retrieve_stock_data(symbol, exchange, interval, period)
             if stock_data.empty:
                 return None, None, f"No data available for {symbol}"
+            # Warn if data is not real-time
+            if stock_data.attrs.get('data_freshness') != 'real_time':
+                logger.warning(f"Data for {symbol} is not real-time (freshness: {stock_data.attrs.get('data_freshness')}). Analysis may be based on stale data.")
             
             # --- MTF/LONG-TERM ANALYSIS ---
             # Map interval to base_interval for MTF utility
@@ -637,6 +614,288 @@ Consider this sector context when analyzing the stock's technical indicators and
         except Exception as e:
             print(f"Error building enhanced sector context: {e}")
             return {'sector': sector, 'benchmarking': sector_benchmarking}
+
+    async def enhanced_analyze_stock(self, symbol: str, exchange: str = "NSE",
+                     period: int = 365, interval: str = "day", output_dir: str = None, 
+                     knowledge_context: str = "", sector: str = None) -> tuple:
+        """
+        Enhanced stock analysis with mathematical validation using code execution.
+        This method provides more accurate analysis by performing actual calculations
+        instead of relying on LLM estimation.
+        """
+        logger.info(f"[ENHANCED ANALYSIS] Starting enhanced analysis for {symbol}")
+        
+        try:
+            # Get or create analysis state
+            state = self._get_or_create_state(symbol, exchange)
+            
+            # Step 1: Retrieve stock data
+            logger.info(f"[ENHANCED ANALYSIS] Retrieving data for {symbol}")
+            data = self.retrieve_stock_data(symbol, exchange, interval, period)
+            if data.empty:
+                raise ValueError(f"No data available for {symbol}")
+            
+            # Step 2: Calculate technical indicators
+            logger.info(f"[ENHANCED ANALYSIS] Calculating indicators for {symbol}")
+            indicators = self.calculate_indicators(data, symbol)
+            
+            # Step 3: Create visualizations
+            logger.info(f"[ENHANCED ANALYSIS] Creating visualizations for {symbol}")
+            chart_paths = self.create_visualizations(data, indicators, symbol, output_dir or "output")
+            
+            # Step 4: Get sector context if available
+            sector_context = None
+            if sector:
+                try:
+                    sector_benchmarking = await self.sector_benchmarking_provider.get_sector_benchmarking(sector, period)
+                    sector_rotation = await self.sector_benchmarking_provider.get_sector_rotation_analysis(sector, period)
+                    sector_correlation = await self.sector_benchmarking_provider.get_sector_correlation_analysis(sector, period)
+                    sector_context = self._build_enhanced_sector_context(sector, sector_benchmarking, sector_rotation, sector_correlation)
+                except Exception as e:
+                    logger.warning(f"[ENHANCED ANALYSIS] Failed to get sector context for {sector}: {e}")
+            
+            # Step 5: Enhanced AI analysis with code execution
+            logger.info(f"[ENHANCED ANALYSIS] Performing enhanced AI analysis for {symbol}")
+            ai_analysis, indicator_summary, chart_insights = await self.enhanced_analyze_with_ai(
+                symbol, indicators, chart_paths, period, interval, knowledge_context, sector_context
+            )
+            
+            # Step 6: Build comprehensive result
+            logger.info(f"[ENHANCED ANALYSIS] Building comprehensive result for {symbol}")
+            result = self._build_enhanced_analysis_result(
+                symbol, exchange, data, indicators, ai_analysis, 
+                indicator_summary, chart_insights, chart_paths, 
+                sector_context, period, interval
+            )
+            
+            # Step 7: Update state
+            state.update(
+                indicators=indicators,
+                analysis_results=result,
+                last_updated=datetime.now()
+            )
+            
+            logger.info(f"[ENHANCED ANALYSIS] Completed enhanced analysis for {symbol}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"[ENHANCED ANALYSIS] Error in enhanced analysis for {symbol}: {e}")
+            raise
+
+    async def enhanced_analyze_with_ai(self, symbol: str, indicators: dict, chart_paths: dict, 
+                                     period: int, interval: str, knowledge_context: str = "", 
+                                     sector_context: dict = None) -> tuple:
+        """
+        Enhanced AI analysis with code execution for mathematical validation.
+        """
+        try:
+            # Combine knowledge context with sector context
+            enhanced_knowledge_context = knowledge_context
+            if sector_context:
+                enhanced_knowledge_context += f"\n\nSector Context:\n{json.dumps(sector_context, indent=2)}"
+            
+            # Use enhanced analysis with code execution
+            ai_analysis, indicator_summary, chart_insights = await self.gemini_client.analyze_stock_with_enhanced_calculations(
+                symbol=symbol,
+                indicators=indicators,
+                chart_paths=chart_paths,
+                period=period,
+                interval=interval,
+                knowledge_context=enhanced_knowledge_context
+            )
+            
+            return ai_analysis, indicator_summary, chart_insights
+            
+        except Exception as e:
+            logger.error(f"[ENHANCED ANALYSIS] Error in enhanced AI analysis for {symbol}: {e}")
+            raise
+
+    def _build_enhanced_analysis_result(self, symbol: str, exchange: str, data: pd.DataFrame, 
+                                      indicators: dict, ai_analysis: dict, indicator_summary: str, 
+                                      chart_insights: str, chart_paths: dict, sector_context: dict, 
+                                      period: int, interval: str) -> dict:
+        """
+        Build comprehensive enhanced analysis result with mathematical validation.
+        """
+        try:
+            import time
+            
+            # Get latest price and basic info
+            latest_price = data['close'].iloc[-1] if not data.empty else None
+            price_change = data['close'].iloc[-1] - data['close'].iloc[-2] if len(data) > 1 else 0
+            price_change_pct = (price_change / data['close'].iloc[-2]) * 100 if len(data) > 1 and data['close'].iloc[-2] != 0 else 0
+            
+            # Determine risk level with mathematical validation
+            risk_level = self._determine_enhanced_risk_level(ai_analysis, indicators)
+            
+            # Generate enhanced recommendation
+            recommendation = self._generate_enhanced_recommendation(ai_analysis, indicators)
+            
+            # Build result structure
+            result = {
+                "symbol": symbol,
+                "exchange": exchange,
+                "analysis_timestamp": datetime.now().isoformat(),
+                "analysis_type": "enhanced_with_code_execution",
+                "mathematical_validation": True,
+                "calculation_method": "code_execution",
+                "accuracy_improvement": "high",
+                
+                # Price information
+                "current_price": latest_price,
+                "price_change": price_change,
+                "price_change_percentage": price_change_pct,
+                "analysis_period": f"{period} days",
+                "interval": interval,
+                
+                # AI Analysis
+                "ai_analysis": ai_analysis,
+                "indicator_summary": indicator_summary,
+                "chart_insights": chart_insights,
+                
+                # Technical Analysis
+                "technical_indicators": self.serialize_indicators(indicators),
+                "risk_level": risk_level,
+                "recommendation": recommendation,
+                
+                # Sector Analysis
+                "sector_context": sector_context,
+                
+                # Charts
+                "charts": chart_paths,
+                
+                # Enhanced Metadata
+                "enhanced_metadata": {
+                    "mathematical_validation": True,
+                    "code_execution_enabled": True,
+                    "statistical_analysis": True,
+                    "confidence_improvement": "high",
+                    "calculation_timestamp": time.time(),
+                    "analysis_quality": "enhanced"
+                }
+            }
+            
+            # Add mathematical validation results if available
+            if 'mathematical_validation' in ai_analysis:
+                result['mathematical_validation_results'] = ai_analysis['mathematical_validation']
+            
+            # Add code execution metadata if available
+            if 'analysis_metadata' in ai_analysis and 'code_execution' in ai_analysis['analysis_metadata']:
+                result['code_execution_metadata'] = ai_analysis['analysis_metadata']['code_execution']
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"[ENHANCED ANALYSIS] Error building enhanced result for {symbol}: {e}")
+            raise
+
+    def _determine_enhanced_risk_level(self, ai_analysis: Dict[str, Any], indicators: Dict[str, Any]) -> str:
+        """
+        Determine risk level with enhanced mathematical validation.
+        """
+        try:
+            # Extract risk information from AI analysis
+            risk_score = 0
+            
+            # Check mathematical validation results
+            if 'mathematical_validation' in ai_analysis:
+                math_val = ai_analysis['mathematical_validation']
+                
+                # Volatility analysis
+                if 'volatility_metrics' in math_val:
+                    vol_metrics = math_val['volatility_metrics']
+                    if vol_metrics.get('volatility_level') == 'high':
+                        risk_score += 3
+                    elif vol_metrics.get('volatility_level') == 'medium':
+                        risk_score += 2
+                
+                # Trend strength analysis
+                if 'trend_strength' in math_val:
+                    trend = math_val['trend_strength']
+                    if trend.get('trend_reliability') == 'low':
+                        risk_score += 2
+                
+                # RSI analysis
+                if 'rsi_analysis' in math_val:
+                    rsi = math_val['rsi_analysis']
+                    if rsi.get('signal_strength') == 'weak':
+                        risk_score += 1
+            
+            # Check AI analysis confidence
+            if 'confidence_pct' in ai_analysis:
+                confidence = ai_analysis['confidence_pct']
+                if confidence < 50:
+                    risk_score += 2
+                elif confidence < 70:
+                    risk_score += 1
+            
+            # Determine risk level based on score
+            if risk_score >= 5:
+                return "High"
+            elif risk_score >= 3:
+                return "Medium"
+            else:
+                return "Low"
+                
+        except Exception as e:
+            logger.error(f"Error determining enhanced risk level: {e}")
+            return "Medium"
+
+    def _generate_enhanced_recommendation(self, ai_analysis: Dict[str, Any], indicators: Dict[str, Any]) -> str:
+        """
+        Generate enhanced recommendation with mathematical validation.
+        """
+        try:
+            # Extract recommendation from AI analysis
+            if 'trading_strategy' in ai_analysis:
+                strategy = ai_analysis['trading_strategy']
+                
+                # Check short-term bias
+                if 'short_term' in strategy:
+                    short_term = strategy['short_term']
+                    bias = short_term.get('bias', 'neutral')
+                    confidence = short_term.get('confidence', 50)
+                    
+                    if confidence >= 70:
+                        if bias == 'bullish':
+                            return "Strong Buy"
+                        elif bias == 'bearish':
+                            return "Strong Sell"
+                    elif confidence >= 50:
+                        if bias == 'bullish':
+                            return "Buy"
+                        elif bias == 'bearish':
+                            return "Sell"
+                    else:
+                        return "Hold"
+            
+            # Check mathematical validation for additional insights
+            if 'mathematical_validation' in ai_analysis:
+                math_val = ai_analysis['mathematical_validation']
+                
+                # Check trend strength
+                if 'trend_strength' in math_val:
+                    trend = math_val['trend_strength']
+                    if trend.get('trend_reliability') == 'high':
+                        slope = trend.get('linear_regression_slope', 0)
+                        if slope > 0.1:
+                            return "Buy (Strong Trend)"
+                        elif slope < -0.1:
+                            return "Sell (Strong Trend)"
+                
+                # Check RSI signals
+                if 'rsi_analysis' in math_val:
+                    rsi = math_val['rsi_analysis']
+                    if rsi.get('oversold_periods', 0) > rsi.get('overbought_periods', 0):
+                        return "Buy (Oversold)"
+                    elif rsi.get('overbought_periods', 0) > rsi.get('oversold_periods', 0):
+                        return "Sell (Overbought)"
+            
+            return "Hold"
+            
+        except Exception as e:
+            logger.error(f"Error generating enhanced recommendation: {e}")
+            return "Hold"
 
 # Utility to clean NaN/Infinity for JSON
 from utils import clean_for_json

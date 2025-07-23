@@ -1214,3 +1214,153 @@ class PatternRecognition:
                             patterns.append(pattern)
         
         return patterns 
+
+    @staticmethod
+    def detect_candlestick_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """
+        Detect classic candlestick patterns in OHLCV data.
+        Patterns detected: doji, hammer, inverted hammer, shooting star, bullish engulfing, bearish engulfing, hanging man, etc.
+        Args:
+            df: DataFrame with columns ['open', 'high', 'low', 'close'] (and optionally 'date' as index)
+        Returns:
+            List of dicts, each with keys: 'type', 'index', 'open', 'high', 'low', 'close', and pattern-specific metrics
+        """
+        patterns = []
+        for i in range(1, len(df)):
+            o = df['open'].iloc[i]
+            h = df['high'].iloc[i]
+            l = df['low'].iloc[i]
+            c = df['close'].iloc[i]
+            prev_o = df['open'].iloc[i-1]
+            prev_c = df['close'].iloc[i-1]
+            body = abs(c - o)
+            upper_shadow = h - max(c, o)
+            lower_shadow = min(c, o) - l
+            range_ = h - l
+            # Avoid division by zero
+            if range_ == 0:
+                continue
+            body_pct = body / range_
+            upper_shadow_pct = upper_shadow / range_
+            lower_shadow_pct = lower_shadow / range_
+            # Doji
+            if body_pct < 0.1 and upper_shadow_pct > 0.2 and lower_shadow_pct > 0.2:
+                patterns.append({
+                    'type': 'doji',
+                    'index': i,
+                    'open': o, 'high': h, 'low': l, 'close': c,
+                    'body_size': body, 'upper_shadow': upper_shadow, 'lower_shadow': lower_shadow,
+                    'quality_score': 1 - body_pct
+                })
+            # Hammer
+            elif body_pct < 0.3 and lower_shadow_pct > 0.5 and upper_shadow_pct < 0.2 and c > o:
+                patterns.append({
+                    'type': 'hammer',
+                    'index': i,
+                    'open': o, 'high': h, 'low': l, 'close': c,
+                    'body_size': body, 'upper_shadow': upper_shadow, 'lower_shadow': lower_shadow,
+                    'quality_score': lower_shadow_pct - body_pct
+                })
+            # Inverted Hammer
+            elif body_pct < 0.3 and upper_shadow_pct > 0.5 and lower_shadow_pct < 0.2 and c > o:
+                patterns.append({
+                    'type': 'inverted_hammer',
+                    'index': i,
+                    'open': o, 'high': h, 'low': l, 'close': c,
+                    'body_size': body, 'upper_shadow': upper_shadow, 'lower_shadow': lower_shadow,
+                    'quality_score': upper_shadow_pct - body_pct
+                })
+            # Shooting Star
+            elif body_pct < 0.3 and upper_shadow_pct > 0.5 and lower_shadow_pct < 0.2 and c < o:
+                patterns.append({
+                    'type': 'shooting_star',
+                    'index': i,
+                    'open': o, 'high': h, 'low': l, 'close': c,
+                    'body_size': body, 'upper_shadow': upper_shadow, 'lower_shadow': lower_shadow,
+                    'quality_score': upper_shadow_pct - body_pct
+                })
+            # Hanging Man
+            elif body_pct < 0.3 and lower_shadow_pct > 0.5 and upper_shadow_pct < 0.2 and c < o:
+                patterns.append({
+                    'type': 'hanging_man',
+                    'index': i,
+                    'open': o, 'high': h, 'low': l, 'close': c,
+                    'body_size': body, 'upper_shadow': upper_shadow, 'lower_shadow': lower_shadow,
+                    'quality_score': lower_shadow_pct - body_pct
+                })
+            # Bullish Engulfing
+            elif c > o and prev_c < prev_o and c > prev_o and o < prev_c:
+                patterns.append({
+                    'type': 'bullish_engulfing',
+                    'index': i,
+                    'engulfed_index': i-1,
+                    'open': o, 'high': h, 'low': l, 'close': c,
+                    'prev_open': prev_o, 'prev_close': prev_c,
+                    'body_size': body,
+                    'quality_score': (c - o) / (prev_o - prev_c + 1e-9)
+                })
+            # Bearish Engulfing
+            elif c < o and prev_c > prev_o and c < prev_o and o > prev_c:
+                patterns.append({
+                    'type': 'bearish_engulfing',
+                    'index': i,
+                    'engulfed_index': i-1,
+                    'open': o, 'high': h, 'low': l, 'close': c,
+                    'prev_open': prev_o, 'prev_close': prev_c,
+                    'body_size': body,
+                    'quality_score': (o - c) / (prev_c - prev_o + 1e-9)
+                })
+        return patterns 
+
+    @staticmethod
+    def backtest_pattern(
+        df: pd.DataFrame,
+        pattern_func: callable,
+        window: int = 100,
+        hold_period: int = 10
+    ) -> dict:
+        """
+        Backtest a pattern detection function over a DataFrame.
+        Args:
+            df: DataFrame with OHLCV data
+            pattern_func: function that takes a price series and returns pattern indices or spans
+            window: int, sliding window size for pattern detection
+            hold_period: int, number of bars to hold after pattern completion
+        Returns:
+            dict with win_rate, avg_return, expectancy, n_trades, returns, etc.
+        """
+        results = []
+        prices = df['close']
+        for start in range(0, len(df) - window - hold_period):
+            sub_df = df.iloc[start:start+window]
+            sub_prices = sub_df['close']
+            # Detect patterns in this window
+            patterns = pattern_func(sub_prices)
+            for pattern in patterns:
+                # For tuple patterns (e.g., (start_idx, end_idx)), use end_idx as completion
+                if isinstance(pattern, (tuple, list)) and len(pattern) > 1:
+                    entry_idx = pattern[-1]
+                elif isinstance(pattern, int):
+                    entry_idx = pattern
+                else:
+                    continue
+                global_entry = start + entry_idx
+                if global_entry + hold_period >= len(df):
+                    continue
+                entry_price = df['close'].iloc[global_entry]
+                exit_price = df['close'].iloc[global_entry + hold_period]
+                ret = (exit_price - entry_price) / entry_price
+                results.append(ret)
+        n_trades = len(results)
+        win_trades = [r for r in results if r > 0]
+        loss_trades = [r for r in results if r <= 0]
+        win_rate = len(win_trades) / n_trades if n_trades > 0 else 0
+        avg_return = np.mean(results) if results else 0
+        expectancy = (np.mean(win_trades) if win_trades else 0) * win_rate + (np.mean(loss_trades) if loss_trades else 0) * (1 - win_rate)
+        return {
+            'win_rate': win_rate,
+            'avg_return': avg_return,
+            'expectancy': expectancy,
+            'n_trades': n_trades,
+            'returns': results
+        } 

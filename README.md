@@ -1,50 +1,156 @@
 # Stock Analysis System
 
-A comprehensive stock analysis system that provides AI-powered technical analysis, pattern recognition, and trading insights.
+A state-of-the-art, AI-powered stock analysis backend providing technical analysis, pattern recognition, sector benchmarking, and real-time trading insights.
 
-## 🚀 **Key Features**
+## 🚀 Key Features
 
-- **AI-Powered Analysis**: Advanced analysis using Google's Gemini LLM
-- **Technical Indicators**: Comprehensive technical indicator calculations
-- **Pattern Recognition**: Advanced chart pattern detection
-- **Sector Analysis**: Sector-specific benchmarking and analysis
-- **Real-time Data**: Live market data integration via Zerodha API
-- **Visualization**: Advanced chart generation and pattern visualization
+- **AI-Only Analysis**: Pure AI-powered analysis using Google's Gemini LLM—no rule-based consensus, no conflicting signals.
+- **Comprehensive Technical Indicators**: SMA, EMA, MACD, RSI, Bollinger Bands, ADX, multi-timeframe, and more.
+- **Advanced Pattern Recognition**: Detects triangles, flags, double tops/bottoms, head & shoulders, divergences, and volume anomalies.
+- **Sector Benchmarking**: Hybrid approach for sector-specific and market-wide benchmarking, with sector rotation and correlation analysis.
+- **Real-Time Data**: Live market data and streaming via Zerodha API and WebSocket.
+- **Visualization**: Chart generation and pattern overlays for actionable insights.
+- **Robust Error Handling**: Comprehensive validation, error reporting, and recovery.
+- **Performance Optimizations**: Caching, rate limiting, and parallel processing.
 
-## 🏗️ **Architecture**
+---
 
-### **Core Components**
+## 🏗️ Architecture
 
-- **StockAnalysisOrchestrator**: Main orchestrator for analysis workflow
-- **TechnicalIndicators**: Technical indicator calculations
-- **GeminiClient**: AI-powered analysis using Google's Gemini LLM
-- **PatternRecognition**: Advanced pattern detection algorithms
-- **SectorBenchmarking**: Sector-specific analysis and benchmarking
+### Core Components
 
-### **Analysis Flow**
+- **StockAnalysisOrchestrator** (`agent_capabilities.py`): Main orchestrator for the entire analysis workflow. Handles authentication, data retrieval, indicator calculation, pattern recognition, AI analysis, visualization, and sector benchmarking.
+- **TechnicalIndicators** (`technical_indicators.py`): Calculates all technical indicators and market metrics.
+- **PatternRecognition** (`patterns/recognition.py`): Detects advanced chart patterns and anomalies.
+- **PatternVisualizer/ChartVisualizer** (`patterns/visualization.py`): Generates pattern and comparison charts.
+- **GeminiClient** (`gemini/gemini_client.py`): Interfaces with Gemini LLM for AI-powered analysis and summary generation.
+- **SectorBenchmarkingProvider** (`sector_benchmarking.py`): Provides sector benchmarking, rotation, and correlation analysis.
+- **ZerodhaDataClient** (`zerodha_client.py`): Handles all data retrieval from Zerodha APIs.
+- **SectorClassifier/EnhancedSectorClassifier**: Classifies stocks into sectors using JSON-driven mappings and advanced filtering.
+- **LiveDataPubSub** (`api.py`): Real-time data pub/sub for WebSocket streaming.
 
-1. **Data Retrieval**: Fetch historical data from Zerodha API
-2. **Technical Analysis**: Calculate comprehensive technical indicators
-3. **Pattern Recognition**: Detect chart patterns and formations
-4. **AI Analysis**: Generate AI-powered insights and trading recommendations
-5. **Sector Context**: Apply sector-specific analysis and benchmarking
-6. **Results Assembly**: Compile comprehensive analysis results
+### Analysis Flow
 
-## 📊 **API Response Structure**
+1. **Data Retrieval**: Fetch historical OHLCV data from Zerodha.
+2. **Technical Analysis**: Calculate all technical indicators.
+3. **Pattern Recognition**: Detect chart and volume patterns.
+4. **AI Analysis**: Generate insights and trading recommendations using Gemini LLM.
+5. **Sector Context**: Apply sector benchmarking, rotation, and correlation context.
+6. **Results Assembly**: Compile and serialize results for API response.
 
-The system returns comprehensive analysis results including:
+---
 
-- `ai_analysis`: AI-powered analysis with confidence levels and trading strategies
-- `indicators`: Technical indicator calculations and values
-- `overlays`: Chart patterns and technical overlays
-- `indicator_summary_md`: Markdown summary of technical indicators
-- `chart_insights`: AI-generated chart pattern insights
-- `summary`: Overall analysis summary with signals and recommendations
-- `trading_guidance`: Specific trading strategies and risk management
-- `sector_benchmarking`: Sector-specific analysis and comparisons
-- `metadata`: Analysis metadata and timestamps
+## 📊 API Endpoints
 
-### **Example Response Structure**
+All endpoints are served via FastAPI.
+
+### Main Endpoints
+
+- `POST /analyze` — Run full AI-powered analysis for a stock.
+  - **Request:** `{ "stock": "RELIANCE", "exchange": "NSE", "period": 365, "interval": "day", "sector": "energy" }`
+  - **Response:** Full analysis results (see below).
+
+- `POST /sector/benchmark` — Get sector benchmarking for a stock.
+  - **Request:** `{ "stock": "RELIANCE", "sector": "energy" }`
+
+- `POST /sector/compare` — Compare multiple sectors.
+  - **Request:** `{ "sectors": ["energy", "technology", "banking"] }`
+
+- `GET /sector/list` — List all available sectors.
+- `GET /sector/{sector_name}/stocks` — List all stocks in a sector.
+- `GET /sector/{sector_name}/performance` — Get sector performance metrics.
+- `GET /stock/{symbol}/sector` — Get sector info for a stock.
+- `GET /stock/{symbol}/info` — Get basic stock info and quote.
+- `GET /health` — Health check endpoint.
+- `GET /ws/stream` — WebSocket endpoint for real-time data streaming.
+
+### WebSocket Historical Replay (history action)
+
+- **Action:** `history`
+- **Description:** Request recent N candles for a given token and timeframe via WebSocket.
+- **Request:**
+  ```json
+  {
+    "action": "history",
+    "token": "<INSTRUMENT_TOKEN>",
+    "timeframe": "1m", // or 5m, 1d, etc.
+    "count": 10 // optional, default 50, max 500
+  }
+  ```
+- **Response:**
+  ```json
+  {
+    "type": "history",
+    "token": "<INSTRUMENT_TOKEN>",
+    "timeframe": "1m",
+    "count": 10,
+    "candles": [
+      { "open": ..., "high": ..., "low": ..., "close": ..., "volume": ..., "start": ..., "end": ... },
+      // ... up to N candles ...
+    ]
+  }
+  ```
+- **Example Usage:**
+  - Connect to `ws://<host>:<port>/ws/stream`
+  - Send the above request as JSON
+  - Receive the response with the most recent candles
+
+### WebSocket Custom Alerts
+
+- **Action:** `register_alert`
+- **Description:** Register a custom alert for a token/timeframe (e.g., price crosses, volume spikes).
+- **Request:**
+  ```json
+  {
+    "action": "register_alert",
+    "alert": {
+      "type": "price_cross", // or "volume_spike"
+      "token": "<INSTRUMENT_TOKEN>",
+      "timeframe": "1m", // optional, for candle-based alerts
+      "params": {
+        "threshold": 2500,
+        "direction": "above" // or "below" (for price_cross)
+      }
+    }
+  }
+  ```
+- **Response:**
+  ```json
+  { "type": "alert_registered", "alert_id": "<ALERT_ID>" }
+  ```
+- **Alert Event:**
+  When the alert triggers, the client receives:
+  ```json
+  {
+    "type": "alert",
+    "alert_id": "<ALERT_ID>",
+    "alert_type": "price_cross",
+    "token": "<INSTRUMENT_TOKEN>",
+    "timeframe": "1m",
+    "data": { /* tick or candle data */ },
+    "params": { /* alert params */ }
+  }
+  ```
+- **Remove Alert:**
+  ```json
+  { "action": "remove_alert", "alert_id": "<ALERT_ID>" }
+  ```
+  Response:
+  ```json
+  { "type": "alert_removed", "alert_id": "<ALERT_ID>" }
+  ```
+- **Supported Alert Types:**
+  - `price_cross`: Triggers when price crosses a threshold (params: threshold, direction)
+  - `volume_spike`: Triggers when volume exceeds a threshold (params: threshold)
+
+- **Example Usage:**
+  1. Connect to `ws://<host>:<port>/ws/stream`
+  2. Register an alert as above
+  3. Wait for alert events
+  4. Remove alert when no longer needed
+
+### Example Analysis Response
+
 ```json
 {
   "success": true,
@@ -73,130 +179,81 @@ The system returns comprehensive analysis results including:
       "recommendation": "Strong Buy"
     },
     "trading_guidance": {
-      "short_term": { /* trading strategy */ },
-      "medium_term": { /* trading strategy */ },
-      "long_term": { /* trading strategy */ },
-      "risk_management": [ /* risk factors */ ],
-      "key_levels": [ /* important price levels */ ]
-    }
+      "short_term": {},
+      "medium_term": {},
+      "long_term": {},
+      "risk_management": [],
+      "key_levels": []
+    },
+    "indicators": {},
+    "overlays": {},
+    "indicator_summary_md": "",
+    "chart_insights": "",
+    "sector_benchmarking": {},
+    "metadata": {}
   }
 }
 ```
 
-## 🔧 **Installation & Setup**
+---
 
-### **Prerequisites**
+## 🧠 AI-Only System: No Consensus, No Conflicts
+
+- **Single Source of Truth**: All recommendations and signals are generated by Gemini LLM.
+- **Confidence Scoring**: Every signal and recommendation includes a confidence percentage.
+- **Risk Management**: Built-in risk assessment and actionable trading guidance.
+- **No Rule-Based Consensus**: All legacy consensus/conflict resolution code has been removed.
+
+---
+
+## 🏭 Hybrid Sector Analysis
+
+- **Stock-Specific Benchmarking**: Only fetches data for the stock's sector and NIFTY 50, minimizing API calls.
+- **Comprehensive Sector Context**: Cached sector rotation and correlation analysis for all sectors, updated hourly.
+- **Hybrid Results**: Combines stock-specific and market-wide sector context for robust benchmarking.
+
+---
+
+## ⚡ Real-Time Data & Streaming
+
+- **WebSocket Streaming**: Real-time tick and candle data via `/ws/stream` endpoint.
+- **Live Pub/Sub**: Efficient, filterable pub/sub system for streaming to multiple clients.
+
+---
+
+## 🔒 Security & Performance
+
+- **API Rate Limiting**: Built-in rate limiting for all external API calls.
+- **Caching**: Intelligent caching for repeated queries and sector data.
+- **Parallel Processing**: Optimized for large datasets and fast response times.
+- **Robust Error Handling**: All endpoints return clear error messages and validation.
+
+---
+
+## 🛠️ Installation & Setup
+
+### Prerequisites
 - Python 3.8+
 - Zerodha API credentials
 - Google Gemini API key
 
-### **Installation**
+### Installation
 ```bash
 pip install -r requirements.txt
 ```
 
-### **Configuration**
-1. Set up Zerodha API credentials in `config.py`
-2. Configure Google Gemini API key
-3. Set up sector classification data
+### Configuration
+1. Set up Zerodha API credentials in `config.py` or environment variables.
+2. Configure Google Gemini API key.
+3. Set up sector classification data in `sector_category/`.
 
-## 🚀 **Usage**
+---
 
-### **API Endpoints**
+## 📝 Documentation & Contribution
 
-#### **Analyze Stock**
-```bash
-POST /analyze
-{
-  "stock": "RELIANCE",
-  "exchange": "NSE",
-  "period": 365,
-  "interval": "day",
-  "sector": "energy"
-}
-```
-
-#### **Sector Benchmarking**
-```bash
-POST /sector/benchmark
-{
-  "stock": "RELIANCE",
-  "sector": "energy"
-}
-```
-
-#### **Sector Comparison**
-```bash
-POST /sector/compare
-{
-  "sectors": ["energy", "technology", "banking"]
-}
-```
-
-## 🎯 **AI-Powered Analysis**
-
-The system uses Google's Gemini LLM for sophisticated analysis:
-
-- **Multi-modal Analysis**: Combines technical indicators, chart patterns, and market context
-- **Confidence Scoring**: Provides confidence levels for all recommendations
-- **Conflict Resolution**: Intelligent handling of conflicting signals
-- **Market Context**: Considers broader market conditions and sector dynamics
-- **Risk Management**: Built-in risk assessment and management recommendations
-
-## 📈 **Technical Indicators**
-
-Comprehensive technical analysis including:
-
-- **Moving Averages**: SMA, EMA, WMA with multiple timeframes
-- **Momentum Indicators**: RSI, MACD, Stochastic, Williams %R
-- **Volatility Indicators**: Bollinger Bands, ATR, Keltner Channels
-- **Volume Analysis**: OBV, Volume Profile, Volume Ratios
-- **Trend Indicators**: ADX, Ichimoku, Parabolic SAR
-- **Support/Resistance**: Dynamic level detection and analysis
-
-## 🎨 **Pattern Recognition**
-
-Advanced pattern detection algorithms:
-
-- **Reversal Patterns**: Head & Shoulders, Double Tops/Bottoms, Triple Tops/Bottoms
-- **Continuation Patterns**: Triangles, Flags, Pennants, Wedges
-- **Candlestick Patterns**: Doji, Hammer, Shooting Star, Engulfing
-- **Divergence Detection**: Price-Volume and Price-Indicator divergences
-- **Volume Anomalies**: Unusual volume patterns and spikes
-
-## 🏭 **Sector Analysis**
-
-Comprehensive sector-specific analysis:
-
-- **Sector Benchmarking**: Performance comparison within sectors
-- **Sector Rotation**: Analysis of sector rotation patterns
-- **Correlation Analysis**: Inter-sector correlation insights
-- **Sector-Specific Metrics**: Tailored analysis for different sectors
-
-## 🔒 **Security & Performance**
-
-- **API Rate Limiting**: Built-in rate limiting for external APIs
-- **Caching**: Intelligent caching for performance optimization
-- **Error Handling**: Comprehensive error handling and recovery
-- **Data Validation**: Robust data validation and sanitization
-
-## 📝 **Documentation**
-
-- **API Documentation**: Comprehensive API endpoint documentation
-- **Analysis Guides**: Detailed guides for interpreting analysis results
-- **Best Practices**: Trading and analysis best practices
-- **Troubleshooting**: Common issues and solutions
-
-## 🤝 **Contributing**
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## 📄 **License**
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+- **API Documentation**: See this README and code comments for endpoint details.
+- **Analysis Guides**: See `AI_ONLY_ANALYSIS_GUIDE.md` and `HYBRID_SECTOR_ANALYSIS_APPROACH.md` for advanced usage.
+- **Contributing**: Fork, branch, make changes, add tests, and submit a pull request.
+- **License**: MIT License (see LICENSE file).
 
 

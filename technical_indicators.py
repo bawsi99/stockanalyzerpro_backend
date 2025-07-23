@@ -1706,15 +1706,26 @@ class TechnicalIndicators:
             "percentile": float((rolling_20d.rank().iloc[-1] / len(rolling_20d)) * 100)
         }
         
+        # Helper function to safely get idxmin with proper NA handling
+        def safe_idxmin(series):
+            if series.empty or series.isna().all():
+                return None
+            try:
+                # Use skipna=True to avoid the deprecation warning
+                min_idx = series.idxmin(skipna=True)
+                return str(min_idx) if min_idx is not None else None
+            except (ValueError, TypeError):
+                return None
+        
         stress_scenarios["worst_60d"] = {
             "return": float(rolling_60d.min()),
-            "date": str(rolling_60d.idxmin()) if rolling_60d.idxmin() else None,
+            "date": safe_idxmin(rolling_60d),
             "percentile": float((rolling_60d.rank().iloc[-1] / len(rolling_60d)) * 100)
         }
         
         stress_scenarios["worst_252d"] = {
             "return": float(rolling_252d.min()),
-            "date": str(rolling_252d.idxmin()) if rolling_252d.idxmin() else None,
+            "date": safe_idxmin(rolling_252d),
             "percentile": float((rolling_252d.rank().iloc[-1] / len(rolling_252d)) * 100)
         }
         
