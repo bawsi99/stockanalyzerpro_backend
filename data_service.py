@@ -53,7 +53,7 @@ from pydantic import BaseModel, Field
 
 # Local imports
 from zerodha_ws_client import zerodha_ws_client, candle_aggregator
-from market_hours_manager import market_hours_manager
+# Market hours manager removed - continuous data flow enabled
 from enhanced_data_service import enhanced_data_service, DataRequest
 from zerodha_client import ZerodhaDataClient
 
@@ -437,23 +437,12 @@ async def startup_event():
     # Wait a moment for the connection to establish
     await asyncio.sleep(3)
     
-    # Subscribe to default tokens for basic coverage
-    default_tokens = [256265, 11536, 1330, 1594, 4963]  # RELIANCE, TCS, HDFC, INFY, ICICIBANK
-    try:
-        print(f"Attempting to subscribe to default tokens: {default_tokens}")
-        zerodha_ws_client.subscribe(default_tokens)
-        
-        # Set mode to 'quote' for OHLCV data (44 bytes per packet)
-        # This provides open, high, low, close, volume data needed for charts
-        zerodha_ws_client.set_mode('quote', default_tokens)
-        
-        print(f"Successfully subscribed to default Zerodha tokens: {default_tokens}")
-        print("WebSocket mode set to 'quote' for OHLCV data")
-    except Exception as e:
-        print(f"Error subscribing to default tokens: {e}")
-        print("This is expected if Zerodha credentials are not configured")
-        print("To enable live data, please set ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN environment variables")
-        print("Make sure your .env file is in the backend directory and contains valid credentials")
+    # Set mode to 'quote' for OHLCV data (44 bytes per packet)
+    # This provides open, high, low, close, volume data needed for charts
+    print("WebSocket client ready for dynamic subscriptions")
+    print("WebSocket mode will be set to 'quote' for OHLCV data when symbols are subscribed")
+    print("To enable live data, please set ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN environment variables")
+    print("Make sure your .env file is in the backend directory and contains valid credentials")
 
 # --- Pydantic Models ---
 class HistoricalDataRequest(BaseModel):
@@ -484,6 +473,9 @@ async def ws_stream(websocket: WebSocket):
     # Start heartbeat task
     heartbeat_task = asyncio.create_task(heartbeat_loop(websocket, queue))
     
+    # Track current subscriptions for this connection
+    current_subscriptions = set()
+    
     try:
         while True:
             done, pending = await asyncio.wait(
@@ -496,26 +488,57 @@ async def ws_stream(websocket: WebSocket):
                     try:
                         msg = json.loads(result)
                         if msg.get('action') == 'subscribe':
-                            tokens = msg.get('tokens', [])
+                            symbols = msg.get('symbols', [])  # Frontend sends symbols
+                            tokens = msg.get('tokens', [])     # Also support direct tokens
                             timeframes = msg.get('timeframes', [])
                             throttle_ms = msg.get('throttle_ms', 0)
                             batch = msg.get('batch', False)
                             batch_size = msg.get('batch_size', 1)
                             format_type = msg.get('format', 'json')
                             
-                            # Subscribe to Zerodha WebSocket for the requested tokens
-                            if tokens:
+                            # Convert symbols to tokens if provided
+                            all_tokens = []
+                            if symbols:
                                 try:
-                                    # Convert string tokens to integers for Zerodha
-                                    int_tokens = [int(token) for token in tokens]
-                                    zerodha_ws_client.subscribe(int_tokens)
-                                    print(f"Subscribed to Zerodha tokens: {int_tokens}")
+                                    # Read directly from CSV file to avoid authentication issues
+                                    df = pd.read_csv('zerodha_instruments.csv')
+                                    for symbol in symbols:
+                                        instrument = df[(df['tradingsymbol'] == symbol) & (df['exchange'] == 'NSE')]
+                                        if len(instrument) > 0:
+                                            token = int(instrument.iloc[0]['instrument_token'])
+                                            all_tokens.append(token)
+                                            print(f"Converted symbol {symbol} to token {token}")
+                                        else:
+                                            print(f"Warning: Could not find token for symbol {symbol}")
+                                except Exception as e:
+                                    print(f"Error converting symbols to tokens: {e}")
+                            
+                            # Add direct tokens if provided
+                            if tokens:
+                                all_tokens.extend([int(token) for token in tokens])
+                            
+                            # Subscribe to Zerodha WebSocket for the requested tokens
+                            if all_tokens:
+                                try:
+                                    # Unsubscribe from previous tokens for this connection
+                                    if current_subscriptions:
+                                        old_tokens = list(current_subscriptions)
+                                        zerodha_ws_client.unsubscribe(old_tokens)
+                                        print(f"Unsubscribed from previous tokens: {old_tokens}")
+                                    
+                                    # Subscribe to new tokens
+                                    zerodha_ws_client.subscribe(all_tokens)
+                                    # Set mode to 'quote' for OHLCV data
+                                    zerodha_ws_client.set_mode('quote', all_tokens)
+                                    current_subscriptions = set(all_tokens)
+                                    print(f"Subscribed to Zerodha tokens: {all_tokens}")
+                                    print(f"Set mode to 'quote' for OHLCV data")
                                 except Exception as e:
                                     print(f"Error subscribing to Zerodha tokens: {e}")
                             
                             await live_pubsub.update_filter(
                                 queue, 
-                                tokens=tokens, 
+                                tokens=[str(token) for token in all_tokens], 
                                 timeframes=timeframes, 
                                 throttle_ms=throttle_ms,
                                 batch=batch,
@@ -525,7 +548,8 @@ async def ws_stream(websocket: WebSocket):
                             
                             response = {
                                 'type': 'subscribed',
-                                'tokens': tokens,
+                                'symbols': symbols,
+                                'tokens': [str(token) for token in all_tokens],
                                 'timeframes': timeframes,
                                 'throttle_ms': throttle_ms,
                                 'batch': batch,
@@ -540,29 +564,48 @@ async def ws_stream(websocket: WebSocket):
                                 await websocket.send_json(response)
                                 
                         elif msg.get('action') == 'unsubscribe':
+                            symbols = msg.get('symbols', [])
                             tokens = msg.get('tokens', [])
                             timeframes = msg.get('timeframes', [])
                             
-                            # Unsubscribe from Zerodha WebSocket for the requested tokens
-                            if tokens:
+                            # Convert symbols to tokens if provided
+                            all_tokens = []
+                            if symbols:
                                 try:
-                                    # Convert string tokens to integers for Zerodha
-                                    int_tokens = [int(token) for token in tokens]
-                                    zerodha_ws_client.unsubscribe(int_tokens)
-                                    print(f"Unsubscribed from Zerodha tokens: {int_tokens}")
+                                    # Read directly from CSV file to avoid authentication issues
+                                    df = pd.read_csv('zerodha_instruments.csv')
+                                    for symbol in symbols:
+                                        instrument = df[(df['tradingsymbol'] == symbol) & (df['exchange'] == 'NSE')]
+                                        if len(instrument) > 0:
+                                            token = int(instrument.iloc[0]['instrument_token'])
+                                            all_tokens.append(token)
+                                except Exception as e:
+                                    print(f"Error converting symbols to tokens for unsubscribe: {e}")
+                            
+                            # Add direct tokens if provided
+                            if tokens:
+                                all_tokens.extend([int(token) for token in tokens])
+                            
+                            # Unsubscribe from Zerodha WebSocket for the requested tokens
+                            if all_tokens:
+                                try:
+                                    zerodha_ws_client.unsubscribe(all_tokens)
+                                    current_subscriptions.difference_update(all_tokens)
+                                    print(f"Unsubscribed from Zerodha tokens: {all_tokens}")
                                 except Exception as e:
                                     print(f"Error unsubscribing from Zerodha tokens: {e}")
                             
                             # Remove specific tokens/timeframes from filter
                             current_filter = live_pubsub.clients[queue]
-                            if tokens:
-                                current_filter['tokens'] -= set(tokens)
+                            if all_tokens:
+                                current_filter['tokens'] -= set([str(token) for token in all_tokens])
                             if timeframes:
                                 current_filter['timeframes'] -= set(timeframes)
                             
                             response = {
                                 'type': 'unsubscribed',
-                                'tokens': tokens,
+                                'symbols': symbols,
+                                'tokens': [str(token) for token in all_tokens],
                                 'timeframes': timeframes
                             }
                             
@@ -852,26 +895,19 @@ async def get_stock_history(
         # Convert to JSON serializable format
         candles = []
         for index, row in df.iterrows():
-            # Debug: Print row info
-            print(f"[DataService] Processing row - Index: {index} (type: {type(index)})")
-            
             # Handle timestamp conversion properly
             if hasattr(index, 'timestamp'):
                 # If index is a datetime object
                 timestamp = int(index.timestamp())
-                print(f"[DataService] Using index timestamp: {timestamp}")
             elif 'date' in row:
                 # If date is in the row data (shouldn't happen if index is set properly)
                 if isinstance(row['date'], str):
                     timestamp = int(pd.to_datetime(row['date']).timestamp())
-                    print(f"[DataService] Using date string: {row['date']} -> {timestamp}")
                 else:
                     timestamp = int(row['date'].timestamp())
-                    print(f"[DataService] Using date object: {row['date']} -> {timestamp}")
             else:
                 # Fallback: use current time
                 timestamp = int(pd.Timestamp.now().timestamp())
-                print(f"[DataService] Using fallback timestamp: {timestamp}")
             
             candle = {
                 'time': timestamp,
@@ -882,7 +918,6 @@ async def get_stock_history(
                 'volume': float(row['volume'])
             }
             candles.append(candle)
-            print(f"[DataService] Created candle: {candle}")
         
         # Sort by time (oldest first)
         candles.sort(key=lambda x: x['time'])
@@ -1072,14 +1107,16 @@ async def token_to_symbol(token: int, exchange: str = "NSE"):
 async def symbol_to_token(symbol: str, exchange: str = "NSE"):
     """Get token for a given symbol."""
     try:
-        zerodha_client = ZerodhaDataClient()
-        token = zerodha_client.get_instrument_token(symbol, exchange)
+        # Read directly from CSV file to avoid authentication issues
+        df = pd.read_csv('zerodha_instruments.csv')
+        instrument = df[(df['tradingsymbol'] == symbol) & (df['exchange'] == exchange)]
         
-        if token:
+        if len(instrument) > 0:
+            token = instrument.iloc[0]['instrument_token']
             return {
                 "success": True,
                 "symbol": symbol,
-                "token": token,
+                "token": int(token),
                 "exchange": exchange,
                 "timestamp": pd.Timestamp.now().isoformat()
             }
@@ -1099,12 +1136,13 @@ async def symbol_to_token(symbol: str, exchange: str = "NSE"):
 
 @app.get("/market/status")
 async def get_market_status():
-    """Get current market status."""
+    """Get current market status - always returns open for continuous data flow."""
     try:
-        status = market_hours_manager.get_market_status()
         return {
             "success": True,
-            "market_status": status,
+            "market_status": "open",
+            "continuous_flow_enabled": True,
+            "market_always_open": True,
             "timestamp": pd.Timestamp.now().isoformat()
         }
     except Exception as e:

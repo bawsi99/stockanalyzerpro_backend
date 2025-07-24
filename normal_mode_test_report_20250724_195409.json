@@ -1,0 +1,112 @@
+{
+  "test_summary": {
+    "total_tests": 16,
+    "passed_tests": 13,
+    "failed_tests": 3,
+    "success_rate": 81.25
+  },
+  "environment": {
+    "market_hours_test_mode": "false",
+    "force_market_open": "false",
+    "current_market_status": "closed",
+    "current_time": "2025-07-24T19:54:09.107906+05:30"
+  },
+  "test_results": [
+    {
+      "test_name": "Normal Mode Environment Variables",
+      "result": "PASS",
+      "details": "MARKET_HOURS_TEST_MODE=False, FORCE_MARKET_OPEN=False",
+      "timestamp": "2025-07-24T19:54:08.842302"
+    },
+    {
+      "test_name": "Normal Mode Market Status",
+      "result": "PASS",
+      "details": "Current status: closed, Time: 2025-07-24 19:54:08 IST",
+      "timestamp": "2025-07-24T19:54:08.842506"
+    },
+    {
+      "test_name": "Market Hours Respect",
+      "result": "PASS",
+      "details": "Expected open: False, Actual open: False, Time: 19:54",
+      "timestamp": "2025-07-24T19:54:08.842550"
+    },
+    {
+      "test_name": "Normal Mode Tick Processing Decision",
+      "result": "FAIL",
+      "details": "Should process: True, Market open: False",
+      "timestamp": "2025-07-24T19:54:09.107280"
+    },
+    {
+      "test_name": "Normal Mode Data Strategy",
+      "result": "PASS",
+      "details": "Strategy: historical, Test mode: False",
+      "timestamp": "2025-07-24T19:54:09.107331"
+    },
+    {
+      "test_name": "Normal Mode WebSocket Recommendation",
+      "result": "PASS",
+      "details": "Should use WebSocket: False, Market status: closed",
+      "timestamp": "2025-07-24T19:54:09.107363"
+    },
+    {
+      "test_name": "Market Open Hours",
+      "result": "PASS",
+      "details": "Expected: open, Got: open",
+      "timestamp": "2025-07-24T19:54:09.107408"
+    },
+    {
+      "test_name": "Market Closed Hours",
+      "result": "PASS",
+      "details": "Expected: closed, Got: closed",
+      "timestamp": "2025-07-24T19:54:09.107424"
+    },
+    {
+      "test_name": "Pre-Market Hours",
+      "result": "FAIL",
+      "details": "Expected: pre_market, Got: closed",
+      "timestamp": "2025-07-24T19:54:09.107439"
+    },
+    {
+      "test_name": "Post-Market Hours",
+      "result": "FAIL",
+      "details": "Expected: post_market, Got: closed",
+      "timestamp": "2025-07-24T19:54:09.107452"
+    },
+    {
+      "test_name": "Normal Mode Data Strategy for 1m",
+      "result": "PASS",
+      "details": "Expected: historical, Got: historical, Market: closed",
+      "timestamp": "2025-07-24T19:54:09.107509"
+    },
+    {
+      "test_name": "Normal Mode Data Strategy for 5m",
+      "result": "PASS",
+      "details": "Expected: historical, Got: historical, Market: closed",
+      "timestamp": "2025-07-24T19:54:09.107537"
+    },
+    {
+      "test_name": "Normal Mode Data Strategy for 15m",
+      "result": "PASS",
+      "details": "Expected: historical, Got: historical, Market: closed",
+      "timestamp": "2025-07-24T19:54:09.107562"
+    },
+    {
+      "test_name": "Normal Mode Data Strategy for 1h",
+      "result": "PASS",
+      "details": "Expected: historical, Got: historical, Market: closed",
+      "timestamp": "2025-07-24T19:54:09.107586"
+    },
+    {
+      "test_name": "Normal Mode Data Strategy for 1d",
+      "result": "PASS",
+      "details": "Expected: historical, Got: historical, Market: closed",
+      "timestamp": "2025-07-24T19:54:09.107610"
+    },
+    {
+      "test_name": "Normal Mode Cache Duration",
+      "result": "PASS",
+      "details": "Expected: 3600s, Got: 3600s, Market: closed",
+      "timestamp": "2025-07-24T19:54:09.107634"
+    }
+  ]
+}

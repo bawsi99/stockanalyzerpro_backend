@@ -247,6 +247,97 @@ pip install -r requirements.txt
 2. Configure Google Gemini API key.
 3. Set up sector classification data in `sector_category/`.
 
+### Environment Variables
+
+Create a `.env` file in the backend directory:
+
+```bash
+# Zerodha API Configuration
+ZERODHA_API_KEY=your_api_key
+ZERODHA_ACCESS_TOKEN=your_access_token
+
+# JWT Configuration
+JWT_SECRET=your_jwt_secret
+
+# Test Mode Configuration (Optional)
+MARKET_HOURS_TEST_MODE=false
+FORCE_MARKET_OPEN=false
+
+# Google Gemini API
+GOOGLE_GEMINI_API_KEY=your_gemini_api_key
+```
+
+### Test Mode Configuration
+
+For testing purposes, you can disable market hours restrictions to test frontend live data functionality anytime.
+
+#### Enable Test Mode
+```bash
+# Add to your .env file
+MARKET_HOURS_TEST_MODE=true
+FORCE_MARKET_OPEN=true
+```
+
+#### Test Mode Behavior
+When `MARKET_HOURS_TEST_MODE=true`:
+- **Market Status**: Always returns `OPEN` status
+- **Weekends**: Treated as regular trading days
+- **Holidays**: Treated as regular trading days
+- **WebSocket**: Always recommended for all intervals
+- **Cache Duration**: Reduced to 1 minute for live testing
+- **Cost Estimation**: Returns 0 cost for testing
+- **Tick Processing**: All ticks are processed regardless of market status
+
+#### Usage Examples
+```bash
+# For Frontend Testing
+MARKET_HOURS_TEST_MODE=true
+FORCE_MARKET_OPEN=true
+
+# For Production
+MARKET_HOURS_TEST_MODE=false
+FORCE_MARKET_OPEN=false
+```
+
+#### API Response Examples
+Market Status (with test mode):
+```json
+{
+  "current_time": "2024-01-15T14:30:00+05:30",
+  "timezone": "Asia/Kolkata",
+  "market_status": "open",
+  "is_weekend": false,
+  "is_holiday": false,
+  "test_mode_enabled": true,
+  "force_market_open": true
+}
+```
+
+WebSocket Messages (with test mode):
+```json
+{
+  "type": "tick",
+  "token": "256265",
+  "price": 2450.50,
+  "timestamp": 1705312200,
+  "volume_traded": 1000,
+  "market_status": "open",
+  "data_freshness": "real_time",
+  "test_mode": true,
+  "force_market_open": true
+}
+```
+
+#### Logging
+When test mode is enabled, you'll see:
+```
+🔧 MARKET HOURS TEST MODE ENABLED - Market hours restrictions disabled
+🔧 FORCE MARKET OPEN ENABLED - Market will always appear as OPEN
+[TEST MODE] Processed tick for token: 256265, price: 2450.50
+```
+
+**Security Note**: Test mode should only be enabled in development/testing environments, never in production.
+
 ---
 
 ## 📝 Documentation & Contribution

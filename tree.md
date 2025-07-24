@@ -11,7 +11,7 @@ The system is built with a **split backend architecture** consisting of two inde
 - `data_service.py` - Main FastAPI application for data operations
 - `zerodha_ws_client.py` - WebSocket client for real-time data
 - `enhanced_data_service.py` - Cost-efficient data fetching
-- `market_hours_manager.py` - Market hours and optimization
+- `market_hours_manager.py` - REMOVED: Market hours manager (continuous data flow enabled)
 - `zerodha_client.py` - Zerodha API client
 
 ### 2. Analysis Service (Port 8001)
@@ -89,7 +89,7 @@ The system is built with a **split backend architecture** consisting of two inde
 - **DataRequest**: Data request with optimization parameters
 - **DataResponse**: Data response with metadata
 
-### Market Hours Manager (`market_hours_manager.py`)
+### Market Hours Manager (REMOVED - Continuous Data Flow Enabled)
 
 #### MarketHoursManager
 - **get_market_status()**: Current market status
@@ -301,7 +301,7 @@ The system is built with a **split backend architecture** consisting of two inde
 2. **Historical Data Request** (`data_service.py`)
    ├─ get_stock_history() → ZerodhaDataClient
    ├─ enhanced_data_service.get_optimal_data()
-   └─ market_hours_manager.get_optimal_data_strategy()
+   └─ Continuous data flow strategy (always live)
 
 3. **Real-time Streaming** (`data_service.py`)
    ├─ ws_stream() → authenticate_websocket()
@@ -470,7 +470,7 @@ The system is built with a **split backend architecture** consisting of two inde
 ### Service Dependencies
 - **Data Service**: zerodha_client, zerodha_ws_client, enhanced_data_service
 - **Analysis Service**: agent_capabilities, technical_indicators, sector_benchmarking
-- **Shared Dependencies**: cache_manager, market_hours_manager, patterns
+- **Shared Dependencies**: cache_manager, patterns (market_hours_manager removed)
 
 ### Development Tools
 - **Service Startup Scripts**: Easy service management

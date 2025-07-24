@@ -10,13 +10,22 @@ import time
 import logging
 import datetime
 import struct
+import random
 from collections import defaultdict
 from typing import Dict, List, Optional, Any, Callable
 import asyncio
-import random
 
-# Import market hours manager
-from market_hours_manager import market_hours_manager, MarketStatus
+# Market status enum (simplified without market hours manager)
+from enum import Enum
+
+class MarketStatus(Enum):
+    """Market status enumeration."""
+    OPEN = "open"
+    CLOSED = "closed"
+    PRE_MARKET = "pre_market"
+    POST_MARKET = "post_market"
+    WEEKEND = "weekend"
+    HOLIDAY = "holiday"
 
 # Try to import optional dependencies
 try:
@@ -51,70 +60,6 @@ logger = logging.getLogger(__name__)
 # Global data stores
 tick_store: Dict[int, Dict[str, Any]] = {}
 tick_store_lock = threading.Lock()
-
-# Mock data generator for testing when Zerodha credentials are not available
-class MockDataGenerator:
-    """Generates realistic mock tick data for testing purposes."""
-    
-    def __init__(self):
-        self.base_prices = {
-            256265: 2500.0,  # RELIANCE
-            11536: 3800.0,   # TCS
-            1330: 1600.0,    # HDFC
-            1594: 1400.0,    # INFY
-            4963: 950.0      # ICICIBANK
-        }
-        self.last_prices = self.base_prices.copy()
-        self.volatility = 0.02  # 2% volatility
-        self.last_tick_time = {}
-        
-    def generate_mock_tick(self, token: int) -> Dict[str, Any]:
-        """Generate a realistic mock tick for the given token."""
-        current_time = time.time()
-        
-        # Get base price for this token
-        base_price = self.base_prices.get(token, 1000.0)
-        last_price = self.last_prices.get(token, base_price)
-        
-        # Generate price movement (random walk with mean reversion)
-        price_change = (random.random() - 0.5) * self.volatility * last_price
-        new_price = last_price + price_change
-        
-        # Ensure price doesn't go negative
-        new_price = max(new_price, base_price * 0.5)
-        
-        # Update last price
-        self.last_prices[token] = new_price
-        
-        # Generate volume (random between 1000 and 10000)
-        volume = random.randint(1000, 10000)
-        
-        # Generate OHLC data
-        open_price = last_price
-        high_price = max(open_price, new_price) + random.random() * 10
-        low_price = min(open_price, new_price) - random.random() * 10
-        close_price = new_price
-        
-        tick = {
-            'instrument_token': token,
-            'last_price': round(new_price, 2),
-            'last_quantity': random.randint(100, 1000),
-            'average_price': round((open_price + close_price) / 2, 2),
-            'volume_traded': volume,
-            'total_buy_quantity': random.randint(5000, 50000),
-            'total_sell_quantity': random.randint(5000, 50000),
-            'open': round(open_price, 2),
-            'high': round(high_price, 2),
-            'low': round(low_price, 2),
-            'close': round(close_price, 2),
-            'timestamp': current_time
-        }
-        
-        self.last_tick_time[token] = current_time
-        return tick
-
-# Global mock data generator
-mock_generator = MockDataGenerator()
 
 # Timeframe definitions (in seconds)
 TIMEFRAMES = {
@@ -228,13 +173,10 @@ class ZerodhaWSClient:
         self.running: bool = False
         self.tick_hooks: List[Callable] = []
         
-        # Market hours optimization
-        self.market_hours_manager = market_hours_manager
+        # Always treat market as open for continuous data flow
+        self.market_status = MarketStatus.OPEN
         self.last_tick_time = {}  # Track last tick time per token
         self.duplicate_tick_threshold = 30  # Seconds to consider tick as duplicate
-        self.market_status_cache = None
-        self.market_status_cache_time = 0
-        self.market_status_cache_duration = 60  # Cache market status for 1 minute
         
         self._setup_callbacks()
 
@@ -324,16 +266,14 @@ class ZerodhaWSClient:
         self.kws.on_order_update = self.on_order_update
     
     def _get_market_status(self) -> MarketStatus:
-        """Get cached market status to avoid repeated calls."""
-        current_time = time.time()
-        if (self.market_status_cache is None or 
-            current_time - self.market_status_cache_time > self.market_status_cache_duration):
-            self.market_status_cache = self.market_hours_manager.get_market_status()
-            self.market_status_cache_time = current_time
-        return self.market_status_cache
+        """Get current market status - always returns OPEN for continuous data flow."""
+        return self.market_status
     
     def _is_duplicate_tick(self, token: int, tick_data: Dict[str, Any]) -> bool:
         """Check if tick is duplicate based on price and time."""
+        # Always process all ticks for continuous data flow
+        return False
+            
         current_time = time.time()
         last_time = self.last_tick_time.get(token, 0)
         
@@ -342,44 +282,20 @@ class ZerodhaWSClient:
             return False
         
         # Check if price hasn't changed (common when market is closed)
-        if token in tick_store:
-            last_tick = tick_store[token]
-            if (last_tick.get('last_price') == tick_data.get('last_price') and
-                last_tick.get('volume_traded') == tick_data.get('volume_traded')):
-                return True
+        with tick_store_lock:
+            if token in tick_store:
+                last_tick = tick_store[token]
+                if (last_tick.get('last_price') == tick_data.get('last_price') and
+                    last_tick.get('volume_traded') == tick_data.get('volume_traded')):
+                    logger.info(f"[DUPLICATE] Tick is duplicate for token {token} - same price and volume")
+                    return True
         
         return False
     
     def _should_process_tick(self, token: int, tick_data: Dict[str, Any]) -> bool:
-        """Determine if tick should be processed based on market status and optimization rules."""
-        market_status = self._get_market_status()
-        
-        # Always process ticks during market hours
-        if market_status == MarketStatus.OPEN:
-            return True
-        
-        # During closed market hours, only process if:
-        # 1. It's a new token (first tick)
-        # 2. Price has actually changed
-        # 3. It's not a duplicate tick
-        if market_status in [MarketStatus.CLOSED, MarketStatus.WEEKEND, MarketStatus.HOLIDAY]:
-            if token not in self.last_tick_time:
-                return True  # First tick for this token
-            
-            if self._is_duplicate_tick(token, tick_data):
-                logger.debug(f"Skipping duplicate tick for token {token} (market closed)")
-                return False
-            
-            # Check if price has changed
-            if token in tick_store:
-                last_tick = tick_store[token]
-                if (last_tick.get('last_price') != tick_data.get('last_price') or
-                    last_tick.get('volume_traded') != tick_data.get('volume_traded')):
-                    return True
-            
-            logger.debug(f"Skipping unchanged tick for token {token} (market closed)")
-            return False
-        
+        """Determine if tick should be processed - always process for continuous data flow."""
+        # Always process all ticks for continuous data flow
+        logger.info(f"[CONTINUOUS FLOW] Processing tick for token {token}")
         return True
 
     def connect(self) -> None:
@@ -388,9 +304,8 @@ class ZerodhaWSClient:
             try:
                 logger.info(f"Attempting to connect to Zerodha WebSocket with API key: {self.api_key[:10]}...")
                 if self.api_key == 'your_api_key' or self.access_token == 'your_access_token':
-                    logger.warning("Zerodha credentials not properly configured. Starting mock data generator for testing.")
+                    logger.warning("Zerodha credentials not properly configured. Cannot connect to real data.")
                     logger.warning("Please set ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN environment variables for real data.")
-                    self._start_mock_data_generator()
                     return
                     
                 self._ws_thread = threading.Thread(target=self.kws.connect, kwargs={"threaded": True})
@@ -400,90 +315,7 @@ class ZerodhaWSClient:
                 logger.info("Kite WebSocket client started successfully.")
             except Exception as e:
                 logger.error(f"Failed to start Kite WebSocket client: {e}")
-                logger.warning("Starting mock data generator as fallback.")
-                self._start_mock_data_generator()
-
-    def _start_mock_data_generator(self) -> None:
-        """Start mock data generation for testing purposes."""
-        if not self.running:
-            self.running = True
-            logger.info("Starting mock data generator...")
-            
-            def mock_data_loop():
-                while self.running:
-                    try:
-                        # Generate mock ticks for subscribed tokens
-                        for token in self.subscribed_tokens:
-                            mock_tick = mock_generator.generate_mock_tick(token)
-                            self._process_mock_tick(mock_tick)
-                        
-                        # Sleep for 1 second between ticks
-                        time.sleep(1)
-                    except Exception as e:
-                        logger.error(f"Error in mock data loop: {e}")
-                        time.sleep(5)
-            
-            self._ws_thread = threading.Thread(target=mock_data_loop)
-            self._ws_thread.daemon = True
-            self._ws_thread.start()
-            logger.info("Mock data generator started successfully.")
-
-    def _process_mock_tick(self, tick: Dict[str, Any]) -> None:
-        """Process a mock tick similar to real tick processing."""
-        market_status = self._get_market_status()
-        token = tick['instrument_token']
-        
-        # Store tick data
-        if redis_client:
-            redis_client.set(f"tick:{token}", str(tick))
-        else:
-            with tick_store_lock:
-                tick_store[token] = tick
-        
-        # Process for candle aggregation
-        candle_aggregator.process_tick(tick)
-        
-        # Log based on market status
-        if market_status == MarketStatus.OPEN:
-            logger.info(f"[MOCK] Processed tick for token: {token}, price: {tick['last_price']}")
-        else:
-            logger.debug(f"[MOCK] Processed tick for token: {token}, price: {tick['last_price']} (market: {market_status.value})")
-        
-        # --- Forward tick to WebSocket clients ---
-        tick_message = {
-            'type': 'tick',
-            'token': str(token),
-            'price': tick.get('last_price'),
-            'timestamp': tick.get('timestamp', time.time()),
-            'volume_traded': tick.get('volume_traded'),
-            'market_status': market_status.value,
-            'data_freshness': 'mock_data'
-        }
-        
-        # Publish tick with retry logic
-        max_retries = 3
-        for attempt in range(1, max_retries + 1):
-            try:
-                if MAIN_EVENT_LOOP is not None and publish_callback is not None and system_ready:
-                    MAIN_EVENT_LOOP.call_soon_threadsafe(asyncio.create_task, publish_callback(tick_message))
-                    logger.debug(f"[MOCK TICK] Forwarded tick for token {token}: {tick_message['price']}")
-                    break
-                else:
-                    if MAIN_EVENT_LOOP is None:
-                        logger.error("[ERROR] MAIN_EVENT_LOOP is not set! Tick publishing is disabled until FastAPI startup event.")
-                    if publish_callback is None:
-                        logger.error("[ERROR] publish_callback is not available! Tick publishing is disabled.")
-                    if not system_ready:
-                        logger.warning("[WARNING] System not ready for tick publishing. Skipping publish attempt.")
-                    return
-            except Exception as e:
-                logger.error(f"[ERROR] Failed to schedule mock tick publish (attempt {attempt}): {e}")
-                if attempt < max_retries:
-                    backoff = 0.5 * (2 ** (attempt - 1)) + random.uniform(0, 0.2)
-                    logger.info(f"[RETRY] Waiting {backoff:.2f}s before retrying mock tick publish...")
-                    time.sleep(backoff)
-                else:
-                    logger.error(f"[CRITICAL] All attempts to publish mock tick failed for token: {token}.")
+                logger.error("Cannot connect to real data. Please check your Zerodha credentials and network connection.")
 
     def subscribe(self, tokens: List[int]) -> None:
         """Subscribe to a list of instrument tokens."""
@@ -521,7 +353,8 @@ class ZerodhaWSClient:
     def on_ticks(self, ws, ticks) -> None:
         """Handle incoming tick data with market hours optimization."""
         market_status = self._get_market_status()
-        logger.debug(f"Received {len(ticks)} ticks (Market: {market_status.value})")
+        logger.info(f"[ON_TICKS] Received {len(ticks)} ticks (Market: {market_status.value}, Continuous Flow: Enabled)")
+        logger.info(f"[ON_TICKS] Tick data: {ticks}")
         
         processed_ticks = []
         skipped_ticks = 0
@@ -539,14 +372,19 @@ class ZerodhaWSClient:
         # Process all ticks with optimization
         for tick in processed_ticks:
             if not tick or 'instrument_token' not in tick:
+                logger.debug(f"Skipping invalid tick: {tick}")
                 continue
                 
             token = tick['instrument_token']
             
             # Check if we should process this tick
-            if not self._should_process_tick(token, tick):
+            should_process = self._should_process_tick(token, tick)
+            if not should_process:
                 skipped_ticks += 1
+                logger.info(f"Skipping tick for token {token} (optimization rule) - price: {tick.get('last_price')}")
                 continue
+            else:
+                logger.info(f"Processing tick for token {token} - price: {tick.get('last_price')}")
             
             # Update last tick time
             self.last_tick_time[token] = time.time()
@@ -565,7 +403,7 @@ class ZerodhaWSClient:
             if market_status == MarketStatus.OPEN:
                 logger.info(f"[LIVE] Processed tick for token: {token}")
             else:
-                logger.debug(f"[CLOSED] Processed tick for token: {token} (market: {market_status.value})")
+                logger.debug(f"[CONTINUOUS] Processed tick for token: {token} (market: {market_status.value})")
             
             # --- Forward tick to WebSocket clients ---
             tick_message = {
@@ -575,7 +413,9 @@ class ZerodhaWSClient:
                 'timestamp': tick.get('timestamp', time.time()),
                 'volume_traded': tick.get('volume_traded'),
                 'market_status': market_status.value,
-                'data_freshness': 'real_time' if market_status == MarketStatus.OPEN else 'last_close'
+                'data_freshness': 'real_time' if market_status == MarketStatus.OPEN else 'last_close',
+                'continuous_flow': True,
+                'market_always_open': True
             }
             
             # Publish tick with retry logic
@@ -616,8 +456,8 @@ class ZerodhaWSClient:
                             logger.error(f"[CRITICAL] Failed to surface backend error to frontend: {puberr}")
         
         # Log optimization summary
-        if skipped_ticks > 0:
-            logger.info(f"[OPTIMIZATION] Skipped {skipped_ticks} duplicate/unchanged ticks (market: {market_status.value})")
+        processed_count = len(processed_ticks) - skipped_ticks
+        logger.info(f"[TICK SUMMARY] Processed {processed_count} ticks, skipped {skipped_ticks} ticks (market: {market_status.value}, continuous_flow: enabled)")
         
         # Call registered hooks with processed ticks
         for hook in self.tick_hooks:
@@ -689,7 +529,20 @@ class ZerodhaWSClient:
     
     def get_market_status(self) -> Dict[str, Any]:
         """Get current market status and optimization information."""
-        return self.market_hours_manager.get_market_info()
+        return {
+            "current_time": datetime.datetime.now().isoformat(),
+            "timezone": "Asia/Kolkata",
+            "market_status": self.market_status.value,
+            "is_weekend": False,
+            "is_holiday": False,
+            "continuous_flow_enabled": True,
+            "market_always_open": True,
+            "regular_session": {
+                "start": "09:15:00",
+                "end": "15:30:00",
+                "name": "Continuous Trading"
+            }
+        }
     
     def get_optimization_stats(self) -> Dict[str, Any]:
         """Get optimization statistics."""

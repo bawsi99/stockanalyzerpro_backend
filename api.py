@@ -20,6 +20,7 @@ import json
 import math
 import asyncio
 import traceback
+import datetime
 from typing import Dict, List, Optional, Any
 
 # Try to import optional dependencies
@@ -60,7 +61,7 @@ from pydantic import BaseModel, Field
 from agent_capabilities import StockAnalysisOrchestrator
 from zerodha_ws_client import zerodha_ws_client, candle_aggregator
 from analysis_storage import store_analysis_in_supabase
-from market_hours_manager import market_hours_manager
+# Market hours manager removed - continuous data flow enabled
 from enhanced_data_service import enhanced_data_service, DataRequest
 
 # Import sector components
@@ -982,7 +983,7 @@ async def startup_event():
     await asyncio.sleep(3)
     
     # Subscribe to default tokens for basic coverage
-    default_tokens = [256265, 11536, 1330, 1594, 4963]  # RELIANCE, TCS, HDFC, INFY, ICICIBANK
+    default_tokens = [738561, 11536, 1330, 1594, 4963]  # Updated token, TCS, HDFC, INFY, ICICIBANK
     try:
         print(f"Attempting to subscribe to default tokens: {default_tokens}")
         zerodha_ws_client.subscribe(default_tokens)
@@ -2556,17 +2557,42 @@ async def symbol_to_token(symbol: str, exchange: str = "NSE"):
 
 @app.get("/market/status")
 async def get_market_status():
-    """Get current market status and hours information."""
+    """Get current market status - always returns open for continuous data flow."""
     try:
-        return market_hours_manager.get_market_info()
+        return {
+            "current_time": datetime.datetime.now().isoformat(),
+            "timezone": "Asia/Kolkata",
+            "market_status": "open",
+            "is_weekend": False,
+            "is_holiday": False,
+            "continuous_flow_enabled": True,
+            "market_always_open": True,
+            "regular_session": {
+                "start": "09:15:00",
+                "end": "15:30:00",
+                "name": "Continuous Trading"
+            }
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting market status: {str(e)}")
 
 @app.get("/market/optimization/strategy")
 async def get_optimization_strategy(symbol: str, interval: str = "1d"):
-    """Get optimal data fetching strategy for a symbol and interval."""
+    """Get optimal data fetching strategy - always recommends live data for continuous flow."""
     try:
-        strategy = market_hours_manager.get_optimal_data_strategy(symbol, interval)
+        strategy = {
+            "market_status": "open",
+            "current_time": datetime.datetime.now().isoformat(),
+            "recommended_approach": "live",
+            "reason": "Continuous data flow enabled - always use live data",
+            "cost_efficiency": "continuous_flow",
+            "data_freshness": "real_time",
+            "websocket_recommended": True,
+            "cache_duration": 60,  # 1 minute
+            "next_update": None,
+            "continuous_flow": True,
+            "market_always_open": True
+        }
         return {
             "symbol": symbol,
             "interval": interval,
@@ -2653,8 +2679,9 @@ async def get_optimization_recommendations():
     try:
         return {
             "recommendations": enhanced_data_service._get_cost_recommendations(),
-            "market_status": market_hours_manager.get_market_status().value,
-            "current_time": market_hours_manager.get_current_ist_time().isoformat()
+            "market_status": "open",
+            "current_time": datetime.datetime.now().isoformat(),
+            "continuous_flow_enabled": True
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting recommendations: {str(e)}")

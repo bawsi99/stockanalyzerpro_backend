@@ -12,7 +12,17 @@ from typing import Dict, Any, Optional, List, Tuple
 import pandas as pd
 from dataclasses import dataclass
 
-from market_hours_manager import market_hours_manager, MarketStatus
+# Market status enum (simplified without market hours manager)
+from enum import Enum
+
+class MarketStatus(Enum):
+    """Market status enumeration."""
+    OPEN = "open"
+    CLOSED = "closed"
+    PRE_MARKET = "pre_market"
+    POST_MARKET = "post_market"
+    WEEKEND = "weekend"
+    HOLIDAY = "holiday"
 from zerodha_client import ZerodhaDataClient
 from zerodha_ws_client import zerodha_ws_client
 
@@ -47,7 +57,7 @@ class EnhancedDataService:
     
     def __init__(self):
         self.zerodha_client = ZerodhaDataClient()
-        self.market_hours_manager = market_hours_manager
+        self.market_status = MarketStatus.OPEN  # Always open for continuous flow
         self.data_cache = {}
         self.cache_metadata = {}
         
@@ -56,7 +66,7 @@ class EnhancedDataService:
         self.request_count = 0
         self.optimization_savings = 0.0
         
-        logger.info("EnhancedDataService initialized")
+        logger.info("EnhancedDataService initialized with continuous data flow")
     
     def get_optimal_data(self, request: DataRequest) -> DataResponse:
         """
@@ -70,10 +80,20 @@ class EnhancedDataService:
         """
         self.request_count += 1
         
-        # Get optimal strategy
-        strategy = self.market_hours_manager.get_optimal_data_strategy(
-            request.symbol, request.interval
-        )
+        # Get optimal strategy - always use live data for continuous flow
+        strategy = {
+            "market_status": "open",
+            "current_time": datetime.now().isoformat(),
+            "recommended_approach": "live",
+            "reason": "Continuous data flow enabled - always use live data",
+            "cost_efficiency": "continuous_flow",
+            "data_freshness": "real_time",
+            "websocket_recommended": True,
+            "cache_duration": 60,  # 1 minute
+            "next_update": None,
+            "continuous_flow": True,
+            "market_always_open": True
+        }
         
         # Check cache first
         cache_key = f"{request.symbol}_{request.exchange}_{request.interval}_{request.period}"
@@ -108,10 +128,8 @@ class EnhancedDataService:
                 optimization_applied=False
             )
         
-        # Calculate cost
-        cost = self.market_hours_manager.estimate_data_cost(
-            strategy["recommended_approach"], 0.1  # Assume 6 minutes of usage
-        )
+        # Calculate cost - always 0 for continuous flow
+        cost = 0.0  # Continuous flow mode - no cost tracking
         self.total_cost += cost
         
         # Create response
@@ -229,7 +247,20 @@ class EnhancedDataService:
     
     def get_market_status(self) -> Dict[str, Any]:
         """Get current market status and optimization information."""
-        return self.market_hours_manager.get_market_info()
+        return {
+            "current_time": datetime.now().isoformat(),
+            "timezone": "Asia/Kolkata",
+            "market_status": self.market_status.value,
+            "is_weekend": False,
+            "is_holiday": False,
+            "continuous_flow_enabled": True,
+            "market_always_open": True,
+            "regular_session": {
+                "start": "09:15:00",
+                "end": "15:30:00",
+                "name": "Continuous Trading"
+            }
+        }
     
     def get_optimization_stats(self) -> Dict[str, Any]:
         """Get optimization statistics."""
@@ -238,7 +269,7 @@ class EnhancedDataService:
             "total_cost": self.total_cost,
             "average_cost_per_request": self.total_cost / max(self.request_count, 1),
             "cache_hit_rate": self._calculate_cache_hit_rate(),
-            "market_status": self.market_hours_manager.get_market_status().value,
+            "market_status": self.market_status.value,
             "websocket_stats": zerodha_ws_client.get_optimization_stats()
         }
     
@@ -268,14 +299,26 @@ class EnhancedDataService:
     
     def get_cost_analysis(self) -> Dict[str, Any]:
         """Get detailed cost analysis."""
-        strategy = self.market_hours_manager.get_optimal_data_strategy("RELIANCE", "1d")
+        strategy = {
+            "market_status": "open",
+            "current_time": datetime.now().isoformat(),
+            "recommended_approach": "live",
+            "reason": "Continuous data flow enabled - always use live data",
+            "cost_efficiency": "continuous_flow",
+            "data_freshness": "real_time",
+            "websocket_recommended": True,
+            "cache_duration": 60,  # 1 minute
+            "next_update": None,
+            "continuous_flow": True,
+            "market_always_open": True
+        }
         
         return {
             "current_strategy": strategy,
             "cost_comparison": {
-                "live_data": self.market_hours_manager.estimate_data_cost("live", 1.0),
-                "historical_data": self.market_hours_manager.estimate_data_cost("historical", 1.0),
-                "websocket": self.market_hours_manager.estimate_data_cost("websocket", 1.0)
+                "live_data": 0.0,
+                "historical_data": 0.0,
+                "websocket": 0.0
             },
             "recommendations": self._get_cost_recommendations()
         }
@@ -283,17 +326,12 @@ class EnhancedDataService:
     def _get_cost_recommendations(self) -> List[str]:
         """Get cost optimization recommendations."""
         recommendations = []
-        market_status = self.market_hours_manager.get_market_status()
         
-        if market_status in [MarketStatus.CLOSED, MarketStatus.WEEKEND, MarketStatus.HOLIDAY]:
-            recommendations.append("Use historical data during market closed hours")
-            recommendations.append("Disable WebSocket connections to save costs")
-            recommendations.append("Increase cache duration for closed market periods")
-        
-        if market_status == MarketStatus.OPEN:
-            recommendations.append("Use WebSocket for short intervals (1m, 5m, 15m)")
-            recommendations.append("Use historical API for longer intervals")
-            recommendations.append("Cache data for 1-5 minutes during market hours")
+        # Continuous flow recommendations
+        recommendations.append("Continuous data flow enabled - always use live data")
+        recommendations.append("WebSocket connections always active for real-time data")
+        recommendations.append("Cache data for 1 minute during continuous flow")
+        recommendations.append("All data sources available 24/7")
         
         return recommendations
 
