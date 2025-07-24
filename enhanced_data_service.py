@@ -254,6 +254,18 @@ class EnhancedDataService:
         self.cache_metadata.clear()
         logger.info("Data cache cleared")
     
+    def clear_interval_cache(self, symbol: str, interval: str) -> None:
+        """Clear cache for a specific symbol and interval."""
+        keys_to_remove = [
+            key for key in self.data_cache.keys()
+            if key.startswith(f"{symbol}_") and interval in key
+        ]
+        for key in keys_to_remove:
+            del self.data_cache[key]
+            if key in self.cache_metadata:
+                del self.cache_metadata[key]
+        logger.info(f"Cleared cache for {symbol} with interval {interval}")
+    
     def get_cost_analysis(self) -> Dict[str, Any]:
         """Get detailed cost analysis."""
         strategy = self.market_hours_manager.get_optimal_data_strategy("RELIANCE", "1d")

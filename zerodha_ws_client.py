@@ -52,6 +52,70 @@ logger = logging.getLogger(__name__)
 tick_store: Dict[int, Dict[str, Any]] = {}
 tick_store_lock = threading.Lock()
 
+# Mock data generator for testing when Zerodha credentials are not available
+class MockDataGenerator:
+    """Generates realistic mock tick data for testing purposes."""
+    
+    def __init__(self):
+        self.base_prices = {
+            256265: 2500.0,  # RELIANCE
+            11536: 3800.0,   # TCS
+            1330: 1600.0,    # HDFC
+            1594: 1400.0,    # INFY
+            4963: 950.0      # ICICIBANK
+        }
+        self.last_prices = self.base_prices.copy()
+        self.volatility = 0.02  # 2% volatility
+        self.last_tick_time = {}
+        
+    def generate_mock_tick(self, token: int) -> Dict[str, Any]:
+        """Generate a realistic mock tick for the given token."""
+        current_time = time.time()
+        
+        # Get base price for this token
+        base_price = self.base_prices.get(token, 1000.0)
+        last_price = self.last_prices.get(token, base_price)
+        
+        # Generate price movement (random walk with mean reversion)
+        price_change = (random.random() - 0.5) * self.volatility * last_price
+        new_price = last_price + price_change
+        
+        # Ensure price doesn't go negative
+        new_price = max(new_price, base_price * 0.5)
+        
+        # Update last price
+        self.last_prices[token] = new_price
+        
+        # Generate volume (random between 1000 and 10000)
+        volume = random.randint(1000, 10000)
+        
+        # Generate OHLC data
+        open_price = last_price
+        high_price = max(open_price, new_price) + random.random() * 10
+        low_price = min(open_price, new_price) - random.random() * 10
+        close_price = new_price
+        
+        tick = {
+            'instrument_token': token,
+            'last_price': round(new_price, 2),
+            'last_quantity': random.randint(100, 1000),
+            'average_price': round((open_price + close_price) / 2, 2),
+            'volume_traded': volume,
+            'total_buy_quantity': random.randint(5000, 50000),
+            'total_sell_quantity': random.randint(5000, 50000),
+            'open': round(open_price, 2),
+            'high': round(high_price, 2),
+            'low': round(low_price, 2),
+            'close': round(close_price, 2),
+            'timestamp': current_time
+        }
+        
+        self.last_tick_time[token] = current_time
+        return tick
+
+# Global mock data generator
+mock_generator = MockDataGenerator()
+
 # Timeframe definitions (in seconds)
 TIMEFRAMES = {
     '1m': 60,
@@ -324,7 +388,9 @@ class ZerodhaWSClient:
             try:
                 logger.info(f"Attempting to connect to Zerodha WebSocket with API key: {self.api_key[:10]}...")
                 if self.api_key == 'your_api_key' or self.access_token == 'your_access_token':
-                    logger.error("Zerodha credentials not properly configured. Please set ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN environment variables.")
+                    logger.warning("Zerodha credentials not properly configured. Starting mock data generator for testing.")
+                    logger.warning("Please set ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN environment variables for real data.")
+                    self._start_mock_data_generator()
                     return
                     
                 self._ws_thread = threading.Thread(target=self.kws.connect, kwargs={"threaded": True})
@@ -334,7 +400,90 @@ class ZerodhaWSClient:
                 logger.info("Kite WebSocket client started successfully.")
             except Exception as e:
                 logger.error(f"Failed to start Kite WebSocket client: {e}")
-                self.running = False
+                logger.warning("Starting mock data generator as fallback.")
+                self._start_mock_data_generator()
+
+    def _start_mock_data_generator(self) -> None:
+        """Start mock data generation for testing purposes."""
+        if not self.running:
+            self.running = True
+            logger.info("Starting mock data generator...")
+            
+            def mock_data_loop():
+                while self.running:
+                    try:
+                        # Generate mock ticks for subscribed tokens
+                        for token in self.subscribed_tokens:
+                            mock_tick = mock_generator.generate_mock_tick(token)
+                            self._process_mock_tick(mock_tick)
+                        
+                        # Sleep for 1 second between ticks
+                        time.sleep(1)
+                    except Exception as e:
+                        logger.error(f"Error in mock data loop: {e}")
+                        time.sleep(5)
+            
+            self._ws_thread = threading.Thread(target=mock_data_loop)
+            self._ws_thread.daemon = True
+            self._ws_thread.start()
+            logger.info("Mock data generator started successfully.")
+
+    def _process_mock_tick(self, tick: Dict[str, Any]) -> None:
+        """Process a mock tick similar to real tick processing."""
+        market_status = self._get_market_status()
+        token = tick['instrument_token']
+        
+        # Store tick data
+        if redis_client:
+            redis_client.set(f"tick:{token}", str(tick))
+        else:
+            with tick_store_lock:
+                tick_store[token] = tick
+        
+        # Process for candle aggregation
+        candle_aggregator.process_tick(tick)
+        
+        # Log based on market status
+        if market_status == MarketStatus.OPEN:
+            logger.info(f"[MOCK] Processed tick for token: {token}, price: {tick['last_price']}")
+        else:
+            logger.debug(f"[MOCK] Processed tick for token: {token}, price: {tick['last_price']} (market: {market_status.value})")
+        
+        # --- Forward tick to WebSocket clients ---
+        tick_message = {
+            'type': 'tick',
+            'token': str(token),
+            'price': tick.get('last_price'),
+            'timestamp': tick.get('timestamp', time.time()),
+            'volume_traded': tick.get('volume_traded'),
+            'market_status': market_status.value,
+            'data_freshness': 'mock_data'
+        }
+        
+        # Publish tick with retry logic
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                if MAIN_EVENT_LOOP is not None and publish_callback is not None and system_ready:
+                    MAIN_EVENT_LOOP.call_soon_threadsafe(asyncio.create_task, publish_callback(tick_message))
+                    logger.debug(f"[MOCK TICK] Forwarded tick for token {token}: {tick_message['price']}")
+                    break
+                else:
+                    if MAIN_EVENT_LOOP is None:
+                        logger.error("[ERROR] MAIN_EVENT_LOOP is not set! Tick publishing is disabled until FastAPI startup event.")
+                    if publish_callback is None:
+                        logger.error("[ERROR] publish_callback is not available! Tick publishing is disabled.")
+                    if not system_ready:
+                        logger.warning("[WARNING] System not ready for tick publishing. Skipping publish attempt.")
+                    return
+            except Exception as e:
+                logger.error(f"[ERROR] Failed to schedule mock tick publish (attempt {attempt}): {e}")
+                if attempt < max_retries:
+                    backoff = 0.5 * (2 ** (attempt - 1)) + random.uniform(0, 0.2)
+                    logger.info(f"[RETRY] Waiting {backoff:.2f}s before retrying mock tick publish...")
+                    time.sleep(backoff)
+                else:
+                    logger.error(f"[CRITICAL] All attempts to publish mock tick failed for token: {token}.")
 
     def subscribe(self, tokens: List[int]) -> None:
         """Subscribe to a list of instrument tokens."""
@@ -421,7 +570,7 @@ class ZerodhaWSClient:
             # --- Forward tick to WebSocket clients ---
             tick_message = {
                 'type': 'tick',
-                'token': token,
+                'token': str(token),
                 'price': tick.get('last_price'),
                 'timestamp': tick.get('timestamp', time.time()),
                 'volume_traded': tick.get('volume_traded'),
@@ -435,6 +584,7 @@ class ZerodhaWSClient:
                 try:
                     if MAIN_EVENT_LOOP is not None and publish_callback is not None and system_ready:
                         MAIN_EVENT_LOOP.call_soon_threadsafe(asyncio.create_task, publish_callback(tick_message))
+                        logger.debug(f"[TICK] Forwarded tick for token {token}: {tick_message['price']}")
                         break
                     else:
                         if MAIN_EVENT_LOOP is None:

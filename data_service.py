@@ -771,8 +771,8 @@ async def get_stock_history(
     This endpoint provides full historical data for charting, not limited by analysis period.
     """
     try:
-        # Validate interval
-        valid_intervals = ['1min', '3min', '5min', '10min', '15min', '30min', '60min', '1day']
+        # Validate interval (include frontend intervals)
+        valid_intervals = ['1min', '3min', '5min', '10min', '15min', '30min', '60min', '1h', '1day']
         if interval not in valid_intervals:
             raise HTTPException(
                 status_code=400, 
@@ -788,10 +788,13 @@ async def get_stock_history(
             '15min': '15minute',
             '30min': '30minute',
             '60min': '60minute',
+            '1h': '60minute',
             '1day': 'day'
         }
         
         backend_interval = interval_mapping.get(interval, 'day')
+        
+        print(f"[DataService] Fetching historical data for {symbol} with interval: {interval} -> {backend_interval}")
         
         # Get orchestrator and authenticate
         zerodha_client = ZerodhaDataClient()
@@ -827,15 +830,51 @@ async def get_stock_history(
         if df is None or df.empty:
             raise HTTPException(status_code=404, detail=f"No historical data found for {symbol}")
         
+        # Ensure proper datetime index for timestamp conversion
+        if 'date' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+            print(f"[DataService] Setting 'date' column as index for {symbol}")
+            df['date'] = pd.to_datetime(df['date'])
+            df.set_index('date', inplace=True)
+            print(f"[DataService] Index type after setting: {type(df.index)}")
+            print(f"[DataService] Index values: {df.index.tolist()[:5]}")
+        
         # Limit the data points if requested
         if limit > 0:
             df = df.tail(limit)
+            # Ensure index is preserved after tail operation
+            if 'date' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+                print(f"[DataService] Re-setting 'date' column as index after tail operation for {symbol}")
+                df['date'] = pd.to_datetime(df['date'])
+                df.set_index('date', inplace=True)
+                print(f"[DataService] After tail and re-setting index - Index type: {type(df.index)}")
+                print(f"[DataService] Index values: {df.index.tolist()[:5]}")
         
         # Convert to JSON serializable format
         candles = []
         for index, row in df.iterrows():
+            # Debug: Print row info
+            print(f"[DataService] Processing row - Index: {index} (type: {type(index)})")
+            
+            # Handle timestamp conversion properly
+            if hasattr(index, 'timestamp'):
+                # If index is a datetime object
+                timestamp = int(index.timestamp())
+                print(f"[DataService] Using index timestamp: {timestamp}")
+            elif 'date' in row:
+                # If date is in the row data (shouldn't happen if index is set properly)
+                if isinstance(row['date'], str):
+                    timestamp = int(pd.to_datetime(row['date']).timestamp())
+                    print(f"[DataService] Using date string: {row['date']} -> {timestamp}")
+                else:
+                    timestamp = int(row['date'].timestamp())
+                    print(f"[DataService] Using date object: {row['date']} -> {timestamp}")
+            else:
+                # Fallback: use current time
+                timestamp = int(pd.Timestamp.now().timestamp())
+                print(f"[DataService] Using fallback timestamp: {timestamp}")
+            
             candle = {
-                'time': int(index.timestamp()) if hasattr(index, 'timestamp') else int(index),
+                'time': timestamp,
                 'open': float(row['open']),
                 'high': float(row['high']),
                 'low': float(row['low']),
@@ -843,9 +882,12 @@ async def get_stock_history(
                 'volume': float(row['volume'])
             }
             candles.append(candle)
+            print(f"[DataService] Created candle: {candle}")
         
         # Sort by time (oldest first)
         candles.sort(key=lambda x: x['time'])
+        
+        print(f"[DataService] Returning {len(candles)} candles for {symbol} with interval {interval}")
         
         response = {
             "success": True,
@@ -897,11 +939,31 @@ async def get_optimized_data(request: OptimizedDataRequest):
         if response.data is None or response.data.empty:
             raise HTTPException(status_code=404, detail=f"No data found for {request.symbol}")
         
+        # Ensure proper datetime index for timestamp conversion
+        if 'date' in response.data.columns and not isinstance(response.data.index, pd.DatetimeIndex):
+            print(f"[DataService] Setting 'date' column as index for optimized data")
+            response.data['date'] = pd.to_datetime(response.data['date'])
+            response.data.set_index('date', inplace=True)
+        
         # Convert to JSON serializable format
         candles = []
         for index, row in response.data.iterrows():
+            # Handle timestamp conversion properly
+            if hasattr(index, 'timestamp'):
+                # If index is a datetime object
+                timestamp = int(index.timestamp())
+            elif 'date' in row:
+                # If date is in the row data (shouldn't happen if index is set properly)
+                if isinstance(row['date'], str):
+                    timestamp = int(pd.to_datetime(row['date']).timestamp())
+                else:
+                    timestamp = int(row['date'].timestamp())
+            else:
+                # Fallback: use current time
+                timestamp = int(pd.Timestamp.now().timestamp())
+            
             candle = {
-                'time': int(index.timestamp()) if hasattr(index, 'timestamp') else int(index),
+                'time': timestamp,
                 'open': float(row['open']),
                 'high': float(row['high']),
                 'low': float(row['low']),
@@ -1081,6 +1143,25 @@ async def clear_optimization_cache():
         return {
             "success": True,
             "message": "Cache cleared successfully",
+            "timestamp": pd.Timestamp.now().isoformat()
+        }
+    except Exception as e:
+        traceback.print_exc()
+        error_response = {
+            "success": False,
+            "error": str(e),
+            "timestamp": pd.Timestamp.now().isoformat()
+        }
+        raise HTTPException(status_code=500, detail=error_response)
+
+@app.post("/market/optimization/clear-interval-cache")
+async def clear_interval_cache(symbol: str, interval: str):
+    """Clear cache for a specific symbol and interval."""
+    try:
+        enhanced_data_service.clear_interval_cache(symbol, interval)
+        return {
+            "success": True,
+            "message": f"Cache cleared for {symbol} with interval {interval}",
             "timestamp": pd.Timestamp.now().isoformat()
         }
     except Exception as e:

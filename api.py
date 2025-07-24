@@ -1,4 +1,19 @@
 # api.py
+"""
+DEPRECATED: This file is deprecated and should not be used.
+
+The backend has been split into two separate services:
+- data_service.py (Port 8000) - Handles data fetching, WebSocket connections, real-time streaming
+- analysis_service.py (Port 8001) - Handles analysis, AI processing, chart generation
+
+Please use the new split services instead:
+- Start Data Service: python start_data_service.py
+- Start Analysis Service: python start_analysis_service.py
+- Or use convenience script: python run_services.py
+
+This file will be removed in a future version.
+"""
+
 import os
 import time
 import json
@@ -2182,8 +2197,8 @@ async def get_stock_history(
     This endpoint provides full historical data for charting, not limited by analysis period.
     """
     try:
-        # Validate interval
-        valid_intervals = ['1min', '3min', '5min', '10min', '15min', '30min', '60min', '1day']
+        # Validate interval (include frontend intervals)
+        valid_intervals = ['1min', '3min', '5min', '10min', '15min', '30min', '60min', '1h', '1day']
         if interval not in valid_intervals:
             raise HTTPException(
                 status_code=400, 
@@ -2199,10 +2214,13 @@ async def get_stock_history(
             '15min': '15minute',
             '30min': '30minute',
             '60min': '60minute',
+            '1h': '60minute',
             '1day': 'day'
         }
         
         backend_interval = interval_mapping.get(interval, 'day')
+        
+        print(f"[API] Fetching historical data for {symbol} with interval: {interval} -> {backend_interval}")
         
         # Get orchestrator and authenticate
         orchestrator = StockAnalysisOrchestrator()
@@ -2238,15 +2256,68 @@ async def get_stock_history(
         if df is None or df.empty:
             raise HTTPException(status_code=404, detail=f"No historical data found for {symbol}")
         
+        # Debug: Print DataFrame info
+        print(f"[API] DataFrame info for {symbol}:")
+        print(f"  Shape: {df.shape}")
+        print(f"  Columns: {df.columns.tolist()}")
+        print(f"  Index type: {type(df.index)}")
+        print(f"  Index values: {df.index.tolist()[:5]}")
+        print(f"  Sample data:")
+        print(df.head(3))
+        
+        # Ensure DataFrame has proper datetime index
+        if 'date' in df.columns:
+            print(f"[API] Found 'date' column in DataFrame for {symbol}")
+            if not isinstance(df.index, pd.DatetimeIndex):
+                print(f"[API] Setting 'date' column as index for {symbol}")
+                df['date'] = pd.to_datetime(df['date'])
+                df.set_index('date', inplace=True)
+                print(f"[API] After setting index - Index type: {type(df.index)}")
+                print(f"[API] Index values: {df.index.tolist()[:5]}")
+            else:
+                print(f"[API] DataFrame already has datetime index for {symbol}")
+        else:
+            print(f"[API] WARNING: No 'date' column found for {symbol}")
+            print(f"[API] DataFrame columns: {df.columns.tolist()}")
+            print(f"[API] DataFrame index: {df.index}")
+        
         # Limit the data points if requested
         if limit > 0:
             df = df.tail(limit)
+            # Ensure index is preserved after tail operation
+            if 'date' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+                print(f"[API] Re-setting 'date' column as index after tail operation for {symbol}")
+                df['date'] = pd.to_datetime(df['date'])
+                df.set_index('date', inplace=True)
+                print(f"[API] After tail and re-setting index - Index type: {type(df.index)}")
+                print(f"[API] Index values: {df.index.tolist()[:5]}")
         
         # Convert to JSON serializable format
         candles = []
         for index, row in df.iterrows():
+            # Debug: Print row info
+            print(f"[API] Processing row - Index: {index} (type: {type(index)})")
+            
+            # Handle timestamp conversion properly
+            if hasattr(index, 'timestamp'):
+                # If index is a datetime object
+                timestamp = int(index.timestamp())
+                print(f"[API] Using index timestamp: {timestamp}")
+            elif 'date' in row:
+                # If date is in the row data (shouldn't happen if index is set properly)
+                if isinstance(row['date'], str):
+                    timestamp = int(pd.to_datetime(row['date']).timestamp())
+                    print(f"[API] Using date string: {row['date']} -> {timestamp}")
+                else:
+                    timestamp = int(row['date'].timestamp())
+                    print(f"[API] Using date object: {row['date']} -> {timestamp}")
+            else:
+                # Fallback: use current time
+                timestamp = int(pd.Timestamp.now().timestamp())
+                print(f"[API] Using fallback timestamp: {timestamp}")
+            
             candle = {
-                'time': int(index.timestamp()) if hasattr(index, 'timestamp') else int(index),
+                'time': timestamp,
                 'open': float(row['open']),
                 'high': float(row['high']),
                 'low': float(row['low']),
@@ -2254,9 +2325,12 @@ async def get_stock_history(
                 'volume': float(row['volume'])
             }
             candles.append(candle)
+            print(f"[API] Created candle: {candle}")
         
         # Sort by time (oldest first)
         candles.sort(key=lambda x: x['time'])
+        
+        print(f"[API] Returning {len(candles)} candles for {symbol} with interval {interval}")
         
         response = {
             "success": True,
@@ -2399,8 +2473,20 @@ async def get_stock_indicators(
                 'lower': [float(val) if not pd.isna(val) else None for val in bb_result['lower']]
             }
         
+        # Ensure proper datetime index for timestamp conversion
+        if 'date' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+            print(f"[API] Setting 'date' column as index for indicators endpoint")
+            df['date'] = pd.to_datetime(df['date'])
+            df.set_index('date', inplace=True)
+        
         # Get timestamps for alignment
-        timestamps = [int(index.timestamp()) if hasattr(index, 'timestamp') else int(index) for index in df.index]
+        timestamps = []
+        for index in df.index:
+            if hasattr(index, 'timestamp'):
+                timestamps.append(int(index.timestamp()))
+            else:
+                print(f"[API] Warning: Index {index} has no timestamp method, using fallback")
+                timestamps.append(int(pd.Timestamp.now().timestamp()))
         
         response = {
             "success": True,
@@ -2509,6 +2595,15 @@ async def clear_optimization_cache():
         return {"message": "Optimization cache cleared successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error clearing cache: {str(e)}")
+
+@app.post("/market/optimization/clear-interval-cache")
+async def clear_interval_cache(symbol: str, interval: str):
+    """Clear cache for a specific symbol and interval."""
+    try:
+        enhanced_data_service.clear_interval_cache(symbol, interval)
+        return {"message": f"Cache cleared for {symbol} with interval {interval}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error clearing interval cache: {str(e)}")
 
 class OptimizedDataRequest(BaseModel):
     symbol: str = Field(..., description="Stock symbol")

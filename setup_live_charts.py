@@ -123,10 +123,17 @@ def test_imports() -> bool:
         return False
     
     try:
-        from api import app
-        print("✅ API module imported successfully")
+        from data_service import app as data_app
+        print("✅ Data Service module imported successfully")
     except ImportError as e:
-        print(f"❌ Error importing API module: {e}")
+        print(f"❌ Error importing Data Service module: {e}")
+        return False
+    
+    try:
+        from analysis_service import app as analysis_app
+        print("✅ Analysis Service module imported successfully")
+    except ImportError as e:
+        print(f"❌ Error importing Analysis Service module: {e}")
         return False
     
     return True
@@ -155,7 +162,8 @@ def check_directory_structure() -> bool:
     """Check if required files and directories exist."""
     required_files = [
         'zerodha_ws_client.py',
-        'api.py',
+        'data_service.py',
+        'analysis_service.py',
         'requirements.txt'
     ]
     
@@ -212,9 +220,11 @@ def main() -> None:
     if passed == total:
         print("🎉 All checks passed! Your live charts setup is ready.")
         print("\nNext steps:")
-        print("1. Start the backend: python -m uvicorn api:app --reload --host 0.0.0.0 --port 8000")
-        print("2. Test WebSocket: python test_websocket_connection.py")
-        print("3. Start frontend and test live charts")
+        print("1. Start Data Service: python start_data_service.py")
+        print("2. Start Analysis Service: python start_analysis_service.py")
+        print("3. Or use convenience script: python run_services.py")
+        print("4. Test WebSocket: python test_websocket_connection.py")
+        print("5. Start frontend and test live charts")
     else:
         print("⚠️  Some checks failed. Please fix the issues above before proceeding.")
         sys.exit(1)

@@ -699,8 +699,20 @@ async def get_stock_indicators(
                 'lower': [float(val) if not pd.isna(val) else None for val in bb_result[2]]
             }
         
+        # Ensure proper datetime index for timestamp conversion
+        if 'date' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+            print(f"[AnalysisService] Setting 'date' column as index for indicators endpoint")
+            df['date'] = pd.to_datetime(df['date'])
+            df.set_index('date', inplace=True)
+        
         # Get timestamps for alignment
-        timestamps = [int(index.timestamp()) if hasattr(index, 'timestamp') else int(index) for index in df.index]
+        timestamps = []
+        for index in df.index:
+            if hasattr(index, 'timestamp'):
+                timestamps.append(int(index.timestamp()))
+            else:
+                print(f"[AnalysisService] Warning: Index {index} has no timestamp method, using fallback")
+                timestamps.append(int(pd.Timestamp.now().timestamp()))
         
         response = {
             "success": True,
@@ -802,8 +814,20 @@ async def get_patterns(
             triangles = PatternRecognition.detect_triangles(df['close'])
             patterns_data['triangles'] = triangles
         
+        # Ensure proper datetime index for timestamp conversion
+        if 'date' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+            print(f"[AnalysisService] Setting 'date' column as index for patterns endpoint")
+            df['date'] = pd.to_datetime(df['date'])
+            df.set_index('date', inplace=True)
+        
         # Get timestamps for alignment
-        timestamps = [int(index.timestamp()) if hasattr(index, 'timestamp') else int(index) for index in df.index]
+        timestamps = []
+        for index in df.index:
+            if hasattr(index, 'timestamp'):
+                timestamps.append(int(index.timestamp()))
+            else:
+                print(f"[AnalysisService] Warning: Index {index} has no timestamp method, using fallback")
+                timestamps.append(int(pd.Timestamp.now().timestamp()))
         
         response = {
             "success": True,
