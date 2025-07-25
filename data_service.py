@@ -155,7 +155,7 @@ def make_json_serializable(obj):
 app = FastAPI(title="Stock Data Service", version="1.0.0")
 
 # Load CORS origins from environment variable
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:8080,http://127.0.0.1:5173").split(",")
 CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS if origin.strip()]
 
 # Add CORS middleware

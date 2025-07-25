@@ -1,6 +1,9 @@
 import os
 
 class PromptManager:
+    # Class variable for the solving line
+    SOLVING_LINE = "\n\nLet me solve this by .."
+    
     def __init__(self, prompt_dir=None):
         if prompt_dir is None:
             # Set to ../prompts relative to this file

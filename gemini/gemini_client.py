@@ -71,6 +71,8 @@ class GeminiClient:
                 knowledge_context=knowledge_context or "",
                 raw_indicators=raw_indicators_json
             )
+            # Add the solving line at the very end
+            prompt += self.prompt_manager.SOLVING_LINE
         except Exception as ex:
             # print(f"[DEBUG-ERROR] Exception during format_prompt: {ex}")
             import traceback; traceback.print_exc()
@@ -462,6 +464,9 @@ MATHEMATICAL VALIDATION REQUIREMENTS:
 Use Python code for all calculations and include the mathematical validation results in your analysis.
 """
         
+        # Add the solving line at the very end
+        enhanced_decision_prompt += self.prompt_manager.SOLVING_LINE
+        
         try:
             text_response, code_results, execution_results = self.core.call_llm_with_code_execution(enhanced_decision_prompt)
             
@@ -497,23 +502,31 @@ Use Python code for all calculations and include the mathematical validation res
     async def analyze_comprehensive_overview(self, image: bytes) -> str:
         """Analyze the comprehensive comparison chart that shows all major indicators."""
         prompt = self.prompt_manager.format_prompt("image_analysis_comprehensive_overview")
+        # Add the solving line at the very end
+        prompt += self.prompt_manager.SOLVING_LINE
         return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
 
     async def analyze_volume_comprehensive(self, images: list) -> str:
         """Analyze all volume-related charts together for complete volume story."""
         prompt = self.prompt_manager.format_prompt("image_analysis_volume_comprehensive")
+        # Add the solving line at the very end
+        prompt += self.prompt_manager.SOLVING_LINE
         pil_images = [self.image_utils.bytes_to_image(img) for img in images]
         return await self.core.call_llm_with_images(prompt, pil_images)
 
     async def analyze_reversal_patterns(self, images: list) -> str:
         """Analyze divergence and double tops/bottoms charts together for reversal signals."""
         prompt = self.prompt_manager.format_prompt("image_analysis_reversal_patterns")
+        # Add the solving line at the very end
+        prompt += self.prompt_manager.SOLVING_LINE
         pil_images = [self.image_utils.bytes_to_image(img) for img in images]
         return await self.core.call_llm_with_images(prompt, pil_images)
 
     async def analyze_continuation_levels(self, images: list) -> str:
         """Analyze triangles/flags and support/resistance charts together for continuation and levels."""
         prompt = self.prompt_manager.format_prompt("image_analysis_continuation_levels")
+        # Add the solving line at the very end
+        prompt += self.prompt_manager.SOLVING_LINE
         pil_images = [self.image_utils.bytes_to_image(img) for img in images]
         return await self.core.call_llm_with_images(prompt, pil_images)
 
@@ -536,6 +549,9 @@ Technical Indicators Data: {json.dumps(clean_for_json(self.convert_numpy_types(i
 
 Use Python code for all calculations and include the results in your analysis.
 """
+        
+        # Add the solving line at the very end
+        enhanced_prompt += self.prompt_manager.SOLVING_LINE
         return await self.core.call_llm_with_image(enhanced_prompt, self.image_utils.bytes_to_image(image), enable_code_execution=True)
 
     async def analyze_volume_comprehensive_with_calculations(self, images: list, indicators: dict) -> str:
@@ -557,6 +573,9 @@ Technical Indicators Data: {json.dumps(clean_for_json(self.convert_numpy_types(i
 
 Use Python code for all calculations and include the results in your analysis.
 """
+        
+        # Add the solving line at the very end
+        enhanced_prompt += self.prompt_manager.SOLVING_LINE
         pil_images = [self.image_utils.bytes_to_image(img) for img in images]
         return await self.core.call_llm_with_images(enhanced_prompt, pil_images, enable_code_execution=True)
 
