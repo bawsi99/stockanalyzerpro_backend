@@ -16,6 +16,7 @@ import time
 import json
 import asyncio
 import traceback
+import uuid
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 
@@ -51,14 +52,114 @@ from technical_indicators import TechnicalIndicators
 
 app = FastAPI(title="Stock Analysis Service", version="1.0.0")
 
+# Load CORS origins from environment variable
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080").split(",")
+CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS if origin.strip()]
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Add your frontend URL
+    allow_origins=CORS_ORIGINS,  # Only allow specified origins
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+# Global variables for initialization
+MAIN_EVENT_LOOP = None
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize the analysis service on startup."""
+    global MAIN_EVENT_LOOP
+    MAIN_EVENT_LOOP = asyncio.get_running_loop()
+    
+    print("🚀 Starting Analysis Service...")
+    
+    # Initialize Zerodha data client for historical data (no WebSocket needed)
+    try:
+        from zerodha_client import ZerodhaDataClient
+        
+        # Test Zerodha credentials
+        api_key = os.getenv("ZERODHA_API_KEY")
+        access_token = os.getenv("ZERODHA_ACCESS_TOKEN")
+        
+        if api_key and access_token and api_key != "your_api_key":
+            print("🔗 Zerodha credentials configured - historical data available")
+        else:
+            print("ℹ️  Zerodha credentials not configured - historical data limited")
+            
+    except Exception as e:
+        print(f"⚠️  Warning: Could not initialize Zerodha data client: {e}")
+    
+    # Initialize other components
+    try:
+        # Initialize sector classifiers
+        print("🏭 Initializing sector classifiers...")
+        sector_classifier.get_all_sectors()
+        enhanced_sector_classifier.get_all_sectors()
+        print("✅ Sector classifiers initialized")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not initialize sector classifiers: {e}")
+    
+    # Initialize technical indicators and pattern recognition
+    try:
+        print("📊 Initializing technical analysis components...")
+        from technical_indicators import TechnicalIndicators
+        from patterns.recognition import PatternRecognition
+        from patterns.visualization import PatternVisualizer, ChartVisualizer
+        
+        # These will be initialized when first used, but we can pre-load them
+        print("✅ Technical analysis components ready")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not initialize technical analysis components: {e}")
+    
+    # Initialize Gemini client
+    try:
+        print("🤖 Initializing AI analysis components...")
+        from gemini.gemini_client import GeminiClient
+        from gemini.gemini_core import GeminiCore
+        from gemini.prompt_manager import PromptManager
+        
+        # Test Gemini API key
+        gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_GEMINI_API_KEY")
+        if gemini_api_key:
+            print("✅ Gemini AI components ready")
+        else:
+            print("⚠️  Warning: Gemini API key not configured")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not initialize AI components: {e}")
+    
+    print("✅ Analysis Service startup completed")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    print("🛑 Shutting down Analysis Service...")
+    
+    # Cleanup any data clients or resources
+    try:
+        # No specific cleanup needed for data clients
+        print("✅ Data clients cleaned up")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not cleanup data clients: {e}")
+    
+    # Cleanup any background tasks or resources
+    try:
+        # Cancel any running tasks
+        tasks = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+        if tasks:
+            print(f"🔄 Cancelling {len(tasks)} background tasks...")
+            for task in tasks:
+                task.cancel()
+            
+            # Wait for tasks to complete
+            await asyncio.gather(*tasks, return_exceptions=True)
+            print("✅ Background tasks cleaned up")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not cleanup background tasks: {e}")
+    
+    print("✅ Analysis Service shutdown completed")
 
 def make_json_serializable(obj):
     """Recursively convert objects to JSON serializable format."""
@@ -180,8 +281,55 @@ class IndicatorsRequest(BaseModel):
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "service": "analysis_service", "timestamp": pd.Timestamp.now().isoformat()}
+    """Health check endpoint with detailed service status."""
+    try:
+        # Check Zerodha data client status
+        zerodha_status = "unknown"
+        try:
+            api_key = os.getenv("ZERODHA_API_KEY")
+            access_token = os.getenv("ZERODHA_ACCESS_TOKEN")
+            if api_key and access_token and api_key != "your_api_key":
+                zerodha_status = "configured"
+            else:
+                zerodha_status = "not_configured"
+        except Exception:
+            zerodha_status = "error"
+        
+        # Check Gemini API key
+        gemini_status = "unknown"
+        try:
+            gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_GEMINI_API_KEY")
+            gemini_status = "configured" if gemini_api_key else "not_configured"
+        except Exception:
+            gemini_status = "error"
+        
+        # Check sector classifiers
+        sector_status = "unknown"
+        try:
+            sectors = sector_classifier.get_all_sectors()
+            sector_status = f"loaded_{len(sectors)}_sectors"
+        except Exception:
+            sector_status = "error"
+        
+        return {
+            "status": "healthy",
+            "service": "Stock Analysis Service",
+            "timestamp": pd.Timestamp.now().isoformat(),
+            "components": {
+                "zerodha_data_client": zerodha_status,
+                "gemini_ai": gemini_status,
+                "sector_classifiers": sector_status,
+                "main_event_loop": "running" if MAIN_EVENT_LOOP and not MAIN_EVENT_LOOP.is_closed() else "not_running"
+            },
+            "version": "1.0.0"
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "service": "Stock Analysis Service",
+            "error": str(e),
+            "timestamp": pd.Timestamp.now().isoformat()
+        }
 
 @app.post("/analyze")
 async def analyze(request: AnalysisRequest):
@@ -213,9 +361,19 @@ async def analyze(request: AnalysisRequest):
         serialized_results = make_json_serializable(results)
 
         # Store analysis in Supabase
-        # You may need to pass the user_id and symbol from the request or context
-        user_id = getattr(request, 'user_id', None) or 'system'  # Replace with actual user_id logic
-        store_analysis_in_supabase(results, user_id, request.stock)
+        # Generate a proper UUID for anonymous/system users
+        user_id = getattr(request, 'user_id', None)
+        if not user_id:
+            # Generate a UUID for anonymous/system users
+            user_id = str(uuid.uuid4())
+        store_analysis_in_supabase(
+            serialized_results, 
+            user_id, 
+            request.stock,
+            exchange=request.exchange,
+            period=request.period,
+            interval=request.interval
+        )
 
         # Clean, efficient response
         response = {

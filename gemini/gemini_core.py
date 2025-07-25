@@ -43,10 +43,11 @@ class GeminiCore:
             else:
                 raise Exception("Empty or invalid response from LLM")
         except Exception as ex:
-            #print(f"[DEBUG-ERROR] Exception in call_llm: {ex}")
+            print(f"[DEBUG-ERROR] Exception in call_llm: {ex}")
             import traceback; traceback.print_exc()
-            #print(f"[DEBUG-ERROR] Prompt that caused error: {prompt}")
-            raise
+            print(f"[DEBUG-ERROR] Prompt that caused error: {prompt[:200]}...")
+            # Return empty string instead of raising
+            return ""
 
     def call_llm_with_code_execution(self, prompt: str, model: str = "gemini-2.5-flash"):
         """
@@ -72,13 +73,13 @@ class GeminiCore:
             if response and hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
                 if hasattr(candidate, 'content') and candidate.content:
-                    if hasattr(candidate.content, 'parts'):
+                    if hasattr(candidate.content, 'parts') and candidate.content.parts is not None:
                         for part in candidate.content.parts:
-                            if part.text is not None:
+                            if hasattr(part, 'text') and part.text is not None:
                                 text_response += part.text
-                            if part.executable_code is not None:
+                            if hasattr(part, 'executable_code') and part.executable_code is not None:
                                 code_results.append(part.executable_code.code)
-                            if part.code_execution_result is not None:
+                            if hasattr(part, 'code_execution_result') and part.code_execution_result is not None:
                                 execution_results.append(part.code_execution_result.output)
                     else:
                         # Fallback: try to get text directly
@@ -97,7 +98,9 @@ class GeminiCore:
             
         except Exception as ex:
             import traceback; traceback.print_exc()
-            raise
+            print(f"[DEBUG] Error in call_llm_with_code_execution: {ex}")
+            # Return empty results instead of raising
+            return "", [], []
 
     async def call_llm_with_image(self, prompt: str, image, model: str = "gemini-2.5-flash", enable_code_execution: bool = False):
         """

@@ -1,26 +1,43 @@
-from supabase_client import get_supabase_client
+from database_manager import db_manager
 
-def extract_analysis_fields(analysis: dict, user_id: str, symbol: str) -> dict:
-    # Extract all required fields for stock_analyses table
-    return {
-        "user_id": user_id,
-        "stock_symbol": symbol,
-        "analysis_data": analysis,  # full JSON
-        "overall_signal": analysis.get("summary", {}).get("overall_signal"),
-        "confidence_score": analysis.get("ai_analysis", {}).get("confidence_pct"),
-        "risk_level": analysis.get("summary", {}).get("risk_level"),
-        "current_price": analysis.get("metadata", {}).get("current_price"),
-        "price_change_percentage": analysis.get("metadata", {}).get("price_change_pct"),
-        "sector": analysis.get("metadata", {}).get("sector"),
-        "analysis_type": analysis.get("analysis_type", "standard"),
-        "analysis_quality": analysis.get("summary", {}).get("analysis_quality", "standard"),
-        "mathematical_validation": analysis.get("mathematical_validation", False),
-        "chart_paths": analysis.get("chart_paths"),
-        "metadata": analysis.get("metadata", {}),
-    }
-
-def store_analysis_in_supabase(analysis: dict, user_id: str, symbol: str):
-    supabase = get_supabase_client()
-    data = extract_analysis_fields(analysis, user_id, symbol)
-    result = supabase.table("stock_analyses").insert(data).execute()
-    return result 
+def store_analysis_in_supabase(analysis: dict, user_id: str, symbol: str, 
+                              exchange: str = "NSE", period: int = 365, interval: str = "day"):
+    """
+    Store analysis results in Supabase with proper validation and user management.
+    
+    Args:
+        analysis: Analysis results dictionary
+        user_id: User ID (should be a valid UUID string)
+        symbol: Stock symbol
+        exchange: Stock exchange (default: "NSE")
+        period: Analysis period in days (default: 365)
+        interval: Data interval (default: "day")
+    
+    Returns:
+        str: Analysis ID if successful, None otherwise
+    
+    Raises:
+        ValueError: If user_id is not a valid UUID or other validation fails
+        Exception: If Supabase operation fails
+    """
+    try:
+        # Use the database manager to handle all storage operations
+        analysis_id = db_manager.store_analysis(
+            analysis=analysis,
+            user_id=user_id,
+            symbol=symbol,
+            exchange=exchange,
+            period=period,
+            interval=interval
+        )
+        
+        if analysis_id:
+            # Update user analysis count
+            db_manager.update_user_analysis_count(user_id)
+            return analysis_id
+        else:
+            raise Exception("Failed to store analysis")
+            
+    except Exception as e:
+        print(f"Error storing analysis in Supabase: {e}")
+        raise 

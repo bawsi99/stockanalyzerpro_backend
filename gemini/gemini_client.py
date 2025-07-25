@@ -82,9 +82,9 @@ class GeminiClient:
             try:
                 # Use code execution for enhanced mathematical analysis
                 text_response, code_results, execution_results = self.core.call_llm_with_code_execution(prompt)
-                # print(f"[DEBUG] LLM response (raw): {text_response!r}")
-                # print(f"[DEBUG] Code results: {code_results}")
-                # print(f"[DEBUG] Execution results: {execution_results}")
+                print(f"[DEBUG] LLM response length: {len(text_response) if text_response else 0}")
+                print(f"[DEBUG] Code results count: {len(code_results)}")
+                print(f"[DEBUG] Execution results count: {len(execution_results)}")
             except Exception as ex:
                 print(f"[DEBUG-ERROR] Exception during LLM call with code execution: {ex}")
                 # Fallback to regular LLM call without code execution
@@ -324,7 +324,7 @@ class GeminiClient:
         # 3. Final decision prompt with enhanced mathematical validation
         decision_prompt = self.prompt_manager.format_prompt(
             "final_stock_decision",
-            indicator_json=json.dumps(self.convert_numpy_types(ind_json), indent=2),
+            indicator_json=json.dumps(clean_for_json(self.convert_numpy_types(ind_json)), indent=2),
             chart_insights=chart_insights_md
         )
         try:
@@ -444,7 +444,7 @@ class GeminiClient:
         # 3. Enhanced final decision with comprehensive mathematical validation
         enhanced_decision_prompt = self.prompt_manager.format_prompt(
             "final_stock_decision",
-            indicator_json=json.dumps(self.convert_numpy_types(ind_json), indent=2),
+            indicator_json=json.dumps(clean_for_json(self.convert_numpy_types(ind_json)), indent=2),
             chart_insights=chart_insights_md
         )
         
@@ -532,7 +532,7 @@ Analyze the chart and perform the following calculations using Python code:
 5. Calculate volatility metrics (standard deviation, coefficient of variation)
 6. Validate support/resistance levels using statistical methods
 
-Technical Indicators Data: {json.dumps(self.convert_numpy_types(indicators), indent=2)}
+Technical Indicators Data: {json.dumps(clean_for_json(self.convert_numpy_types(indicators)), indent=2)}
 
 Use Python code for all calculations and include the results in your analysis.
 """
@@ -553,7 +553,7 @@ Analyze the volume charts and perform the following calculations using Python co
 5. Calculate volume-based support/resistance levels
 6. Validate volume confirmation of price movements
 
-Technical Indicators Data: {json.dumps(self.convert_numpy_types(indicators), indent=2)}
+Technical Indicators Data: {json.dumps(clean_for_json(self.convert_numpy_types(indicators)), indent=2)}
 
 Use Python code for all calculations and include the results in your analysis.
 """

@@ -63,7 +63,10 @@ class CacheManager:
             "args": args,
             "kwargs": sorted(kwargs.items())
         }
-        key_string = json.dumps(key_data, sort_keys=True, default=str)
+        from utils import clean_for_json
+        
+        cleaned_key_data = clean_for_json(key_data)
+        key_string = json.dumps(cleaned_key_data, sort_keys=True, default=str)
         
         # Generate hash for consistent key length
         return hashlib.md5(key_string.encode()).hexdigest()

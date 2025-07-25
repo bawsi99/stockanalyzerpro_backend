@@ -96,9 +96,16 @@ def verify_api_key(api_key: str) -> bool:
     return api_key in API_KEYS
 
 async def authenticate_websocket(websocket: WebSocket) -> Optional[Dict]:
-    """Authenticate WebSocket connection using JWT token or API key."""
+    """Authenticate WebSocket connection using JWT token or API key and validate origin."""
+    # First, validate the origin
+    origin = websocket.headers.get('origin')
+    if origin and origin not in CORS_ORIGINS:
+        print(f"❌ WebSocket connection rejected from unauthorized origin: {origin}")
+        print(f"   Allowed origins: {CORS_ORIGINS}")
+        return None
+    
     if not REQUIRE_AUTH:
-        return {'user_id': 'anonymous', 'auth_type': 'none'}
+        return {'user_id': str(uuid.uuid4()), 'auth_type': 'none'}
     
     # Try to get token from query parameters or headers
     token = websocket.query_params.get('token')
@@ -147,10 +154,14 @@ def make_json_serializable(obj):
 
 app = FastAPI(title="Stock Data Service", version="1.0.0")
 
+# Load CORS origins from environment variable
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080").split(",")
+CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS if origin.strip()]
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Add your frontend URL
+    allow_origins=CORS_ORIGINS,  # Only allow specified origins
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
@@ -167,6 +178,10 @@ class LiveDataPubSub:
         self.client_health = {}    # queue -> last_heartbeat_time
         self.client_connected = {} # queue -> connection status
         self.client_auth = {}      # queue -> auth info
+        
+        # NEW: Centralized subscription management
+        self.token_subscribers = {}  # token -> set of queues
+        self.global_subscribed_tokens = set()  # All tokens currently subscribed to Zerodha
 
     async def subscribe(self, auth_info: Optional[Dict] = None):
         queue = asyncio.Queue()
@@ -187,11 +202,25 @@ class LiveDataPubSub:
             self.client_format[queue] = 'json'
             self.client_health[queue] = time.time()
             self.client_connected[queue] = True
-            self.client_auth[queue] = auth_info or {'user_id': 'anonymous', 'auth_type': 'none'}
+            self.client_auth[queue] = auth_info or {'user_id': str(uuid.uuid4()), 'auth_type': 'none'}
         return queue, filter_
 
     async def unsubscribe(self, queue):
         async with self.lock:
+            # Remove from token subscribers
+            tokens_to_remove = []
+            for token, subscribers in list(self.token_subscribers.items()):
+                if queue in subscribers:
+                    subscribers.remove(queue)
+                    # If no more subscribers for this token, remove it from global subscription
+                    if not subscribers:
+                        tokens_to_remove.append(token)
+            
+            # Remove tokens that have no subscribers
+            for token in tokens_to_remove:
+                await self._unsubscribe_from_zerodha([token])
+                del self.token_subscribers[token]
+            
             if queue in self.clients:
                 del self.clients[queue]
             if queue in self.client_throttle:
@@ -209,17 +238,71 @@ class LiveDataPubSub:
 
     async def update_filter(self, queue, **kwargs):
         async with self.lock:
-            if queue in self.clients:
-                filter_ = self.clients[queue]
-                for key, value in kwargs.items():
-                    if key == 'tokens' and isinstance(value, list):
-                        filter_['tokens'] = set(value)
-                    elif key == 'timeframes' and isinstance(value, list):
-                        filter_['timeframes'] = set(value)
-                    elif key in ['all', 'throttle_ms', 'batch', 'batch_size', 'format']:
-                        filter_[key] = value
-                        if key == 'format':
-                            self.client_format[queue] = value
+            if queue not in self.clients:
+                return
+                
+            filter_ = self.clients[queue]
+            old_tokens = filter_.get('tokens', set()).copy()
+            
+            for key, value in kwargs.items():
+                if key == 'tokens' and isinstance(value, list):
+                    filter_['tokens'] = set(value)
+                elif key == 'timeframes' and isinstance(value, list):
+                    filter_['timeframes'] = set(value)
+                elif key in ['all', 'throttle_ms', 'batch', 'batch_size', 'format']:
+                    filter_[key] = value
+                    if key == 'format':
+                        self.client_format[queue] = value
+            
+            # Update token subscriptions
+            new_tokens = filter_.get('tokens', set())
+            
+            # Remove old token subscriptions
+            tokens_to_unsubscribe = old_tokens - new_tokens
+            for token in tokens_to_unsubscribe:
+                if token in self.token_subscribers:
+                    self.token_subscribers[token].discard(queue)
+                    # If no more subscribers for this token, remove it from global subscription
+                    if not self.token_subscribers[token]:
+                        await self._unsubscribe_from_zerodha([token])
+                        del self.token_subscribers[token]
+            
+            # Add new token subscriptions
+            tokens_to_subscribe = new_tokens - old_tokens
+            for token in tokens_to_subscribe:
+                if token not in self.token_subscribers:
+                    self.token_subscribers[token] = set()
+                self.token_subscribers[token].add(queue)
+                # If this is a new token globally, subscribe to it
+                if token not in self.global_subscribed_tokens:
+                    await self._subscribe_to_zerodha([token])
+
+    async def _subscribe_to_zerodha(self, tokens):
+        """Subscribe to tokens in Zerodha WebSocket if not already subscribed."""
+        new_tokens = [token for token in tokens if token not in self.global_subscribed_tokens]
+        if new_tokens:
+            try:
+                # Convert string tokens to integers for Zerodha
+                int_tokens = [int(token) for token in new_tokens]
+                zerodha_ws_client.subscribe(int_tokens)
+                zerodha_ws_client.set_mode('quote', int_tokens)
+                self.global_subscribed_tokens.update(new_tokens)
+                print(f"🔗 Subscribed to new Zerodha tokens: {new_tokens}")
+            except Exception as e:
+                print(f"❌ Error subscribing to Zerodha tokens {new_tokens}: {e}")
+
+    async def _unsubscribe_from_zerodha(self, tokens):
+        """Unsubscribe from tokens in Zerodha WebSocket if no clients are subscribed."""
+        tokens_to_unsubscribe = [token for token in tokens if token in self.global_subscribed_tokens]
+        if tokens_to_unsubscribe:
+            try:
+                # Convert string tokens to integers for Zerodha
+                int_tokens = [int(token) for token in tokens_to_unsubscribe]
+                zerodha_ws_client.unsubscribe(int_tokens)
+                self.global_subscribed_tokens.difference_update(tokens_to_unsubscribe)
+                print(f"🔗 Unsubscribed from Zerodha tokens: {tokens_to_unsubscribe}")
+            except Exception as e:
+                print(f"❌ Error unsubscribing from Zerodha tokens {tokens_to_unsubscribe}: {e}")
 
     async def update_heartbeat(self, queue):
         """Update the last heartbeat time for a client."""
@@ -234,39 +317,53 @@ class LiveDataPubSub:
                 self.client_connected[queue] = False
 
     async def get_connection_stats(self):
-        """Get connection statistics for monitoring."""
+        """Get connection statistics."""
         async with self.lock:
             total_clients = len(self.clients)
             connected_clients = sum(1 for connected in self.client_connected.values() if connected)
-            current_time = time.time()
-            active_clients = sum(1 for last_heartbeat in self.client_health.values() 
-                               if current_time - last_heartbeat < 60)  # Active in last 60 seconds
-            
-            # Auth statistics
-            auth_stats = {}
-            for auth_info in self.client_auth.values():
-                auth_type = auth_info.get('auth_type', 'unknown')
-                auth_stats[auth_type] = auth_stats.get(auth_type, 0) + 1
+            total_tokens = len(self.global_subscribed_tokens)
             
             return {
                 'total_clients': total_clients,
                 'connected_clients': connected_clients,
-                'active_clients': active_clients,
-                'auth_stats': auth_stats,
-                'timestamp': current_time
+                'total_tokens': total_tokens,
+                'subscribed_tokens': list(self.global_subscribed_tokens),
+                'token_subscribers': {token: len(subscribers) for token, subscribers in self.token_subscribers.items()}
             }
 
     async def publish(self, data):
         current_time = time.time() * 1000
+        token = data.get('token')
+        
+        # NEW: Only send to clients subscribed to this specific token
+        target_queues = set()
+        if token and token in self.token_subscribers:
+            target_queues = self.token_subscribers[token].copy()
+        elif data.get('type') == 'candle':  # For candle data, check timeframe subscribers
+            timeframe = data.get('timeframe')
+            if timeframe:
+                # Find clients subscribed to this timeframe
+                for queue, filter_ in self.clients.items():
+                    if (filter_.get('all', True) or 
+                        (filter_.get('timeframes') and timeframe in filter_.get('timeframes', set()))):
+                        target_queues.add(queue)
+        else:
+            # For other data types, send to all clients (fallback)
+            target_queues = set(self.clients.keys())
+        
         async with self.lock:
-            for queue, filter_ in self.clients.items():
+            for queue in target_queues:
+                if queue not in self.clients:
+                    continue
+                    
+                filter_ = self.clients[queue]
+                
                 # Skip disconnected clients
                 if not self.client_connected.get(queue, False):
                     continue
                     
-                # Check if client wants this data
+                # Check if client wants this data (additional filtering)
                 if not filter_['all']:
-                    token = data.get('token')
                     timeframe = data.get('timeframe')
                     if token and filter_['tokens'] and token not in filter_['tokens']:
                         continue
@@ -380,6 +477,9 @@ async def alert_publish_hook(data):
 
 # Patch hooks
 def tick_forward_hook(token, tick):
+    # Import global variables from zerodha_ws_client
+    from zerodha_ws_client import publish_callback, system_ready, MAIN_EVENT_LOOP
+    
     data = {
         'type': 'tick',
         'token': int(token),
@@ -387,8 +487,11 @@ def tick_forward_hook(token, tick):
         'timestamp': float(tick.get('timestamp', time.time())),
         'volume_traded': float(tick.get('volume_traded', 0)),
     }
-    asyncio.create_task(live_pubsub.publish(data))
-    asyncio.create_task(alert_publish_hook(data))
+    # Use the existing publish mechanism that handles async context properly
+    if MAIN_EVENT_LOOP is not None and publish_callback is not None and system_ready:
+        MAIN_EVENT_LOOP.call_soon_threadsafe(asyncio.create_task, publish_callback(data))
+    else:
+        print(f"⚠️  Cannot publish tick data - system not ready")
 
 def candle_forward_hook(token, timeframe, candle):
     """Forward completed candles to WebSocket subscribers with proper data transformation."""
@@ -417,6 +520,7 @@ def candle_forward_hook(token, timeframe, candle):
 
 # Register hooks
 candle_aggregator.register_callback(candle_forward_hook)
+zerodha_ws_client.register_tick_hook(tick_forward_hook)
 
 # --- FastAPI Startup Event ---
 @app.on_event("startup")
@@ -441,8 +545,17 @@ async def startup_event():
     # This provides open, high, low, close, volume data needed for charts
     print("WebSocket client ready for dynamic subscriptions")
     print("WebSocket mode will be set to 'quote' for OHLCV data when symbols are subscribed")
-    print("To enable live data, please set ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN environment variables")
-    print("Make sure your .env file is in the backend directory and contains valid credentials")
+    
+    # Check if Zerodha credentials are available
+    api_key = os.getenv("ZERODHA_API_KEY")
+    access_token = os.getenv("ZERODHA_ACCESS_TOKEN")
+    
+    if not api_key or not access_token:
+        print("⚠️  To enable live data, please set ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN environment variables")
+        print("Make sure your .env file is in the backend directory and contains valid credentials")
+    else:
+        print("✅ Zerodha credentials loaded successfully")
+        print("✅ Live data streaming is enabled")
 
 # --- Pydantic Models ---
 class HistoricalDataRequest(BaseModel):
@@ -473,8 +586,7 @@ async def ws_stream(websocket: WebSocket):
     # Start heartbeat task
     heartbeat_task = asyncio.create_task(heartbeat_loop(websocket, queue))
     
-    # Track current subscriptions for this connection
-    current_subscriptions = set()
+    # Subscription tracking is now handled centrally by live_pubsub
     
     try:
         while True:
@@ -517,24 +629,8 @@ async def ws_stream(websocket: WebSocket):
                             if tokens:
                                 all_tokens.extend([int(token) for token in tokens])
                             
-                            # Subscribe to Zerodha WebSocket for the requested tokens
-                            if all_tokens:
-                                try:
-                                    # Unsubscribe from previous tokens for this connection
-                                    if current_subscriptions:
-                                        old_tokens = list(current_subscriptions)
-                                        zerodha_ws_client.unsubscribe(old_tokens)
-                                        print(f"Unsubscribed from previous tokens: {old_tokens}")
-                                    
-                                    # Subscribe to new tokens
-                                    zerodha_ws_client.subscribe(all_tokens)
-                                    # Set mode to 'quote' for OHLCV data
-                                    zerodha_ws_client.set_mode('quote', all_tokens)
-                                    current_subscriptions = set(all_tokens)
-                                    print(f"Subscribed to Zerodha tokens: {all_tokens}")
-                                    print(f"Set mode to 'quote' for OHLCV data")
-                                except Exception as e:
-                                    print(f"Error subscribing to Zerodha tokens: {e}")
+                            # Token subscription is now handled centrally by live_pubsub
+                            # No need to manage individual subscriptions here
                             
                             await live_pubsub.update_filter(
                                 queue, 
@@ -586,21 +682,13 @@ async def ws_stream(websocket: WebSocket):
                             if tokens:
                                 all_tokens.extend([int(token) for token in tokens])
                             
-                            # Unsubscribe from Zerodha WebSocket for the requested tokens
-                            if all_tokens:
-                                try:
-                                    zerodha_ws_client.unsubscribe(all_tokens)
-                                    current_subscriptions.difference_update(all_tokens)
-                                    print(f"Unsubscribed from Zerodha tokens: {all_tokens}")
-                                except Exception as e:
-                                    print(f"Error unsubscribing from Zerodha tokens: {e}")
-                            
-                            # Remove specific tokens/timeframes from filter
-                            current_filter = live_pubsub.clients[queue]
-                            if all_tokens:
-                                current_filter['tokens'] -= set([str(token) for token in all_tokens])
-                            if timeframes:
-                                current_filter['timeframes'] -= set(timeframes)
+                            # Token unsubscription is now handled centrally by live_pubsub
+                            # Just update the filter to remove tokens/timeframes
+                            await live_pubsub.update_filter(
+                                queue,
+                                tokens=[],  # Clear all tokens
+                                timeframes=[]  # Clear all timeframes
+                            )
                             
                             response = {
                                 'type': 'unsubscribed',
@@ -837,7 +925,7 @@ async def get_stock_history(
         
         backend_interval = interval_mapping.get(interval, 'day')
         
-        print(f"[DataService] Fetching historical data for {symbol} with interval: {interval} -> {backend_interval}")
+        # print(f"[DataService] Fetching historical data for {symbol} with interval: {interval} -> {backend_interval}")
         
         # Get orchestrator and authenticate
         zerodha_client = ZerodhaDataClient()
@@ -875,22 +963,22 @@ async def get_stock_history(
         
         # Ensure proper datetime index for timestamp conversion
         if 'date' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
-            print(f"[DataService] Setting 'date' column as index for {symbol}")
+            # print(f"[DataService] Setting 'date' column as index for {symbol}")
             df['date'] = pd.to_datetime(df['date'])
             df.set_index('date', inplace=True)
-            print(f"[DataService] Index type after setting: {type(df.index)}")
-            print(f"[DataService] Index values: {df.index.tolist()[:5]}")
+            # print(f"[DataService] Index type after setting: {type(df.index)}")
+            # print(f"[DataService] Index values: {df.index.tolist()[:5]}")
         
         # Limit the data points if requested
         if limit > 0:
             df = df.tail(limit)
             # Ensure index is preserved after tail operation
             if 'date' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
-                print(f"[DataService] Re-setting 'date' column as index after tail operation for {symbol}")
+                # print(f"[DataService] Re-setting 'date' column as index after tail operation for {symbol}")
                 df['date'] = pd.to_datetime(df['date'])
                 df.set_index('date', inplace=True)
-                print(f"[DataService] After tail and re-setting index - Index type: {type(df.index)}")
-                print(f"[DataService] Index values: {df.index.tolist()[:5]}")
+                # print(f"[DataService] After tail and re-setting index - Index type: {type(df.index)}")
+                # print(f"[DataService] Index values: {df.index.tolist()[:5]}")
         
         # Convert to JSON serializable format
         candles = []
@@ -922,7 +1010,7 @@ async def get_stock_history(
         # Sort by time (oldest first)
         candles.sort(key=lambda x: x['time'])
         
-        print(f"[DataService] Returning {len(candles)} candles for {symbol} with interval {interval}")
+        # print(f"[DataService] Returning {len(candles)} candles for {symbol} with interval {interval}")
         
         response = {
             "success": True,
@@ -976,7 +1064,7 @@ async def get_optimized_data(request: OptimizedDataRequest):
         
         # Ensure proper datetime index for timestamp conversion
         if 'date' in response.data.columns and not isinstance(response.data.index, pd.DatetimeIndex):
-            print(f"[DataService] Setting 'date' column as index for optimized data")
+            # print(f"[DataService] Setting 'date' column as index for optimized data")
             response.data['date'] = pd.to_datetime(response.data['date'])
             response.data.set_index('date', inplace=True)
         

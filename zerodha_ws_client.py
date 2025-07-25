@@ -295,7 +295,7 @@ class ZerodhaWSClient:
     def _should_process_tick(self, token: int, tick_data: Dict[str, Any]) -> bool:
         """Determine if tick should be processed - always process for continuous data flow."""
         # Always process all ticks for continuous data flow
-        logger.info(f"[CONTINUOUS FLOW] Processing tick for token {token}")
+        # logger.info(f"[CONTINUOUS FLOW] Processing tick for token {token}")
         return True
 
     def connect(self) -> None:
@@ -352,9 +352,10 @@ class ZerodhaWSClient:
 
     def on_ticks(self, ws, ticks) -> None:
         """Handle incoming tick data with market hours optimization."""
+        global publish_callback, system_ready, MAIN_EVENT_LOOP
         market_status = self._get_market_status()
-        logger.info(f"[ON_TICKS] Received {len(ticks)} ticks (Market: {market_status.value}, Continuous Flow: Enabled)")
-        logger.info(f"[ON_TICKS] Tick data: {ticks}")
+        # logger.info(f"[ON_TICKS] Received {len(ticks)} ticks (Market: {market_status.value}, Continuous Flow: Enabled)")
+        # logger.info(f"[ON_TICKS] Tick data: {ticks}")
         
         processed_ticks = []
         skipped_ticks = 0
@@ -383,8 +384,8 @@ class ZerodhaWSClient:
                 skipped_ticks += 1
                 logger.info(f"Skipping tick for token {token} (optimization rule) - price: {tick.get('last_price')}")
                 continue
-            else:
-                logger.info(f"Processing tick for token {token} - price: {tick.get('last_price')}")
+            # else:
+            #     logger.info(f"Processing tick for token {token} - price: {tick.get('last_price')}")
             
             # Update last tick time
             self.last_tick_time[token] = time.time()
@@ -401,9 +402,11 @@ class ZerodhaWSClient:
             
             # Log based on market status
             if market_status == MarketStatus.OPEN:
-                logger.info(f"[LIVE] Processed tick for token: {token}")
+                # logger.info(f"[LIVE] Processed tick for token: {token}")
+                pass
             else:
-                logger.debug(f"[CONTINUOUS] Processed tick for token: {token} (market: {market_status.value})")
+                # logger.debug(f"[CONTINUOUS] Processed tick for token: {token} (market: {market_status.value})")
+                pass
             
             # --- Forward tick to WebSocket clients ---
             tick_message = {
@@ -459,10 +462,13 @@ class ZerodhaWSClient:
         processed_count = len(processed_ticks) - skipped_ticks
         logger.info(f"[TICK SUMMARY] Processed {processed_count} ticks, skipped {skipped_ticks} ticks (market: {market_status.value}, continuous_flow: enabled)")
         
-        # Call registered hooks with processed ticks
+        # Call registered hooks with individual ticks
         for hook in self.tick_hooks:
             try:
-                hook(processed_ticks)
+                for tick in processed_ticks:
+                    token = tick.get('instrument_token')
+                    if token:
+                        hook(token, tick)
             except Exception as e:
                 logger.error(f"Tick hook error: {e}")
 

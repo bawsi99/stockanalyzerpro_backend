@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-run_services.py
+run_services_direct.py
 
-Script to run both data service and analysis service simultaneously.
-This is a convenience script for development and testing.
+Alternative script to run both services using direct uvicorn commands.
+This approach mimics the manual uvicorn commands that work reliably.
 """
 
 import os
@@ -20,11 +20,11 @@ sys.path.insert(0, str(backend_dir))
 def print_banner():
     """Print startup banner."""
     print("=" * 60)
-    print("🚀 TRADER PRO - Split Backend Services")
+    print("🚀 TRADER PRO - Direct Uvicorn Services")
     print("=" * 60)
     print("📊 Data Service:     http://localhost:8000")
     print("🧠 Analysis Service: http://localhost:8001")
-    print("🔗 WebSocket Stream: ws://localhost:8081/ws/stream")
+    print("🔗 WebSocket:        ws://localhost:8000/ws/stream")
     print("=" * 60)
     print("Press Ctrl+C to stop all services")
     print("=" * 60)
@@ -33,7 +33,7 @@ def check_ports():
     """Check if ports are available."""
     import socket
     
-    ports_to_check = [8000, 8001, 8081]
+    ports_to_check = [8000, 8001]
     unavailable_ports = []
     
     for port in ports_to_check:
@@ -50,20 +50,30 @@ def check_ports():
     
     return True
 
-def start_service(service_name, script_path, port):
-    """Start a service using subprocess."""
+def start_uvicorn_service(service_name, module_name, port):
+    """Start a service using direct uvicorn command."""
     try:
-        # Change to backend directory for proper module resolution
+        # Build uvicorn command
+        cmd = [
+            sys.executable, "-m", "uvicorn",
+            f"{module_name}:app",
+            "--host", "0.0.0.0",
+            "--port", str(port),
+            "--reload"
+        ]
+        
+        # Start process
         process = subprocess.Popen(
-            [sys.executable, script_path],
+            cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,  # Redirect stderr to stdout
+            stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
             universal_newlines=True,
-            cwd=backend_dir  # Set working directory to backend
+            cwd=backend_dir
         )
         print(f"✅ {service_name} started (PID: {process.pid})")
+        print(f"   Command: {' '.join(cmd)}")
         return process
     except Exception as e:
         print(f"❌ Failed to start {service_name}: {e}")
@@ -83,7 +93,6 @@ def monitor_processes(processes):
             for name, process in processes.items():
                 if process.stdout:
                     try:
-                        # Non-blocking read
                         output = process.stdout.readline()
                         if output:
                             print(f"[{name}] {output.strip()}")
@@ -120,32 +129,16 @@ def main():
     if not check_ports():
         return 1
     
-    # Define services
+    # Define services with direct uvicorn commands
     services = {
-        "Data Service": "start_data_service.py",
-        "Analysis Service": "start_analysis_service.py",
-        "WebSocket Stream Service": "start_websocket_service.py"
+        "Data Service": ("data_service", 8000),
+        "Analysis Service": ("analysis_service", 8001)
     }
     
     # Start services
     processes = {}
-    for service_name, script_name in services.items():
-        script_path = backend_dir / script_name
-        if not script_path.exists():
-            print(f"❌ Script not found: {script_path}")
-            return 1
-        
-        # Determine port based on service name
-        if "Data" in service_name:
-            port = 8000
-        elif "Analysis" in service_name:
-            port = 8001
-        elif "WebSocket" in service_name:
-            port = 8081
-        else:
-            port = 8000
-            
-        process = start_service(service_name, script_path, port)
+    for service_name, (module_name, port) in services.items():
+        process = start_uvicorn_service(service_name, module_name, port)
         if process:
             processes[service_name] = process
         else:
@@ -173,7 +166,6 @@ def main():
     print("✅ All services started successfully!")
     print("🌐 Data Service:     http://localhost:8000/health")
     print("🧠 Analysis Service: http://localhost:8001/health")
-    print("🔗 WebSocket Stream: http://localhost:8081/health")
     print("\n📝 Logs will appear below:")
     print("-" * 60)
     

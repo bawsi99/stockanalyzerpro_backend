@@ -175,6 +175,17 @@ class SectorBenchmarkingProvider:
             }
             days = timeframe_days.get(timeframe, 90)
             
+            # OPTIMIZATION: Fetch NIFTY 50 data once and reuse for all sectors
+            logging.info(f"Fetching NIFTY 50 data once for {timeframe} timeframe (will be reused for all {len(self.sector_tokens)} sectors)")
+            nifty_data = self._get_nifty_data(days + 50)
+            nifty_return = None
+            if nifty_data is not None and len(nifty_data) >= days:
+                nifty_return = ((nifty_data['close'].iloc[-1] - nifty_data['close'].iloc[-days]) / 
+                              nifty_data['close'].iloc[-days]) * 100
+                logging.info(f"NIFTY 50 return calculated: {nifty_return:.2f}%")
+            else:
+                logging.warning("Could not fetch NIFTY 50 data for sector rotation analysis")
+            
             # Get sector performance data
             sector_performance = {}
             sector_momentum = {}
@@ -198,11 +209,8 @@ class SectorBenchmarkingProvider:
                     recent_prices = sector_data['close'].tail(20)
                     momentum = ((recent_prices.iloc[-1] - recent_prices.iloc[0]) / recent_prices.iloc[0]) * 100
                     
-                    # Calculate relative strength vs NIFTY
-                    nifty_data = self._get_nifty_data(days + 50)
-                    if nifty_data is not None and len(nifty_data) >= days:
-                        nifty_return = ((nifty_data['close'].iloc[-1] - nifty_data['close'].iloc[-days]) / 
-                                      nifty_data['close'].iloc[-days]) * 100
+                    # Calculate relative strength vs NIFTY (using pre-fetched data)
+                    if nifty_return is not None:
                         relative_strength = total_return - nifty_return
                     else:
                         relative_strength = total_return
@@ -891,7 +899,7 @@ class SectorBenchmarkingProvider:
     
     def _get_nifty_data(self, period: int = 365) -> Optional[pd.DataFrame]:
         """
-        Get historical data for NIFTY 50 index.
+        Get historical data for NIFTY 50 index with caching.
         
         Args:
             period: Number of days to retrieve
@@ -900,6 +908,16 @@ class SectorBenchmarkingProvider:
             DataFrame with historical data or None if not available
         """
         try:
+            # Check cache first
+            cache_key = f"NIFTY_50_{period}"
+            current_time = datetime.now()
+            
+            if cache_key in self.sector_data_cache:
+                cached_data, cache_time = self.sector_data_cache[cache_key]
+                if (current_time - cache_time).total_seconds() < self.cache_duration:
+                    return cached_data
+            
+            # Fetch data from Zerodha
             data = self.zerodha_client.get_historical_data(
                 symbol="NIFTY 50",
                 exchange="NSE",
@@ -910,6 +928,9 @@ class SectorBenchmarkingProvider:
             if data is None or data.empty:
                 logging.warning(f"No data available for NIFTY 50")
                 return None
+            
+            # Cache the data
+            self.sector_data_cache[cache_key] = (data, current_time)
                 
             return data
             
@@ -1271,6 +1292,17 @@ class SectorBenchmarkingProvider:
                 if sector not in relevant_sectors:
                     relevant_sectors.append(sector)
             
+            # OPTIMIZATION: Fetch NIFTY 50 data once and reuse for all sectors
+            logging.info(f"Fetching NIFTY 50 data once for optimized {timeframe} timeframe (will be reused for {len(relevant_sectors)} relevant sectors)")
+            nifty_data = self._get_nifty_data(days + 50)
+            nifty_return = None
+            if nifty_data is not None and len(nifty_data) >= days:
+                nifty_return = ((nifty_data['close'].iloc[-1] - nifty_data['close'].iloc[-days]) / 
+                              nifty_data['close'].iloc[-days]) * 100
+                logging.info(f"NIFTY 50 return calculated for optimized analysis: {nifty_return:.2f}%")
+            else:
+                logging.warning("Could not fetch NIFTY 50 data for optimized sector rotation analysis")
+            
             # Now analyze only the relevant sectors
             sector_performance = {}
             sector_momentum = {}
@@ -1294,11 +1326,8 @@ class SectorBenchmarkingProvider:
                     recent_prices = sector_data['close'].tail(20)
                     momentum = ((recent_prices.iloc[-1] - recent_prices.iloc[0]) / recent_prices.iloc[0]) * 100
                     
-                    # Calculate relative strength vs NIFTY
-                    nifty_data = self._get_nifty_data(days + 50)
-                    if nifty_data is not None and len(nifty_data) >= days:
-                        nifty_return = ((nifty_data['close'].iloc[-1] - nifty_data['close'].iloc[-days]) / 
-                                      nifty_data['close'].iloc[-days]) * 100
+                    # Calculate relative strength vs NIFTY (using pre-fetched data)
+                    if nifty_return is not None:
                         relative_strength = total_return - nifty_return
                     else:
                         relative_strength = total_return

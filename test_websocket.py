@@ -1,72 +1,80 @@
 #!/usr/bin/env python3
 """
-Test script to verify WebSocket connection and tick processing
+Test script to verify WebSocket streaming functionality
 """
-import os
+
+import asyncio
+import json
+import websockets
 import time
-import logging
 
-# Load environment variables from .env file
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-
-from zerodha_ws_client import ZerodhaWSClient
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-def test_websocket():
-    """Test WebSocket connection and tick processing"""
+async def test_websocket():
+    """Test WebSocket connection and subscription"""
     
-    # Get credentials from environment
-    api_key = os.getenv('ZERODHA_API_KEY')
-    access_token = os.getenv('ZERODHA_ACCESS_TOKEN')
-    
-    if not api_key or not access_token:
-        logger.error("ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN must be set")
+    # Get authentication token
+    import requests
+    try:
+        response = requests.post("http://localhost:8000/auth/token?user_id=test_user")
+        token_data = response.json()
+        token = token_data.get('token')
+        print(f"✅ Got authentication token: {token[:20]}...")
+    except Exception as e:
+        print(f"❌ Failed to get authentication token: {e}")
         return
     
-    # Create WebSocket client
-    client = ZerodhaWSClient(api_key, access_token)
-    
     # Connect to WebSocket
-    logger.info("Connecting to WebSocket...")
-    client.connect()
+    uri = f"ws://localhost:8000/ws/stream?token={token}"
+    print(f"🔌 Connecting to WebSocket: {uri}")
     
-    # Wait for connection
-    time.sleep(5)
-    
-    # Subscribe to RELIANCE token (738561)
-    test_token = 738561
-    logger.info(f"Subscribing to token {test_token}...")
-    client.subscribe([test_token])
-    
-    # Set mode to quote
-    client.set_mode('quote', [test_token])
-    
-    # Monitor for 30 seconds
-    logger.info("Monitoring for 30 seconds...")
-    start_time = time.time()
-    
-    while time.time() - start_time < 30:
-        # Get latest tick
-        tick = client.get_latest_tick(test_token)
-        if tick:
-            logger.info(f"Latest tick: {tick}")
-        
-        # Get market status
-        market_info = client.get_market_status()
-        logger.info(f"Market status: {market_info}")
-        
-        time.sleep(5)
-    
-    # Disconnect
-    logger.info("Disconnecting...")
-    client.disconnectWebSocket()
+    try:
+        async with websockets.connect(uri) as websocket:
+            print("✅ WebSocket connected successfully")
+            
+            # Wait for welcome message
+            welcome_msg = await websocket.recv()
+            print(f"📨 Welcome message: {welcome_msg}")
+            
+            # Send subscription message
+            subscription_msg = {
+                "action": "subscribe",
+                "symbols": ["RELIANCE"],
+                "timeframes": ["1d"]
+            }
+            
+            print(f"📤 Sending subscription: {subscription_msg}")
+            await websocket.send(json.dumps(subscription_msg))
+            
+            # Wait for subscription confirmation
+            subscription_response = await websocket.recv()
+            print(f"📨 Subscription response: {subscription_response}")
+            
+            # Wait for some data
+            print("⏳ Waiting for streaming data...")
+            start_time = time.time()
+            
+            while time.time() - start_time < 30:  # Wait up to 30 seconds
+                try:
+                    # Set a timeout for receiving messages
+                    message = await asyncio.wait_for(websocket.recv(), timeout=5.0)
+                    print(f"📨 Received message: {message}")
+                    
+                    # Parse the message
+                    data = json.loads(message)
+                    if data.get('type') in ['tick', 'candle']:
+                        print(f"🎉 SUCCESS! Received {data['type']} data: {data}")
+                        break
+                        
+                except asyncio.TimeoutError:
+                    print("⏰ No message received in 5 seconds, continuing...")
+                    continue
+                except Exception as e:
+                    print(f"❌ Error receiving message: {e}")
+                    break
+            
+            print("🏁 Test completed")
+            
+    except Exception as e:
+        print(f"❌ WebSocket test failed: {e}")
 
 if __name__ == "__main__":
-    test_websocket() 
+    asyncio.run(test_websocket()) 
