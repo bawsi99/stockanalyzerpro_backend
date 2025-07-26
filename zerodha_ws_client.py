@@ -306,6 +306,13 @@ class ZerodhaWSClient:
                 if self.api_key == 'your_api_key' or self.access_token == 'your_access_token':
                     logger.warning("Zerodha credentials not properly configured. Cannot connect to real data.")
                     logger.warning("Please set ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN environment variables for real data.")
+                    logger.info("Historical data will still be available, but live streaming will be disabled.")
+                    return
+                
+                # Validate credentials before attempting connection
+                if not self.api_key or not self.access_token:
+                    logger.warning("Missing Zerodha credentials. Live data streaming disabled.")
+                    logger.info("Historical data will still be available, but live streaming will be disabled.")
                     return
                     
                 self._ws_thread = threading.Thread(target=self.kws.connect, kwargs={"threaded": True})
@@ -316,6 +323,8 @@ class ZerodhaWSClient:
             except Exception as e:
                 logger.error(f"Failed to start Kite WebSocket client: {e}")
                 logger.error("Cannot connect to real data. Please check your Zerodha credentials and network connection.")
+                logger.info("Historical data will still be available, but live streaming will be disabled.")
+                self.running = False
 
     def subscribe(self, tokens: List[int]) -> None:
         """Subscribe to a list of instrument tokens."""
@@ -325,6 +334,8 @@ class ZerodhaWSClient:
         try:
             if not self.running:
                 logger.warning("WebSocket client not running. Cannot subscribe to tokens.")
+                logger.info("This is likely due to missing or invalid Zerodha credentials.")
+                logger.info("Historical data is still available via REST API endpoints.")
                 return
                 
             logger.info(f"Subscribing to tokens: {tokens}")
@@ -333,7 +344,8 @@ class ZerodhaWSClient:
             logger.info(f"Successfully subscribed to tokens: {tokens}")
         except Exception as e:
             logger.error(f"Failed to subscribe to tokens {tokens}: {e}")
-            raise
+            logger.info("Historical data is still available via REST API endpoints.")
+            # Don't raise the exception to prevent service disruption
 
     def unsubscribe(self, tokens: List[int]) -> None:
         """Unsubscribe from a list of instrument tokens."""
@@ -491,6 +503,8 @@ class ZerodhaWSClient:
         if code == 403:
             logger.error("Authentication failed. Please check your Zerodha credentials.")
             logger.error("Make sure ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN are properly set in .env file")
+            logger.error("You may need to regenerate your access token if it has expired.")
+            logger.info("Historical data is still available via REST API endpoints.")
             self.running = False
             return
         

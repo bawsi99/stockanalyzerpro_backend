@@ -282,6 +282,12 @@ class LiveDataPubSub:
         new_tokens = [token for token in tokens if token not in self.global_subscribed_tokens]
         if new_tokens:
             try:
+                # Check if Zerodha WebSocket client is running
+                if not hasattr(zerodha_ws_client, 'running') or not zerodha_ws_client.running:
+                    print(f"⚠️  Zerodha WebSocket client not running. Cannot subscribe to tokens: {new_tokens}")
+                    print("📊 Historical data is still available via REST API endpoints")
+                    return
+                
                 # Convert string tokens to integers for Zerodha
                 int_tokens = [int(token) for token in new_tokens]
                 zerodha_ws_client.subscribe(int_tokens)
@@ -290,6 +296,7 @@ class LiveDataPubSub:
                 print(f"🔗 Subscribed to new Zerodha tokens: {new_tokens}")
             except Exception as e:
                 print(f"❌ Error subscribing to Zerodha tokens {new_tokens}: {e}")
+                print("📊 Historical data is still available via REST API endpoints")
 
     async def _unsubscribe_from_zerodha(self, tokens):
         """Unsubscribe from tokens in Zerodha WebSocket if no clients are subscribed."""
@@ -534,28 +541,34 @@ async def startup_event():
     set_publish_callback(live_pubsub.publish)
     set_main_event_loop(MAIN_EVENT_LOOP)
     
-    # Start Zerodha WebSocket client in a background thread
-    print("Starting Zerodha WebSocket client...")
-    zerodha_ws_client.connect()
-    
-    # Wait a moment for the connection to establish
-    await asyncio.sleep(3)
-    
-    # Set mode to 'quote' for OHLCV data (44 bytes per packet)
-    # This provides open, high, low, close, volume data needed for charts
-    print("WebSocket client ready for dynamic subscriptions")
-    print("WebSocket mode will be set to 'quote' for OHLCV data when symbols are subscribed")
-    
-    # Check if Zerodha credentials are available
+    # Check if Zerodha credentials are available before starting WebSocket client
     api_key = os.getenv("ZERODHA_API_KEY")
     access_token = os.getenv("ZERODHA_ACCESS_TOKEN")
     
-    if not api_key or not access_token:
-        print("⚠️  To enable live data, please set ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN environment variables")
-        print("Make sure your .env file is in the backend directory and contains valid credentials")
+    if not api_key or not access_token or api_key == 'your_api_key' or access_token == 'your_access_token':
+        print("⚠️  Zerodha credentials not configured or invalid")
+        print("📊 Historical data will be available via REST API")
+        print("🔴 Live data streaming will be disabled")
+        print("💡 To enable live data, set ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN in .env file")
     else:
-        print("✅ Zerodha credentials loaded successfully")
-        print("✅ Live data streaming is enabled")
+        print("✅ Zerodha credentials found")
+        print("🚀 Starting Zerodha WebSocket client...")
+        try:
+            zerodha_ws_client.connect()
+            await asyncio.sleep(3)
+            
+            if zerodha_ws_client.running:
+                print("✅ Zerodha WebSocket client started successfully")
+                print("✅ Live data streaming is enabled")
+            else:
+                print("⚠️  Zerodha WebSocket client failed to start")
+                print("📊 Historical data will still be available")
+        except Exception as e:
+            print(f"❌ Error starting Zerodha WebSocket client: {e}")
+            print("📊 Historical data will still be available")
+    
+    print("🔧 WebSocket mode will be set to 'quote' for OHLCV data when symbols are subscribed")
+    print("🎯 Data service is ready to handle requests")
 
 # --- Pydantic Models ---
 class HistoricalDataRequest(BaseModel):
