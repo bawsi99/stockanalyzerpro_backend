@@ -590,7 +590,7 @@ async def startup_event():
     # Initialize Zerodha WebSocket client
     try:
         if hasattr(zerodha_ws_client, 'connect') and callable(zerodha_ws_client.connect):
-            await zerodha_ws_client.connect()
+            zerodha_ws_client.connect()
             print("✅ Zerodha WebSocket client connected")
         else:
             print("⚠️  Zerodha WebSocket client connect method not available")
@@ -615,8 +615,8 @@ async def shutdown_event():
         
     # Disconnect Zerodha WebSocket client
     try:
-        if hasattr(zerodha_ws_client, 'disconnect') and callable(zerodha_ws_client.disconnect):
-            await zerodha_ws_client.disconnect()
+        if hasattr(zerodha_ws_client, 'disconnectWebSocket') and callable(zerodha_ws_client.disconnectWebSocket):
+            zerodha_ws_client.disconnectWebSocket()
             print("✅ Zerodha WebSocket client disconnected")
         else:
             print("⚠️  Zerodha WebSocket client disconnect method not available")
