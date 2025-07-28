@@ -59,7 +59,7 @@ from pydantic import BaseModel, Field
 
 # Local imports
 from agent_capabilities import StockAnalysisOrchestrator
-from zerodha_ws_client import zerodha_ws_client, candle_aggregator
+from zerodha_ws_client import get_zerodha_ws_client, candle_aggregator
 from analysis_storage import store_analysis_in_supabase
 # Market hours manager removed - continuous data flow enabled
 from enhanced_data_service import enhanced_data_service, DataRequest
@@ -377,8 +377,9 @@ class LiveDataPubSub:
             try:
                 # Convert string tokens to integers for Zerodha
                 int_tokens = [int(token) for token in new_tokens]
-                zerodha_ws_client.subscribe(int_tokens)
-                zerodha_ws_client.set_mode('quote', int_tokens)
+                ws_client = get_zerodha_ws_client()
+                ws_client.subscribe(int_tokens)
+                ws_client.set_mode('quote', int_tokens)
                 self.global_subscribed_tokens.update(new_tokens)
                 print(f"🔗 Subscribed to new Zerodha tokens: {new_tokens}")
             except Exception as e:
@@ -391,7 +392,8 @@ class LiveDataPubSub:
             try:
                 # Convert string tokens to integers for Zerodha
                 int_tokens = [int(token) for token in tokens_to_unsubscribe]
-                zerodha_ws_client.unsubscribe(int_tokens)
+                ws_client = get_zerodha_ws_client()
+                ws_client.unsubscribe(int_tokens)
                 self.global_subscribed_tokens.difference_update(tokens_to_unsubscribe)
                 print(f"🔗 Unsubscribed from Zerodha tokens: {tokens_to_unsubscribe}")
             except Exception as e:
@@ -1074,7 +1076,10 @@ async def startup_event():
     
     # Start Zerodha WebSocket client in a background thread
     print("Starting Zerodha WebSocket client...")
-    zerodha_ws_client.connect()
+    # Get fresh instance to ensure latest credentials
+    from zerodha_ws_client import get_zerodha_ws_client
+    ws_client = get_zerodha_ws_client()
+    ws_client.connect()
     
     # Wait a moment for the connection to establish
     await asyncio.sleep(3)
@@ -1083,11 +1088,11 @@ async def startup_event():
     default_tokens = [738561, 11536, 1330, 1594, 4963]  # Updated token, TCS, HDFC, INFY, ICICIBANK
     try:
         print(f"Attempting to subscribe to default tokens: {default_tokens}")
-        zerodha_ws_client.subscribe(default_tokens)
+        ws_client.subscribe(default_tokens)
         
         # Set mode to 'quote' for OHLCV data (44 bytes per packet)
         # This provides open, high, low, close, volume data needed for charts
-        zerodha_ws_client.set_mode('quote', default_tokens)
+        ws_client.set_mode('quote', default_tokens)
         
         print(f"Successfully subscribed to default Zerodha tokens: {default_tokens}")
         print("WebSocket mode set to 'quote' for OHLCV data")
@@ -1337,10 +1342,10 @@ async def websocket_health():
 async def test_websocket():
     """Test endpoint to check WebSocket client status."""
     return {
-        'zerodha_ws_running': zerodha_ws_client.running,
-        'subscribed_tokens': list(zerodha_ws_client.subscribed_tokens),
-        'api_key_configured': bool(zerodha_ws_client.api_key and zerodha_ws_client.api_key != 'your_api_key'),
-        'access_token_configured': bool(zerodha_ws_client.access_token and zerodha_ws_client.access_token != 'your_access_token'),
+        'zerodha_ws_running': get_zerodha_ws_client().running,
+        'subscribed_tokens': list(get_zerodha_ws_client().subscribed_tokens),
+        'api_key_configured': bool(get_zerodha_ws_client().api_key and get_zerodha_ws_client().api_key != 'your_api_key'),
+        'access_token_configured': bool(get_zerodha_ws_client().access_token and get_zerodha_ws_client().access_token != 'your_access_token'),
         'candle_aggregator_timeframes': list(candle_aggregator.timeframes),
         'registered_callbacks': len(candle_aggregator.callbacks),
         'timestamp': time.time()
@@ -2707,7 +2712,7 @@ async def get_optimization_stats():
     try:
         return {
             "data_service_stats": enhanced_data_service.get_optimization_stats(),
-            "websocket_stats": zerodha_ws_client.get_optimization_stats(),
+            "websocket_stats": get_zerodha_ws_client().get_optimization_stats(),
             "cost_analysis": enhanced_data_service.get_cost_analysis()
         }
     except Exception as e:

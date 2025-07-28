@@ -314,6 +314,12 @@ class ZerodhaWSClient:
                     logger.warning("Missing Zerodha credentials. Live data streaming disabled.")
                     logger.info("Historical data will still be available, but live streaming will be disabled.")
                     return
+                
+                # Additional validation - check if credentials look valid
+                if len(self.api_key) < 10 or len(self.access_token) < 10:
+                    logger.warning("Zerodha credentials appear to be invalid (too short).")
+                    logger.info("Historical data will still be available, but live streaming will be disabled.")
+                    return
                     
                 self._ws_thread = threading.Thread(target=self.kws.connect, kwargs={"threaded": True})
                 self._ws_thread.daemon = True
@@ -504,9 +510,16 @@ class ZerodhaWSClient:
             logger.error("Authentication failed. Please check your Zerodha credentials.")
             logger.error("Make sure ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN are properly set in .env file")
             logger.error("You may need to regenerate your access token if it has expired.")
+            logger.error("To regenerate access token, visit: https://kite.trade/connect/login")
             logger.info("Historical data is still available via REST API endpoints.")
             self.running = False
             return
+        
+        # For connection errors, provide more specific guidance
+        if code == 1006:
+            logger.error("WebSocket connection was closed uncleanly.")
+            logger.error("This could be due to network issues or server problems.")
+            logger.info("The client will attempt to reconnect automatically.")
         
         # For other errors, attempt to reconnect
         if self.running:
@@ -590,5 +603,28 @@ class ZerodhaWSClient:
                 self.kws.close()
                 self._ws_thread.join(timeout=5)
 
-# Singleton instance for use in backend
-zerodha_ws_client = ZerodhaWSClient(API_KEY, ACCESS_TOKEN) 
+# Singleton instance for use in backend - lazy loaded
+_zerodha_ws_client_instance = None
+
+def get_zerodha_ws_client():
+    """Get the singleton WebSocket client instance, creating it if necessary."""
+    global _zerodha_ws_client_instance
+    if _zerodha_ws_client_instance is None:
+        # Reload environment variables to ensure we have the latest values
+        try:
+            import dotenv
+            dotenv.load_dotenv()
+        except ImportError:
+            pass
+        
+        # Get fresh credentials from environment
+        api_key = os.getenv('ZERODHA_API_KEY') or os.getenv('KITE_API_KEY', 'your_api_key')
+        access_token = os.getenv('ZERODHA_ACCESS_TOKEN') or os.getenv('KITE_ACCESS_TOKEN', 'your_access_token')
+        
+        _zerodha_ws_client_instance = ZerodhaWSClient(api_key, access_token)
+        logger.info(f"Created WebSocket client with API key: {api_key[:10]}...")
+    
+    return _zerodha_ws_client_instance
+
+# For backward compatibility
+zerodha_ws_client = get_zerodha_ws_client() 
