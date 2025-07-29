@@ -7,6 +7,7 @@ from typing import Dict, List, Any, Tuple, Callable
 import matplotlib.dates as mdates
 import os
 import logging
+import asyncio
 
 # Add new imports for pattern modules
 from patterns.recognition import PatternRecognition
@@ -2567,6 +2568,156 @@ class IndianMarketMetricsProvider:
         except Exception as e:
             logging.error(f"Error fetching risk-free rate: {e}")
             return 0.07
+
+    async def get_nifty_50_data_async(self, period: int = 365) -> pd.DataFrame:
+        """Async version of get_nifty_50_data."""
+        try:
+            return await self.zerodha_client.get_historical_data_async(
+                symbol=self.market_indices['NIFTY_50']['symbol'],
+                exchange=self.market_indices['NIFTY_50']['exchange'],
+                period=period
+            )
+        except Exception as e:
+            logging.error(f"Error fetching NIFTY 50 data: {e}")
+            return None
+
+    async def get_india_vix_data_async(self, period: int = 30) -> pd.DataFrame:
+        """Async version of get_india_vix_data."""
+        try:
+            return await self.zerodha_client.get_historical_data_async(
+                symbol=self.market_indices['INDIA_VIX']['symbol'],
+                exchange=self.market_indices['INDIA_VIX']['exchange'],
+                period=period
+            )
+        except Exception as e:
+            logging.error(f"Error fetching INDIA VIX data: {e}")
+            return None
+
+    async def get_sector_index_data_async(self, sector: str, period: int = 365) -> pd.DataFrame:
+        """Async version of get_sector_index_data."""
+        try:
+            primary_index = self.sector_classifier.get_primary_sector_index(sector)
+            if not primary_index:
+                logging.warning(f"No primary index found for sector: {sector}")
+                return None
+            
+            # Find the index mapping
+            index_key = None
+            for key, data in self.market_indices.items():
+                if data['symbol'] == primary_index:
+                    index_key = key
+                    break
+            
+            if not index_key:
+                logging.error(f"Index mapping not found for: {primary_index}")
+                return None
+            
+            return await self.zerodha_client.get_historical_data_async(
+                symbol=self.market_indices[index_key]['symbol'],
+                exchange=self.market_indices[index_key]['exchange'],
+                period=period
+            )
+        except Exception as e:
+            logging.error(f"Error fetching sector index data for {sector}: {e}")
+            return None
+
+    async def get_enhanced_market_metrics_async(self, data: pd.DataFrame, stock_symbol: str) -> Dict[str, float]:
+        """Async version of get_enhanced_market_metrics."""
+        try:
+            # Check if market is open
+            if not self._is_market_open():
+                return self._get_default_market_metrics(stock_symbol)
+            
+            # Get stock returns
+            stock_returns = data['close'].pct_change().dropna()
+            if len(stock_returns) < 30:
+                return self._get_default_market_metrics(stock_symbol)
+            
+            # Fetch all index data concurrently
+            tasks = [
+                self.get_nifty_50_data_async(365),
+                self.get_india_vix_data_async(30)
+            ]
+            
+            # Get sector info if available
+            sector = None
+            if stock_symbol:
+                try:
+                    sector = self.sector_classifier.get_stock_sector(stock_symbol)
+                    if sector and sector != 'UNKNOWN':
+                        tasks.append(self.get_sector_index_data_async(sector, 365))
+                except Exception as e:
+                    logging.warning(f"Could not classify stock {stock_symbol}: {e}")
+            
+            # Execute all async tasks concurrently
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            nifty_data = results[0] if not isinstance(results[0], Exception) else None
+            vix_data = results[1] if not isinstance(results[1], Exception) else None
+            sector_data = results[2] if len(results) > 2 and not isinstance(results[2], Exception) else None
+            
+            # Calculate metrics
+            metrics = {}
+            
+            # Market metrics (NIFTY 50)
+            if nifty_data is not None and len(nifty_data) >= 30:
+                market_returns = nifty_data['close'].pct_change().dropna()
+                aligned_data = pd.concat([stock_returns, market_returns], axis=1).dropna()
+                if len(aligned_data) >= 30:
+                    stock_aligned = aligned_data.iloc[:, 0]
+                    market_aligned = aligned_data.iloc[:, 1]
+                    
+                    metrics.update({
+                        "beta": self.calculate_beta(stock_aligned, market_aligned),
+                        "correlation": self.calculate_correlation(stock_aligned, market_aligned),
+                        "market_beta": self.calculate_beta(stock_aligned, market_aligned),
+                        "market_correlation": self.calculate_correlation(stock_aligned, market_aligned),
+                        "market_return": float((1 + market_aligned).prod() - 1),
+                        "market_volatility": float(market_aligned.std() * np.sqrt(252)),
+                        "market_sharpe": float((market_aligned.mean() * 252 - 0.07) / (market_aligned.std() * np.sqrt(252))) if market_aligned.std() > 0 else 0.0
+                    })
+            
+            # VIX metrics
+            if vix_data is not None and len(vix_data) > 0:
+                current_vix = vix_data['close'].iloc[-1]
+                metrics["current_vix"] = float(current_vix)
+                metrics["market_sentiment"] = "Bearish" if current_vix > 25 else "Bullish" if current_vix < 15 else "Neutral"
+            
+            # Sector metrics
+            if sector_data is not None and len(sector_data) >= 30:
+                sector_returns = sector_data['close'].pct_change().dropna()
+                aligned_data = pd.concat([stock_returns, sector_returns], axis=1).dropna()
+                if len(aligned_data) >= 30:
+                    stock_aligned = aligned_data.iloc[:, 0]
+                    sector_aligned = aligned_data.iloc[:, 1]
+                    
+                    metrics.update({
+                        "sector_beta": self.calculate_beta(stock_aligned, sector_aligned),
+                        "sector_correlation": self.calculate_correlation(stock_aligned, sector_aligned),
+                        "sector_return": float((1 + sector_aligned).prod() - 1),
+                        "sector_volatility": float(sector_aligned.std() * np.sqrt(252)),
+                        "sector_sharpe": float((sector_aligned.mean() * 252 - 0.07) / (sector_aligned.std() * np.sqrt(252))) if sector_aligned.std() > 0 else 0.0,
+                        "sector_excess_return": float((1 + stock_aligned).prod() - 1) - float((1 + sector_aligned).prod() - 1)
+                    })
+            
+            # Add common metrics
+            metrics.update({
+                "stock_return": float((1 + stock_returns).prod() - 1),
+                "stock_volatility": float(stock_returns.std() * np.sqrt(252)),
+                "stock_sharpe": float((stock_returns.mean() * 252 - 0.07) / (stock_returns.std() * np.sqrt(252))) if stock_returns.std() > 0 else 0.0,
+                "risk_free_rate": 0.07,
+                "sector": sector,
+                "data_source": "Real-time async data",
+                "last_update": pd.Timestamp.now().isoformat(),
+                "data_freshness": "real-time",
+                "market_status": "open"
+            })
+            
+            return metrics
+            
+        except Exception as e:
+            logging.error(f"Error in async market metrics calculation: {e}")
+            return self._get_default_market_metrics(stock_symbol)
 
 market_metrics_provider = IndianMarketMetricsProvider()
 

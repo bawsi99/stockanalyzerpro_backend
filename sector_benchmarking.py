@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
+import asyncio
 
 # Import existing components
 from sector_classifier import sector_classifier
@@ -152,6 +153,62 @@ class SectorBenchmarkingProvider:
         except Exception as e:
             logging.error(f"Error in comprehensive benchmarking for {stock_symbol}: {e}")
             return self._get_fallback_benchmarking(stock_symbol, sector)
+    
+    async def get_comprehensive_benchmarking_async(self, stock_symbol: str, stock_data: pd.DataFrame) -> Dict[str, Any]:
+        """Async version of get_comprehensive_benchmarking."""
+        try:
+            # Get stock returns
+            stock_returns = stock_data['close'].pct_change().dropna()
+            if len(stock_returns) < 30:
+                return self._get_fallback_benchmarking(stock_symbol, "UNKNOWN")
+            
+            # Get sector classification
+            sector = self.sector_classifier.get_stock_sector(stock_symbol)
+            
+            # Fetch market and sector data concurrently
+            tasks = [
+                self._calculate_market_metrics_async(stock_returns)
+            ]
+            
+            if sector and sector != 'UNKNOWN':
+                tasks.append(self._calculate_sector_metrics_async(stock_returns, sector))
+            else:
+                tasks.append(None)
+            
+            # Execute tasks concurrently
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            market_metrics = results[0] if not isinstance(results[0], Exception) else self._get_default_market_metrics()
+            sector_metrics = results[1] if len(results) > 1 and not isinstance(results[1], Exception) else None
+            
+            # Calculate relative performance
+            relative_performance = self._calculate_relative_performance(stock_data, sector, market_metrics, sector_metrics)
+            
+            # Calculate risk metrics
+            risk_metrics = self._calculate_sector_risk_metrics(stock_returns, sector, market_metrics, sector_metrics)
+            
+            # Calculate stress metrics
+            stress_metrics = self._calculate_sector_stress_metrics(stock_returns, sector_metrics, market_metrics)
+            
+            # Generate analysis summary
+            analysis_summary = self._generate_analysis_summary(stock_symbol, sector, market_metrics, sector_metrics, relative_performance)
+            
+            return {
+                "market_metrics": market_metrics,
+                "sector_metrics": sector_metrics,
+                "relative_performance": relative_performance,
+                "risk_metrics": risk_metrics,
+                "stress_metrics": stress_metrics,
+                "analysis_summary": analysis_summary,
+                "sector": sector,
+                "stock_symbol": stock_symbol,
+                "data_points": len(stock_returns),
+                "analysis_timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logging.error(f"Error in async comprehensive benchmarking: {e}")
+            return self._get_fallback_benchmarking(stock_symbol, "UNKNOWN")
     
     def analyze_sector_rotation(self, timeframe: str = "3M") -> Dict[str, Any]:
         """
@@ -365,6 +422,235 @@ class SectorBenchmarkingProvider:
             logging.error(f"Error generating sector correlation matrix: {e}")
             return None
     
+    async def analyze_sector_rotation_async(self, timeframe: str = "3M") -> Dict[str, Any]:
+        """
+        Analyze sector rotation patterns and momentum asynchronously.
+        
+        Args:
+            timeframe: Analysis period ("1M", "3M", "6M", "1Y")
+            
+        Returns:
+            Dict containing sector rotation analysis
+        """
+        try:
+            logging.info(f"Analyzing sector rotation for {timeframe} timeframe (ASYNC)")
+            
+            # Calculate days for timeframe
+            timeframe_days = {
+                "1M": 30,
+                "3M": 90,
+                "6M": 180,
+                "1Y": 365
+            }
+            days = timeframe_days.get(timeframe, 90)
+            
+            # OPTIMIZATION: Fetch NIFTY 50 data once and reuse for all sectors
+            logging.info(f"Fetching NIFTY 50 data once for {timeframe} timeframe (will be reused for all {len(self.sector_tokens)} sectors)")
+            nifty_data = await self._get_nifty_data_async(days + 50)
+            nifty_return = None
+            if nifty_data is not None and len(nifty_data) >= days:
+                nifty_return = ((nifty_data['close'].iloc[-1] - nifty_data['close'].iloc[-days]) / 
+                              nifty_data['close'].iloc[-days]) * 100
+                logging.info(f"NIFTY 50 return calculated: {nifty_return:.2f}%")
+            else:
+                logging.warning("Could not fetch NIFTY 50 data for sector rotation analysis")
+            
+            # Fetch all sector data concurrently
+            async def fetch_sector_data(sector, token):
+                try:
+                    sector_data = await self._get_sector_data_async(sector, days + 50)
+                    min_required = days * 0.7 if days > 180 else days * 0.8
+                    if sector_data is not None and len(sector_data) >= min_required:
+                        current_price = sector_data['close'].iloc[-1]
+                        start_price = sector_data['close'].iloc[-days]
+                        total_return = ((current_price - start_price) / start_price) * 100
+                        
+                        recent_prices = sector_data['close'].tail(20)
+                        momentum = ((recent_prices.iloc[-1] - recent_prices.iloc[0]) / recent_prices.iloc[0]) * 100
+                        
+                        if nifty_return is not None:
+                            relative_strength = total_return - nifty_return
+                        else:
+                            relative_strength = total_return
+                        
+                        return sector, {
+                            'total_return': round(total_return, 2),
+                            'momentum': round(momentum, 2),
+                            'relative_strength': round(relative_strength, 2),
+                            'current_price': current_price,
+                            'start_price': start_price
+                        }
+                    else:
+                        logging.warning(f"No sufficient data for {sector}: got {len(sector_data) if sector_data is not None else 0} records, need at least {min_required:.0f}")
+                        return None
+                except Exception as e:
+                    logging.warning(f"Error calculating performance for {sector}: {e}")
+                    return None
+            
+            # Fetch all sector data concurrently
+            tasks = [fetch_sector_data(sector, token) for sector, token in self.sector_tokens.items()]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process results
+            sector_performance = {}
+            sector_momentum = {}
+            
+            for result in results:
+                if isinstance(result, Exception):
+                    logging.warning(f"Exception in sector data fetch: {result}")
+                    continue
+                if result is not None:
+                    sector, data = result
+                    sector_performance[sector] = data
+                    sector_momentum[sector] = data['momentum']
+            
+            # Rank sectors by performance
+            sorted_sectors = sorted(sector_performance.items(), 
+                                  key=lambda x: x[1]['relative_strength'], reverse=True)
+            
+            sector_rankings = {}
+            for rank, (sector, data) in enumerate(sorted_sectors, 1):
+                sector_rankings[sector] = {
+                    'rank': rank,
+                    'performance': data
+                }
+            
+            # Identify rotation patterns
+            rotation_analysis = self._identify_rotation_patterns(sector_performance, timeframe)
+            
+            # Generate recommendations
+            recommendations = self._generate_rotation_recommendations(sector_rankings, rotation_analysis)
+            
+            return {
+                'timeframe': timeframe,
+                'sector_performance': sector_performance,
+                'sector_rankings': sector_rankings,
+                'rotation_patterns': rotation_analysis,
+                'recommendations': recommendations,
+                'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+        except Exception as e:
+            logging.error(f"Error in async sector rotation analysis: {e}")
+            return None
+
+    async def generate_sector_correlation_matrix_async(self, timeframe: str = "6M") -> Dict[str, Any]:
+        """
+        Generate correlation matrix between all sectors for portfolio diversification asynchronously.
+        
+        Args:
+            timeframe: Analysis period ("1M", "3M", "6M", "1Y")
+            
+        Returns:
+            Dict containing correlation matrix and diversification insights
+        """
+        try:
+            logging.info(f"Generating sector correlation matrix for {timeframe} timeframe (ASYNC)")
+            
+            # Calculate days for timeframe
+            timeframe_days = {
+                "1M": 30,
+                "3M": 90,
+                "6M": 180,
+                "1Y": 365
+            }
+            days = timeframe_days.get(timeframe, 180)
+            
+            # Fetch all sector data concurrently
+            async def fetch_sector_data(sector, token):
+                try:
+                    data = await self._get_sector_data_async(sector, days + 50)
+                    min_required = days * 0.7 if days > 180 else days * 0.8
+                    if data is not None and len(data) >= min_required:
+                        returns = data['close'].pct_change().dropna()
+                        return sector, returns
+                    else:
+                        logging.warning(f"No sufficient data for {sector}: got {len(data) if data is not None else 0} records, need at least {min_required:.0f}")
+                        return None
+                except Exception as e:
+                    logging.warning(f"Error getting data for {sector}: {e}")
+                    return None
+            
+            # Fetch all sector data concurrently
+            tasks = [fetch_sector_data(sector, token) for sector, token in self.sector_tokens.items()]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process results
+            sector_data = {}
+            valid_sectors = []
+            
+            for result in results:
+                if isinstance(result, Exception):
+                    logging.warning(f"Exception in sector data fetch: {result}")
+                    continue
+                if result is not None:
+                    sector, returns = result
+                    sector_data[sector] = returns
+                    valid_sectors.append(sector)
+            
+            if len(valid_sectors) < 2:
+                logging.warning(f"Insufficient sector data for correlation analysis. Only {len(valid_sectors)} sectors have sufficient data (need at least 2)")
+                return None
+            
+            # Create correlation matrix
+            returns_df = pd.DataFrame(sector_data)
+            correlation_matrix = returns_df.corr()
+            
+            # Calculate average correlation
+            upper_triangle = correlation_matrix.where(
+                np.triu(np.ones(correlation_matrix.shape), k=1).astype(bool)
+            )
+            avg_correlation = upper_triangle.stack().mean()
+            
+            # Identify high and low correlation pairs
+            high_correlation_pairs = []
+            low_correlation_pairs = []
+            
+            for i in range(len(correlation_matrix.columns)):
+                for j in range(i + 1, len(correlation_matrix.columns)):
+                    sector1 = correlation_matrix.columns[i]
+                    sector2 = correlation_matrix.columns[j]
+                    correlation = correlation_matrix.iloc[i, j]
+                    
+                    if correlation > 0.7:
+                        high_correlation_pairs.append({
+                            'sector1': sector1,
+                            'sector2': sector2,
+                            'correlation': round(correlation, 3)
+                        })
+                    elif correlation < 0.3:
+                        low_correlation_pairs.append({
+                            'sector1': sector1,
+                            'sector2': sector2,
+                            'correlation': round(correlation, 3)
+                        })
+            
+            # Generate diversification insights
+            diversification_insights = self._generate_diversification_insights(
+                correlation_matrix, high_correlation_pairs, low_correlation_pairs, avg_correlation
+            )
+            
+            # Calculate sector volatility for risk assessment
+            sector_volatility = {}
+            for sector in valid_sectors:
+                volatility = sector_data[sector].std() * np.sqrt(252) * 100
+                sector_volatility[sector] = round(volatility, 2)
+            
+            return {
+                'timeframe': timeframe,
+                'correlation_matrix': correlation_matrix.round(3).to_dict(),
+                'average_correlation': round(avg_correlation, 3),
+                'high_correlation_pairs': high_correlation_pairs,
+                'low_correlation_pairs': low_correlation_pairs,
+                'sector_volatility': sector_volatility,
+                'diversification_insights': diversification_insights,
+                'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+        except Exception as e:
+            logging.error(f"Error generating async sector correlation matrix: {e}")
+            return None
+
     def _identify_rotation_patterns(self, sector_performance: Dict, timeframe: str) -> Dict[str, Any]:
         """Identify sector rotation patterns and trends."""
         try:
@@ -584,6 +870,58 @@ class SectorBenchmarkingProvider:
             logging.error(f"Error calculating market metrics: {e}")
             return self._get_default_market_metrics()
     
+    async def _calculate_market_metrics_async(self, stock_returns: pd.Series) -> Dict[str, Any]:
+        """Async version of _calculate_market_metrics."""
+        try:
+            # Get NIFTY 50 data asynchronously
+            nifty_data = await self._get_nifty_data_async(365)
+            
+            if nifty_data is None or len(nifty_data) < 30:
+                return self._get_default_market_metrics()
+            
+            market_returns = nifty_data['close'].pct_change().dropna()
+            
+            # Align data
+            aligned_data = pd.concat([stock_returns, market_returns], axis=1).dropna()
+            if len(aligned_data) < 30:
+                return self._get_default_market_metrics()
+            
+            stock_aligned = aligned_data.iloc[:, 0]
+            market_aligned = aligned_data.iloc[:, 1]
+            
+            # Calculate metrics
+            beta = self._calculate_beta(stock_aligned, market_aligned)
+            correlation = self._calculate_correlation(stock_aligned, market_aligned)
+            volatility_ratio = stock_aligned.std() / market_aligned.std() if market_aligned.std() > 0 else 1.0
+            
+            # Calculate performance metrics
+            stock_cumulative_return = (1 + stock_aligned).prod() - 1
+            market_cumulative_return = (1 + market_aligned).prod() - 1
+            excess_return = stock_cumulative_return - market_cumulative_return
+            
+            # Calculate Sharpe ratios
+            risk_free_rate = 0.07  # 7% annual
+            stock_sharpe = (stock_aligned.mean() * 252 - risk_free_rate) / (stock_aligned.std() * np.sqrt(252)) if stock_aligned.std() > 0 else 0
+            market_sharpe = (market_aligned.mean() * 252 - risk_free_rate) / (market_aligned.std() * np.sqrt(252)) if market_aligned.std() > 0 else 0
+            
+            return {
+                "beta": float(beta),
+                "correlation": float(correlation),
+                "volatility_ratio": float(volatility_ratio),
+                "stock_return": float(stock_cumulative_return),
+                "market_return": float(market_cumulative_return),
+                "excess_return": float(excess_return),
+                "stock_sharpe": float(stock_sharpe),
+                "market_sharpe": float(market_sharpe),
+                "outperformance": float(excess_return),
+                "data_points": len(aligned_data),
+                "benchmark": "NIFTY 50"
+            }
+            
+        except Exception as e:
+            logging.error(f"Error calculating market metrics: {e}")
+            return self._get_default_market_metrics()
+    
     def _calculate_sector_metrics(self, stock_returns: pd.Series, sector: str) -> Dict[str, Any]:
         """Calculate sector-specific benchmarking metrics."""
         try:
@@ -637,11 +975,71 @@ class SectorBenchmarkingProvider:
                 "sector_outperformance": float(sector_excess_return),
                 "data_points": len(aligned_data),
                 "sector_index": sector_index,
-                "sector_name": self.sector_classifier.get_sector_display_name(sector)
+                "benchmark": sector_index
             }
             
         except Exception as e:
-            logging.error(f"Error calculating sector metrics for {sector}: {e}")
+            logging.error(f"Error calculating sector metrics: {e}")
+            return None
+    
+    async def _calculate_sector_metrics_async(self, stock_returns: pd.Series, sector: str) -> Dict[str, Any]:
+        """Async version of _calculate_sector_metrics."""
+        try:
+            if not sector:
+                return None
+            
+            # Get sector index data asynchronously
+            sector_data = await self._get_sector_index_data_async(sector, 365)
+            
+            if sector_data is None or len(sector_data) < 30:
+                logging.warning(f"Insufficient sector data for {sector}")
+                return None
+            
+            sector_returns = sector_data['close'].pct_change().dropna()
+            
+            # Align data
+            aligned_data = pd.concat([stock_returns, sector_returns], axis=1).dropna()
+            if len(aligned_data) < 30:
+                return None
+            
+            stock_aligned = aligned_data.iloc[:, 0]
+            sector_aligned = aligned_data.iloc[:, 1]
+            
+            # Calculate metrics
+            sector_beta = self._calculate_beta(stock_aligned, sector_aligned)
+            sector_correlation = self._calculate_correlation(stock_aligned, sector_aligned)
+            sector_volatility_ratio = stock_aligned.std() / sector_aligned.std() if sector_aligned.std() > 0 else 1.0
+            
+            # Calculate performance metrics
+            stock_cumulative_return = (1 + stock_aligned).prod() - 1
+            sector_cumulative_return = (1 + sector_aligned).prod() - 1
+            sector_excess_return = stock_cumulative_return - sector_cumulative_return
+            
+            # Calculate Sharpe ratios
+            risk_free_rate = 0.07  # 7% annual
+            stock_sharpe = (stock_aligned.mean() * 252 - risk_free_rate) / (stock_aligned.std() * np.sqrt(252)) if stock_aligned.std() > 0 else 0
+            sector_sharpe = (sector_aligned.mean() * 252 - risk_free_rate) / (sector_aligned.std() * np.sqrt(252)) if sector_aligned.std() > 0 else 0
+            
+            # Get sector index symbol
+            sector_index = self.sector_classifier.get_primary_sector_index(sector)
+            
+            return {
+                "sector_beta": float(sector_beta),
+                "sector_correlation": float(sector_correlation),
+                "sector_volatility_ratio": float(sector_volatility_ratio),
+                "stock_return": float(stock_cumulative_return),
+                "sector_return": float(sector_cumulative_return),
+                "sector_excess_return": float(sector_excess_return),
+                "stock_sharpe": float(stock_sharpe),
+                "sector_sharpe": float(sector_sharpe),
+                "sector_outperformance": float(sector_excess_return),
+                "data_points": len(aligned_data),
+                "sector_index": sector_index,
+                "benchmark": sector_index
+            }
+            
+        except Exception as e:
+            logging.error(f"Error calculating sector metrics: {e}")
             return None
     
     def _calculate_relative_performance(self, stock_data: pd.DataFrame, sector: str, 
@@ -884,6 +1282,41 @@ class SectorBenchmarkingProvider:
             logging.error(f"Error fetching sector index data for {sector}: {e}")
             return None
     
+    async def _get_sector_index_data_async(self, sector: str, period: int = 365) -> Optional[pd.DataFrame]:
+        """Async version of _get_sector_index_data with caching."""
+        try:
+            cache_key = f"{sector}_{period}"
+            current_time = datetime.now()
+            
+            # Check cache
+            if cache_key in self.sector_data_cache:
+                cached_data, cache_time = self.sector_data_cache[cache_key]
+                if (current_time - cache_time).total_seconds() < self.cache_duration:
+                    return cached_data
+            
+            # Get sector index symbol
+            sector_index = self.sector_classifier.get_primary_sector_index(sector)
+            if not sector_index:
+                logging.warning(f"No primary index found for sector: {sector}")
+                return None
+            
+            # Fetch data from Zerodha asynchronously
+            sector_data = await self.zerodha_client.get_historical_data_async(
+                symbol=sector_index,
+                exchange="NSE",
+                period=period
+            )
+            
+            # Cache the data
+            if sector_data is not None:
+                self.sector_data_cache[cache_key] = (sector_data, current_time)
+            
+            return sector_data
+            
+        except Exception as e:
+            logging.error(f"Error fetching sector index data for {sector}: {e}")
+            return None
+    
     def _get_sector_data(self, sector: str, period: int = 365) -> Optional[pd.DataFrame]:
         """
         Get historical data for a sector (alias for _get_sector_index_data).
@@ -896,6 +1329,10 @@ class SectorBenchmarkingProvider:
             DataFrame with historical data or None if not available
         """
         return self._get_sector_index_data(sector, period)
+    
+    async def _get_sector_data_async(self, sector: str, period: int = 365) -> Optional[pd.DataFrame]:
+        """Async version of _get_sector_data."""
+        return await self._get_sector_index_data_async(sector, period)
     
     def _get_nifty_data(self, period: int = 365) -> Optional[pd.DataFrame]:
         """
@@ -919,6 +1356,39 @@ class SectorBenchmarkingProvider:
             
             # Fetch data from Zerodha
             data = self.zerodha_client.get_historical_data(
+                symbol="NIFTY 50",
+                exchange="NSE",
+                interval="day",
+                period=period
+            )
+            
+            if data is None or data.empty:
+                logging.warning(f"No data available for NIFTY 50")
+                return None
+            
+            # Cache the data
+            self.sector_data_cache[cache_key] = (data, current_time)
+                
+            return data
+            
+        except Exception as e:
+            logging.error(f"Error getting NIFTY 50 data: {e}")
+            return None
+    
+    async def _get_nifty_data_async(self, period: int = 365) -> Optional[pd.DataFrame]:
+        """Async version of _get_nifty_data with caching."""
+        try:
+            # Check cache first
+            cache_key = f"NIFTY_50_{period}"
+            current_time = datetime.now()
+            
+            if cache_key in self.sector_data_cache:
+                cached_data, cache_time = self.sector_data_cache[cache_key]
+                if (current_time - cache_time).total_seconds() < self.cache_duration:
+                    return cached_data
+            
+            # Fetch data from Zerodha asynchronously
+            data = await self.zerodha_client.get_historical_data_async(
                 symbol="NIFTY 50",
                 exchange="NSE",
                 interval="day",
@@ -1590,7 +2060,6 @@ class SectorBenchmarkingProvider:
             
         except Exception as e:
             logging.error(f"Error generating market overview: {e}")
-            return {}
-
+            return {} 
 # Global instance
-sector_benchmarking_provider = SectorBenchmarkingProvider() 
+sector_benchmarking_provider = SectorBenchmarkingProvider()

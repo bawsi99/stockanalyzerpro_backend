@@ -11,6 +11,9 @@ import json
 import hashlib
 from pathlib import Path
 import time
+import asyncio
+import aiohttp
+from concurrent.futures import ThreadPoolExecutor
 
 
 # Set up logging
@@ -135,8 +138,7 @@ def auto_refresh_token(func):
 
 class ZerodhaDataClient:
     """
-    Client for fetching real stock data from Zerodha using the official KiteConnect API.
-    This class handles authentication, data retrieval, and basic transformations.
+    Client for fetching data from Zerodha API with async support.
     """
     
     def __init__(self, api_key: str = None, api_secret: str = None, access_token: str = None):
@@ -168,6 +170,7 @@ class ZerodhaDataClient:
         self.instruments_cache = {}
         self.data_cache = {}
         self.all_instruments = None
+        self._executor = ThreadPoolExecutor(max_workers=10)  # For running sync methods in async context
         
     def _save_access_token(self, access_token: str):
         """Save the access token to the .env file, replacing the old value if present."""
@@ -456,6 +459,18 @@ class ZerodhaDataClient:
         except Exception as e:
             logger.error(f"Error getting instrument token: {str(e)}")
             return None
+
+    async def get_instrument_token_async(self, symbol: str, exchange: str = "NSE") -> Optional[int]:
+        """
+        Async version of get_instrument_token.
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self._executor,
+            self.get_instrument_token,
+            symbol,
+            exchange
+        )
     
     @auto_refresh_token
     def get_symbol_from_token(self, token: int, exchange: str = "NSE") -> Optional[str]:
@@ -608,6 +623,32 @@ class ZerodhaDataClient:
             logger.error(f"Error getting historical data: {str(e)}")
             return None
     
+    async def get_historical_data_async(
+        self, 
+        symbol: str, 
+        exchange: str = "NSE",
+        interval: str = "day", 
+        from_date: Union[str, datetime] = None,
+        to_date: Union[str, datetime] = None,
+        period: int = 365,
+        continuous: bool = False,
+    ) -> Optional[pd.DataFrame]:
+        """
+        Async version of get_historical_data for index data fetching.
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self._executor,
+            self.get_historical_data,
+            symbol,
+            exchange,
+            interval,
+            from_date,
+            to_date,
+            period,
+            continuous
+        )
+
     @auto_refresh_token
     def get_quote(self, symbol: str, exchange: str = "NSE") -> Optional[Dict]:
         """
@@ -650,6 +691,18 @@ class ZerodhaDataClient:
             print(f"Error getting quote: {str(e)}")
             return None
     
+    async def get_quote_async(self, symbol: str, exchange: str = "NSE") -> Optional[Dict]:
+        """
+        Async version of get_quote.
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self._executor,
+            self.get_quote,
+            symbol,
+            exchange
+        )
+
     @auto_refresh_token
     def get_market_status(self) -> Optional[Dict]:
         """
@@ -737,6 +790,15 @@ class ZerodhaDataClient:
             print(f"Error inferring market status: {str(e)}")
             return None
     
+    async def get_market_status_async(self) -> Optional[Dict]:
+        """
+        Async version of get_market_status.
+        """
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self._executor,
+            self.get_market_status
+        )
 
 
 # Example usage

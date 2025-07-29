@@ -68,7 +68,7 @@ class EnhancedDataService:
         
         logger.info("EnhancedDataService initialized with continuous data flow")
     
-    def get_optimal_data(self, request: DataRequest) -> DataResponse:
+    async def get_optimal_data(self, request: DataRequest) -> DataResponse:
         """
         Get optimal data based on market status and cost efficiency.
         
@@ -113,9 +113,9 @@ class EnhancedDataService:
         
         # Determine data source based on strategy
         if strategy["recommended_approach"] == "live" and not request.force_live:
-            data, source = self._get_live_data(request)
+            data, source = await self._get_live_data(request)
         else:
-            data, source = self._get_historical_data(request)
+            data, source = await self._get_historical_data(request)
         
         if data is None or data.empty:
             logger.error(f"Failed to get data for {request.symbol}")
@@ -148,14 +148,14 @@ class EnhancedDataService:
         
         return response
     
-    def _get_live_data(self, request: DataRequest) -> Tuple[Optional[pd.DataFrame], str]:
+    async def _get_live_data(self, request: DataRequest) -> Tuple[Optional[pd.DataFrame], str]:
         """Get live data from WebSocket or real-time API."""
         try:
             # Get token for the symbol
-            token = self.zerodha_client.get_instrument_token(request.symbol, request.exchange)
+            token = await self.zerodha_client.get_instrument_token_async(request.symbol, request.exchange)
             if token is None:
                 logger.warning(f"Token not found for {request.symbol}, falling back to historical")
-                return self._get_historical_data(request)
+                return await self._get_historical_data(request)
             
             # Check if we have recent WebSocket data
             if request.interval in ["1m", "5m", "15m"]:
@@ -186,7 +186,7 @@ class EnhancedDataService:
         
         return None, "error"
     
-    def _get_historical_data(self, request: DataRequest) -> Tuple[Optional[pd.DataFrame], str]:
+    async def _get_historical_data(self, request: DataRequest) -> Tuple[Optional[pd.DataFrame], str]:
         """Get historical data from Zerodha API."""
         try:
             # Map interval format to Zerodha format
@@ -200,7 +200,7 @@ class EnhancedDataService:
             
             zerodha_interval = interval_mapping.get(request.interval, request.interval)
             
-            data = self.zerodha_client.get_historical_data(
+            data = await self.zerodha_client.get_historical_data_async(
                 symbol=request.symbol,
                 exchange=request.exchange,
                 interval=zerodha_interval,

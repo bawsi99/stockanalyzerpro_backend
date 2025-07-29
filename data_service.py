@@ -964,7 +964,7 @@ async def get_stock_history(
         }
         
         max_period = period_mapping.get(backend_interval, 365)
-        df = zerodha_client.get_historical_data(
+        df = await zerodha_client.get_historical_data_async(
             symbol=symbol,
             exchange=exchange,
             interval=backend_interval,
@@ -1070,7 +1070,7 @@ async def get_optimized_data(request: OptimizedDataRequest):
         )
         
         # Get optimized data
-        response = enhanced_data_service.get_optimal_data(data_request)
+        response = await enhanced_data_service.get_optimal_data(data_request)
         
         if response.data is None or response.data.empty:
             raise HTTPException(status_code=404, detail=f"No data found for {request.symbol}")

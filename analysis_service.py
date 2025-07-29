@@ -49,6 +49,7 @@ from sector_classifier import sector_classifier
 from enhanced_sector_classifier import enhanced_sector_classifier
 from patterns.recognition import PatternRecognition
 from technical_indicators import TechnicalIndicators
+from simple_database_manager import simple_db_manager
 
 app = FastAPI(title="Stock Analysis Service", version="1.0.0")
 
@@ -245,6 +246,50 @@ def validate_analysis_results(results: dict) -> dict:
     
     return validated_results
 
+def resolve_user_id(user_id: Optional[str] = None, email: Optional[str] = None) -> str:
+    """
+    Resolve user ID from provided user_id or email.
+    Email mapping is the primary method for user identification.
+    
+    Args:
+        user_id: Optional user ID (UUID)
+        email: Optional user email for ID mapping
+        
+    Returns:
+        str: Valid user ID (UUID)
+        
+    Raises:
+        ValueError: If no valid user ID can be resolved
+    """
+    try:
+        # If user_id is provided and valid, use it
+        if user_id:
+            try:
+                uuid.UUID(user_id)
+                # Ensure user exists
+                simple_db_manager.ensure_user_exists(user_id)
+                print(f"✅ Using provided user ID: {user_id}")
+                return user_id
+            except (ValueError, TypeError):
+                print(f"⚠️ Invalid user_id format: {user_id}")
+        
+        # If email is provided, try to get user ID from email
+        if email:
+            resolved_user_id = simple_db_manager.get_user_id_by_email(email)
+            if resolved_user_id:
+                print(f"✅ Resolved user ID from email: {email} -> {resolved_user_id}")
+                return resolved_user_id
+            else:
+                print(f"❌ User not found for email: {email}")
+                raise ValueError(f"User not found for email: {email}")
+        
+        # No user_id or email provided
+        raise ValueError("No user_id or email provided for analysis request")
+        
+    except Exception as e:
+        print(f"❌ Error resolving user ID: {e}")
+        raise ValueError(f"Failed to resolve user ID: {e}")
+
 # --- Pydantic Models ---
 class AnalysisRequest(BaseModel):
     stock: str = Field(..., description="Stock symbol to analyze")
@@ -253,6 +298,8 @@ class AnalysisRequest(BaseModel):
     interval: str = Field(default="day", description="Data interval")
     output: Optional[str] = Field(default=None, description="Output directory")
     sector: Optional[str] = Field(default=None, description="Optional sector override")
+    user_id: Optional[str] = Field(default=None, description="User ID (UUID)")
+    email: Optional[str] = Field(default=None, description="User email for ID mapping")
 
 class EnhancedAnalysisRequest(BaseModel):
     stock: str = Field(..., description="Stock symbol to analyze")
@@ -262,6 +309,8 @@ class EnhancedAnalysisRequest(BaseModel):
     output: Optional[str] = Field(default=None, description="Output directory")
     sector: Optional[str] = Field(default=None, description="Optional sector override")
     enable_code_execution: bool = Field(default=True, description="Enable mathematical validation with code execution")
+    user_id: Optional[str] = Field(default=None, description="User ID (UUID)")
+    email: Optional[str] = Field(default=None, description="User email for ID mapping")
 
 class SectorAnalysisRequest(BaseModel):
     sector: str = Field(..., description="Sector to analyze")
@@ -360,20 +409,63 @@ async def analyze(request: AnalysisRequest):
         # Make all data JSON serializable
         serialized_results = make_json_serializable(results)
 
-        # Store analysis in Supabase
-        # Generate a proper UUID for anonymous/system users
-        user_id = getattr(request, 'user_id', None)
-        if not user_id:
-            # Generate a UUID for anonymous/system users
-            user_id = str(uuid.uuid4())
-        store_analysis_in_supabase(
-            serialized_results, 
-            user_id, 
-            request.stock,
-            exchange=request.exchange,
-            period=request.period,
-            interval=request.interval
-        )
+        # Resolve user ID from request
+        try:
+            resolved_user_id = resolve_user_id(
+                user_id=request.user_id,
+                email=request.email
+            )
+
+            # Store analysis in Supabase using simple database manager
+            analysis_id = simple_db_manager.store_analysis(
+                analysis=serialized_results,
+                user_id=resolved_user_id,
+                symbol=request.stock,
+                exchange=request.exchange,
+                period=request.period,
+                interval=request.interval
+            )
+            
+            if not analysis_id:
+                print(f"⚠️ Warning: Failed to store analysis for {request.stock}")
+            else:
+                print(f"✅ Successfully stored analysis for {request.stock} with ID: {analysis_id}")
+                
+                # 🔍 DEBUGGING: Verify storage with correct user ID
+                print(f"🔍 DEBUGGING: Verifying analysis storage...")
+                print(f"   - Analysis ID: {analysis_id}")
+                print(f"   - Expected User ID: {resolved_user_id}")
+                
+                # Query database to fetch the stored analysis
+                try:
+                    stored_analysis = simple_db_manager.supabase.table("stock_analyses_simple").select("user_id").eq("id", analysis_id).execute()
+                    
+                    if stored_analysis.data and len(stored_analysis.data) > 0:
+                        actual_user_id = stored_analysis.data[0].get('user_id')
+                        print(f"   - Actual User ID from DB: {actual_user_id}")
+                        
+                        if actual_user_id == resolved_user_id:
+                            print(f"   ✅ VERIFICATION PASSED: User ID matches!")
+                        else:
+                            print(f"   ❌ VERIFICATION FAILED: User ID mismatch!")
+                            print(f"      Expected: {resolved_user_id}")
+                            print(f"      Actual: {actual_user_id}")
+                    else:
+                        print(f"   ❌ VERIFICATION FAILED: Analysis not found in database")
+                        
+                except Exception as db_error:
+                    print(f"   ❌ VERIFICATION ERROR: {db_error}")
+                
+                print(f"🔍 DEBUGGING: Verification complete")
+                
+        except ValueError as e:
+            print(f"❌ User ID resolution failed: {e}")
+            # Continue with analysis but don't store it
+            print(f"⚠️ Analysis completed but not stored due to user ID resolution failure")
+        except Exception as e:
+            print(f"❌ Error storing analysis: {e}")
+            # Continue with analysis but don't store it
+            print(f"⚠️ Analysis completed but not stored due to storage error")
 
         # Clean, efficient response
         response = {
@@ -453,6 +545,64 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         if 'charts' in validated_result:
             validated_result['charts'] = convert_charts_to_base64(validated_result['charts'])
         
+        # Resolve user ID from request
+        try:
+            resolved_user_id = resolve_user_id(
+                user_id=request.user_id,
+                email=request.email
+            )
+
+            # Store analysis in Supabase using simple database manager
+            analysis_id = simple_db_manager.store_analysis(
+                analysis=validated_result,
+                user_id=resolved_user_id,
+                symbol=request.stock,
+                exchange=request.exchange,
+                period=request.period,
+                interval=request.interval
+            )
+            
+            if not analysis_id:
+                print(f"⚠️ Warning: Failed to store enhanced analysis for {request.stock}")
+            else:
+                print(f"✅ Successfully stored enhanced analysis for {request.stock} with ID: {analysis_id}")
+                
+                # 🔍 DEBUGGING: Verify storage with correct user ID
+                print(f"🔍 DEBUGGING: Verifying enhanced analysis storage...")
+                print(f"   - Analysis ID: {analysis_id}")
+                print(f"   - Expected User ID: {resolved_user_id}")
+                
+                # Query database to fetch the stored analysis
+                try:
+                    stored_analysis = simple_db_manager.supabase.table("stock_analyses_simple").select("user_id").eq("id", analysis_id).execute()
+                    
+                    if stored_analysis.data and len(stored_analysis.data) > 0:
+                        actual_user_id = stored_analysis.data[0].get('user_id')
+                        print(f"   - Actual User ID from DB: {actual_user_id}")
+                        
+                        if actual_user_id == resolved_user_id:
+                            print(f"   ✅ VERIFICATION PASSED: User ID matches!")
+                        else:
+                            print(f"   ❌ VERIFICATION FAILED: User ID mismatch!")
+                            print(f"      Expected: {resolved_user_id}")
+                            print(f"      Actual: {actual_user_id}")
+                    else:
+                        print(f"   ❌ VERIFICATION FAILED: Analysis not found in database")
+                        
+                except Exception as db_error:
+                    print(f"   ❌ VERIFICATION ERROR: {db_error}")
+                
+                print(f"🔍 DEBUGGING: Verification complete")
+                
+        except ValueError as e:
+            print(f"❌ User ID resolution failed: {e}")
+            # Continue with analysis but don't store it
+            print(f"⚠️ Enhanced analysis completed but not stored due to user ID resolution failure")
+        except Exception as e:
+            print(f"❌ Error storing enhanced analysis: {e}")
+            # Continue with analysis but don't store it
+            print(f"⚠️ Enhanced analysis completed but not stored due to storage error")
+        
         print(f"[ENHANCED ANALYSIS] Completed enhanced analysis for {request.stock}")
         return JSONResponse(content=validated_result, status_code=200)
         
@@ -471,6 +621,49 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             status_code=500
         )
 
+@app.post("/analyze/async")
+async def analyze_async(request: AnalysisRequest):
+    """Perform comprehensive stock analysis with async index data fetching for better performance."""
+    output_dir = request.output or f"./output/{request.stock}"
+    os.makedirs(output_dir, exist_ok=True)
+
+    try:
+        orchestrator = StockAnalysisOrchestrator()
+        # Authenticate
+        auth_success = orchestrator.authenticate()
+        if not auth_success:
+            raise HTTPException(status_code=401, detail="Failed to authenticate with Zerodha API")
+
+        # Analyze stock with async index data fetching
+        results, success_message, error_message = await orchestrator.analyze_stock_with_async_index_data(
+            symbol=request.stock,
+            exchange=request.exchange,
+            period=request.period,
+            interval=request.interval,
+            output_dir=output_dir,
+            sector=request.sector  # Pass sector information
+        )
+        
+        if error_message:
+            raise HTTPException(status_code=500, detail=error_message)
+
+        # Make all data JSON serializable
+        serialized_results = make_json_serializable(results)
+        
+        return {
+            "success": True,
+            "message": success_message,
+            "data": serialized_results,
+            "analysis_type": "async_index_data",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in async analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
 @app.post("/sector/benchmark")
 async def sector_benchmark(request: AnalysisRequest):
     """Get sector benchmarking for a specific stock."""
@@ -480,7 +673,7 @@ async def sector_benchmark(request: AnalysisRequest):
         if not orchestrator.authenticate():
             raise HTTPException(status_code=401, detail="Authentication failed")
         
-        data = orchestrator.retrieve_stock_data(
+        data = await orchestrator.retrieve_stock_data(
             symbol=request.stock,
             exchange=request.exchange,
             period=request.period,
@@ -491,7 +684,7 @@ async def sector_benchmark(request: AnalysisRequest):
             raise HTTPException(status_code=404, detail="Stock data not found")
         
         # Get comprehensive sector benchmarking
-        benchmarking = sector_benchmarking_provider.get_comprehensive_benchmarking(request.stock, data)
+        benchmarking = await sector_benchmarking_provider.get_comprehensive_benchmarking_async(request.stock, data)
         
         # Make JSON serializable
         serialized_benchmarking = make_json_serializable(benchmarking)
@@ -514,6 +707,53 @@ async def sector_benchmark(request: AnalysisRequest):
             "timestamp": pd.Timestamp.now().isoformat()
         }
         raise HTTPException(status_code=500, detail=error_response)
+
+@app.post("/sector/benchmark/async")
+async def sector_benchmark_async(request: AnalysisRequest):
+    """Get sector benchmarking with async index data fetching."""
+    try:
+        from sector_benchmarking import SectorBenchmarkingProvider
+        
+        # Create sector benchmarking provider
+        provider = SectorBenchmarkingProvider()
+        
+        # Get stock data first
+        orchestrator = StockAnalysisOrchestrator()
+        auth_success = orchestrator.authenticate()
+        if not auth_success:
+            raise HTTPException(status_code=401, detail="Failed to authenticate with Zerodha API")
+        
+        stock_data = await orchestrator.retrieve_stock_data(
+            symbol=request.stock,
+            exchange=request.exchange,
+            interval=request.interval,
+            period=request.period
+        )
+        
+        if stock_data.empty:
+            raise HTTPException(status_code=404, detail=f"No data available for {request.stock}")
+        
+        # Get comprehensive benchmarking with async index data
+        benchmarking_results = await provider.get_comprehensive_benchmarking_async(
+            request.stock, 
+            stock_data
+        )
+        
+        # Make data JSON serializable
+        serialized_results = make_json_serializable(benchmarking_results)
+        
+        return {
+            "success": True,
+            "data": serialized_results,
+            "analysis_type": "async_sector_benchmarking",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in async sector benchmarking: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Sector benchmarking failed: {str(e)}")
 
 @app.get("/sector/list")
 async def get_sectors():
@@ -584,7 +824,7 @@ async def get_sector_performance(sector_name: str, period: int = 365):
         if not orchestrator.authenticate():
             raise HTTPException(status_code=401, detail="Authentication failed")
         
-        sector_data = orchestrator.retrieve_stock_data(
+        sector_data = await orchestrator.retrieve_stock_data(
             symbol=sector_index,
             exchange="NSE",
             period=period,
@@ -648,7 +888,7 @@ async def compare_sectors(request: SectorComparisonRequest):
                     if not orchestrator.authenticate():
                         raise HTTPException(status_code=401, detail="Authentication failed")
                     
-                    sector_data = orchestrator.retrieve_stock_data(
+                    sector_data = await orchestrator.retrieve_stock_data(
                         symbol=sector_index,
                         exchange="NSE",
                         period=request.period,
@@ -852,9 +1092,9 @@ async def get_stock_indicators(
         if 'bollinger' in requested_indicators:
             bb_result = TechnicalIndicators.calculate_bollinger_bands(df, column='close', window=20, num_std=2.0)
             indicators_data['bollinger_bands'] = {
-                'upper': [float(val) if not pd.isna(val) else None for val in bb_result[0]],
-                'middle': [float(val) if not pd.isna(val) else None for val in bb_result[1]],
-                'lower': [float(val) if not pd.isna(val) else None for val in bb_result[2]]
+                'upper_band': [float(val) if not pd.isna(val) else None for val in bb_result[0]],
+                'middle_band': [float(val) if not pd.isna(val) else None for val in bb_result[1]],
+                'lower_band': [float(val) if not pd.isna(val) else None for val in bb_result[2]]
             }
         
         # Ensure proper datetime index for timestamp conversion
@@ -1097,6 +1337,219 @@ async def get_charts(
             "timestamp": pd.Timestamp.now().isoformat()
         }
         raise HTTPException(status_code=500, detail=error_response)
+
+# ===== USER ANALYSIS ENDPOINTS =====
+
+@app.get("/analyses/user/{user_id}")
+async def get_user_analyses(user_id: str, limit: int = 50):
+    """Get analysis history for a user."""
+    try:
+        # Import the database manager
+        from simple_database_manager import simple_db_manager
+        
+        # Validate that user_id is not empty
+        if not user_id or not user_id.strip():
+            raise HTTPException(status_code=400, detail="user_id cannot be empty.")
+        
+        user_id = user_id.strip()
+        
+        # Check if user_id is a valid UUID
+        try:
+            uuid.UUID(user_id)
+            # If it's a valid UUID, use it directly
+            actual_user_id = user_id
+        except (ValueError, TypeError):
+            # If it's not a UUID, assume it's an email and look up the UUID
+            actual_user_id = simple_db_manager.get_user_id_by_email(user_id)
+            if not actual_user_id:
+                raise HTTPException(status_code=404, detail=f"User not found: {user_id}")
+        
+        analyses = simple_db_manager.get_user_analyses(actual_user_id, limit)
+        return {
+            "success": True,
+            "analyses": analyses,
+            "count": len(analyses)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch user analyses: {str(e)}")
+
+@app.get("/analyses/{analysis_id}")
+async def get_analysis_by_id(analysis_id: str):
+    """Get a specific analysis by ID."""
+    try:
+        from simple_database_manager import simple_db_manager
+        
+        # Validate that analysis_id is not empty
+        if not analysis_id or not analysis_id.strip():
+            raise HTTPException(status_code=400, detail="analysis_id cannot be empty.")
+        
+        # For now, accept any non-empty string as analysis_id
+        analysis_id = analysis_id.strip()
+        
+        analysis = simple_db_manager.get_analysis_by_id(analysis_id)
+        if not analysis:
+            raise HTTPException(status_code=404, detail=f"Analysis not found: {analysis_id}")
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch analysis: {str(e)}")
+
+@app.get("/analyses/signal/{signal}")
+async def get_analyses_by_signal(signal: str, user_id: Optional[str] = None, limit: int = 20):
+    """Get analyses filtered by signal type."""
+    try:
+        from simple_database_manager import simple_db_manager
+        
+        actual_user_id = None
+        if user_id:
+            # Validate that user_id is not empty
+            if not user_id.strip():
+                raise HTTPException(status_code=400, detail="user_id cannot be empty.")
+            
+            user_id = user_id.strip()
+            
+            # Check if user_id is a valid UUID
+            try:
+                uuid.UUID(user_id)
+                # If it's a valid UUID, use it directly
+                actual_user_id = user_id
+            except (ValueError, TypeError):
+                # If it's not a UUID, assume it's an email and look up the UUID
+                actual_user_id = simple_db_manager.get_user_id_by_email(user_id)
+                if not actual_user_id:
+                    raise HTTPException(status_code=404, detail=f"User not found: {user_id}")
+        
+        analyses = simple_db_manager.get_analyses_by_signal(signal, actual_user_id, limit)
+        return {
+            "success": True,
+            "analyses": analyses,
+            "count": len(analyses)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch analyses by signal: {str(e)}")
+
+@app.get("/analyses/sector/{sector}")
+async def get_analyses_by_sector(sector: str, user_id: Optional[str] = None, limit: int = 20):
+    """Get analyses filtered by sector."""
+    try:
+        from simple_database_manager import simple_db_manager
+        
+        actual_user_id = None
+        if user_id:
+            # Validate that user_id is not empty
+            if not user_id.strip():
+                raise HTTPException(status_code=400, detail="user_id cannot be empty.")
+            
+            user_id = user_id.strip()
+            
+            # Check if user_id is a valid UUID
+            try:
+                uuid.UUID(user_id)
+                # If it's a valid UUID, use it directly
+                actual_user_id = user_id
+            except (ValueError, TypeError):
+                # If it's not a UUID, assume it's an email and look up the UUID
+                actual_user_id = simple_db_manager.get_user_id_by_email(user_id)
+                if not actual_user_id:
+                    raise HTTPException(status_code=404, detail=f"User not found: {user_id}")
+        
+        analyses = simple_db_manager.get_analyses_by_sector(sector, actual_user_id, limit)
+        return {
+            "success": True,
+            "analyses": analyses,
+            "count": len(analyses)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch analyses by sector: {str(e)}")
+
+@app.get("/analyses/confidence/{min_confidence}")
+async def get_high_confidence_analyses(min_confidence: float = 80.0, user_id: Optional[str] = None, limit: int = 20):
+    """Get analyses with confidence above threshold."""
+    try:
+        from simple_database_manager import simple_db_manager
+        
+        actual_user_id = None
+        if user_id:
+            # Validate that user_id is not empty
+            if not user_id.strip():
+                raise HTTPException(status_code=400, detail="user_id cannot be empty.")
+            
+            user_id = user_id.strip()
+            
+            # Check if user_id is a valid UUID
+            try:
+                uuid.UUID(user_id)
+                # If it's a valid UUID, use it directly
+                actual_user_id = user_id
+            except (ValueError, TypeError):
+                # If it's not a UUID, assume it's an email and look up the UUID
+                actual_user_id = simple_db_manager.get_user_id_by_email(user_id)
+                if not actual_user_id:
+                    raise HTTPException(status_code=404, detail=f"User not found: {user_id}")
+        
+        analyses = simple_db_manager.get_high_confidence_analyses(min_confidence, actual_user_id, limit)
+        return {
+            "success": True,
+            "analyses": analyses,
+            "count": len(analyses)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch high confidence analyses: {str(e)}")
+
+@app.get("/analyses/summary/user/{user_id}")
+async def get_user_analysis_summary(user_id: str):
+    """Get analysis summary for a user."""
+    try:
+        from simple_database_manager import simple_db_manager
+        
+        # Validate that user_id is not empty
+        if not user_id or not user_id.strip():
+            raise HTTPException(status_code=400, detail="user_id cannot be empty.")
+        
+        user_id = user_id.strip()
+        
+        # Check if user_id is a valid UUID
+        try:
+            uuid.UUID(user_id)
+            # If it's a valid UUID, use it directly
+            actual_user_id = user_id
+        except (ValueError, TypeError):
+            # If it's not a UUID, assume it's an email and look up the UUID
+            actual_user_id = simple_db_manager.get_user_id_by_email(user_id)
+            if not actual_user_id:
+                raise HTTPException(status_code=404, detail=f"User not found: {user_id}")
+        
+        analyses = simple_db_manager.get_user_analyses(actual_user_id, 50)
+        
+        # Create summary
+        summary = {
+            "total_analyses": len(analyses),
+            "unique_stocks": len(set(analysis.get("stock_symbol", "") for analysis in analyses)),
+            "recent_analyses": analyses[:5] if analyses else [],
+            "sectors_analyzed": list(set(analysis.get("sector", "") for analysis in analyses if analysis.get("sector")))
+        }
+        
+        return {
+            "success": True,
+            "summary": summary
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch user analysis summary: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

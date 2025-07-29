@@ -73,7 +73,7 @@ class StockAnalysisOrchestrator:
             self.state_cache[key] = AnalysisState(symbol=symbol, exchange=exchange)
         return self.state_cache[key]
     
-    def retrieve_stock_data(self, symbol: str, exchange: str = "NSE", interval: str = "day", period: int = 365) -> pd.DataFrame:
+    async def retrieve_stock_data(self, symbol: str, exchange: str = "NSE", interval: str = "day", period: int = 365) -> pd.DataFrame:
         """
         Retrieve real-time or historical stock data, preferring real-time streaming data if available.
         """
@@ -119,7 +119,7 @@ class StockAnalysisOrchestrator:
                 else:
                     logger.warning(f"No real-time candles found for {symbol}. Falling back to historical data.")
         # Fallback: use historical data
-        data = self.data_client.get_historical_data(
+        data = await self.data_client.get_historical_data_async(
             symbol=symbol,
             exchange=exchange,
             interval=interval,
@@ -291,7 +291,7 @@ Consider this sector context when analyzing the stock's technical indicators and
             state = self._get_or_create_state(symbol, exchange)
             
             # Retrieve stock data
-            stock_data = self.retrieve_stock_data(symbol, exchange, interval, period)
+            stock_data = await self.retrieve_stock_data(symbol, exchange, interval, period)
             if stock_data.empty:
                 return None, None, f"No data available for {symbol}"
             # Warn if data is not real-time
@@ -327,9 +327,9 @@ Consider this sector context when analyzing the stock's technical indicators and
             if sector:
                 try:
                     # Get sector benchmarking using the correct provider
-                    sector_benchmarking = self.sector_benchmarking_provider.get_comprehensive_benchmarking(symbol, stock_data)
-                    sector_rotation = self.sector_benchmarking_provider.analyze_sector_rotation("3M")
-                    sector_correlation = self.sector_benchmarking_provider.generate_sector_correlation_matrix("6M")
+                    sector_benchmarking = await self.sector_benchmarking_provider.get_comprehensive_benchmarking_async(symbol, stock_data)
+                    sector_rotation = await self.sector_benchmarking_provider.analyze_sector_rotation_async("3M")
+                    sector_correlation = await self.sector_benchmarking_provider.generate_sector_correlation_matrix_async("6M")
                     enhanced_sector_context = self._build_enhanced_sector_context(
                         sector, sector_benchmarking, sector_rotation, sector_correlation
                     )
@@ -376,6 +376,7 @@ Consider this sector context when analyzing the stock's technical indicators and
                     'exchange': exchange,
                     'analysis_date': datetime.now().isoformat(),
                     'data_period': f"{period} days",
+                    'period_days': period,
                     'interval': interval,
                     'sector': sector
                 }
@@ -631,7 +632,7 @@ Consider this sector context when analyzing the stock's technical indicators and
             
             # Step 1: Retrieve stock data
             logger.info(f"[ENHANCED ANALYSIS] Retrieving data for {symbol}")
-            data = self.retrieve_stock_data(symbol, exchange, interval, period)
+            data = await self.retrieve_stock_data(symbol, exchange, interval, period)
             if data.empty:
                 raise ValueError(f"No data available for {symbol}")
             
@@ -917,4 +918,146 @@ if __name__ == "__main__":
         if "parts" in content and content["parts"]:
             logger.info("\nInvestment Recommendation:")
             logger.info(content["parts"][0]["text"])
+
+    async def get_sector_context_async(self, symbol: str, stock_data: pd.DataFrame, sector: str) -> Dict[str, Any]:
+        """
+        Get sector context asynchronously using async index data fetching.
+        """
+        try:
+            # Get sector benchmarking using async methods
+            sector_benchmarking = await self.sector_benchmarking_provider.get_comprehensive_benchmarking_async(symbol, stock_data)
+            
+            # Get sector rotation and correlation (these are still sync for now)
+            sector_rotation = await self.sector_benchmarking_provider.analyze_sector_rotation_async("3M")
+            sector_correlation = await self.sector_benchmarking_provider.generate_sector_correlation_matrix_async("6M")
+            
+            # Build enhanced sector context
+            enhanced_sector_context = self._build_enhanced_sector_context(
+                sector, sector_benchmarking, sector_rotation, sector_correlation
+            )
+            
+            return {
+                'sector_benchmarking': sector_benchmarking,
+                'sector_rotation': sector_rotation,
+                'sector_correlation': sector_correlation,
+                'enhanced_sector_context': enhanced_sector_context
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting async sector context for {sector}: {e}")
+            return {}
+
+    async def analyze_stock_with_async_index_data(self, symbol: str, exchange: str = "NSE",
+                     period: int = 365, interval: str = "day", output_dir: str = None, 
+                     knowledge_context: str = "", sector: str = None) -> tuple:
+        """
+        Enhanced analysis method that uses async index data fetching for better performance.
+        """
+        try:
+            # Get or create analysis state
+            state = self._get_or_create_state(symbol, exchange)
+            
+            # Retrieve stock data
+            stock_data = await self.retrieve_stock_data(symbol, exchange, interval, period)
+            if stock_data.empty:
+                return None, None, f"No data available for {symbol}"
+            
+            # Warn if data is not real-time
+            if stock_data.attrs.get('data_freshness') != 'real_time':
+                logger.warning(f"Data for {symbol} is not real-time (freshness: {stock_data.attrs.get('data_freshness')}). Analysis may be based on stale data.")
+            
+            # --- MTF/LONG-TERM ANALYSIS ---
+            # Map interval to base_interval for MTF utility
+            interval_map = {
+                'minute': 'minute', '3minute': 'minute', '5minute': 'minute', '10minute': 'minute', '15minute': 'minute', '30minute': 'minute', '60minute': 'hour',
+                'day': 'day', 'week': 'week', 'month': 'month'
+            }
+            base_interval = interval_map.get(interval, 'day')
+            try:
+                mtf_result = multi_timeframe_analysis(stock_data, base_interval=base_interval)
+            except Exception as e:
+                mtf_result = {'messages': [f"Error in multi-timeframe analysis: {e}"]}
+            
+            # Calculate technical indicators (for AI analysis, not consensus)
+            state.indicators = self.calculate_indicators(stock_data, symbol)
+            
+            # Create visualizations for AI analysis
+            chart_paths = {}
+            if output_dir:
+                chart_paths = self.create_visualizations(stock_data, state.indicators, symbol, output_dir)
+            
+            # Get sector context asynchronously if available
+            sector_context = {}
+            if sector:
+                try:
+                    sector_context = await self.get_sector_context_async(symbol, stock_data, sector)
+                    enhanced_sector_context = sector_context.get('enhanced_sector_context')
+                except Exception as e:
+                    logger.warning(f"Could not get async sector context for {sector}: {e}")
+                    enhanced_sector_context = None
+            else:
+                enhanced_sector_context = None
+            
+            # Get AI analysis (primary analysis method)
+            ai_analysis, ind_summary_md, chart_insights_md = await self.analyze_with_ai(
+                symbol, state.indicators, chart_paths, period, interval, knowledge_context, enhanced_sector_context
+            )
+            
+            # Convert indicators to serializable format
+            serializable_indicators = self.serialize_indicators(state.indicators)
+            
+            # Create overlays for visualization
+            overlays = self._create_overlays(stock_data, state.indicators)
+            
+            # Build comprehensive analysis results
+            analysis_results = {
+                'ai_analysis': ai_analysis,
+                'indicators': serializable_indicators,
+                'overlays': overlays,
+                'indicator_summary_md': ind_summary_md,
+                'chart_insights': chart_insights_md,
+                'sector_benchmarking': sector_context.get('sector_benchmarking'),
+                'sector_rotation': sector_context.get('sector_rotation'),
+                'sector_correlation': sector_context.get('sector_correlation'),
+                'multi_timeframe_analysis': mtf_result,
+                'summary': {
+                    'overall_signal': ai_analysis.get('trend', 'Unknown'),
+                    'confidence': ai_analysis.get('confidence_pct', 0),
+                    'analysis_method': 'AI-Powered Analysis with Async Index Data',
+                    'analysis_quality': 'High',
+                    'risk_level': self._determine_risk_level(ai_analysis),
+                    'recommendation': self._generate_recommendation(ai_analysis)
+                },
+                'trading_guidance': {
+                    'short_term': ai_analysis.get('short_term', {}),
+                    'medium_term': ai_analysis.get('medium_term', {}),
+                    'long_term': ai_analysis.get('long_term', {}),
+                    'risk_management': ai_analysis.get('risks', []),
+                    'key_levels': ai_analysis.get('must_watch_levels', [])
+                },
+                'metadata': {
+                    'symbol': symbol,
+                    'exchange': exchange,
+                    'analysis_date': datetime.now().isoformat(),
+                    'data_period': f"{period} days",
+                    'period_days': period,
+                    'interval': interval,
+                    'sector': sector,
+                    'analysis_type': 'async_index_data',
+                    'data_freshness': stock_data.attrs.get('data_freshness', 'unknown')
+                }
+            }
+            
+            # Update state
+            state.update(
+                indicators=state.indicators,
+                analysis_results=analysis_results
+            )
+            
+            return analysis_results, "Analysis completed successfully with async index data", None
+            
+        except Exception as e:
+            error_msg = f"Error in async index data analysis: {str(e)}"
+            logger.error(error_msg)
+            return None, None, error_msg
 
