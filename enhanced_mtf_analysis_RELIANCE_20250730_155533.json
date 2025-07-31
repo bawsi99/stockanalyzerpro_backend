@@ -1,0 +1,232 @@
+{
+  "success": true,
+  "symbol": "RELIANCE",
+  "exchange": "NSE",
+  "analysis_timestamp": "2025-07-30T15:55:33.710226",
+  "timeframe_analyses": {
+    "1min": {
+      "trend": "neutral",
+      "confidence": 0.0,
+      "data_points": 8250,
+      "key_indicators": {
+        "rsi": 71.11111111111425,
+        "macd_signal": "neutral",
+        "volume_status": null,
+        "support_levels": [
+          1510.5,
+          1542.0,
+          1479.1
+        ],
+        "resistance_levels": [
+          1521.0,
+          1488.1,
+          1449.9
+        ]
+      },
+      "patterns": [
+        "candlestick",
+        "double_tops",
+        "double_bottoms",
+        "triangles",
+        "head_shoulders"
+      ],
+      "risk_metrics": {
+        "current_price": 1411.0,
+        "volatility": 0.009080615052849217,
+        "max_drawdown": -0.10689877498388134
+      }
+    },
+    "5min": {
+      "trend": "neutral",
+      "confidence": 0.0,
+      "data_points": 3225,
+      "key_indicators": {
+        "rsi": 37.719298245614574,
+        "macd_signal": "neutral",
+        "volume_status": null,
+        "support_levels": [
+          1408.5,
+          1437.0,
+          1479.5
+        ],
+        "resistance_levels": [
+          1417.5,
+          1454.7,
+          1488.0
+        ]
+      },
+      "patterns": [
+        "candlestick",
+        "double_tops",
+        "double_bottoms",
+        "triangles",
+        "head_shoulders"
+      ],
+      "risk_metrics": {
+        "current_price": 1411.0,
+        "volatility": 0.01864298767704661,
+        "max_drawdown": -0.10639669847820481
+      }
+    },
+    "15min": {
+      "trend": "neutral",
+      "confidence": 0.0,
+      "data_points": 1600,
+      "key_indicators": {
+        "rsi": 47.70992366412206,
+        "macd_signal": "neutral",
+        "volume_status": null,
+        "support_levels": [
+          1398.1,
+          1437.0,
+          1496.0
+        ],
+        "resistance_levels": [
+          1439.5,
+          1468.6,
+          1524.8
+        ]
+      },
+      "patterns": [
+        "candlestick",
+        "double_tops",
+        "double_bottoms",
+        "triangles",
+        "head_shoulders"
+      ],
+      "risk_metrics": {
+        "current_price": 1411.0,
+        "volatility": 0.03517215754320074,
+        "max_drawdown": -0.10628143944279632
+      }
+    },
+    "30min": {
+      "trend": "neutral",
+      "confidence": 0.0,
+      "data_points": 1066,
+      "key_indicators": {
+        "rsi": 43.76590330788788,
+        "macd_signal": "neutral",
+        "volume_status": null,
+        "support_levels": [
+          1114.85,
+          1227.6,
+          1285.4
+        ],
+        "resistance_levels": [
+          1251.0,
+          1306.0,
+          1439.5
+        ]
+      },
+      "patterns": [
+        "candlestick",
+        "double_tops",
+        "double_bottoms",
+        "triangles",
+        "head_shoulders"
+      ],
+      "risk_metrics": {
+        "current_price": 1411.0,
+        "volatility": 0.061796267065158075,
+        "max_drawdown": -0.10582010582010583
+      }
+    },
+    "1hour": {
+      "trend": "neutral",
+      "confidence": 0.0,
+      "data_points": 854,
+      "key_indicators": {
+        "rsi": 70.21996615905256,
+        "macd_signal": "neutral",
+        "volume_status": null,
+        "support_levels": [
+          1193.35,
+          1156.0,
+          1233.1
+        ],
+        "resistance_levels": [
+          1290.5,
+          1240.0,
+          1439.5
+        ]
+      },
+      "patterns": [
+        "candlestick",
+        "double_tops",
+        "double_bottoms",
+        "triangles",
+        "head_shoulders"
+      ],
+      "risk_metrics": {
+        "current_price": 1411.0,
+        "volatility": 0.08278663429235353,
+        "max_drawdown": -0.12297063903281523
+      }
+    },
+    "1day": {
+      "trend": "neutral",
+      "confidence": 0.0,
+      "data_points": 251,
+      "key_indicators": {
+        "rsi": 22.429906542056017,
+        "macd_signal": "neutral",
+        "volume_status": null,
+        "support_levels": [
+          1217.25,
+          1156.0,
+          1114.85
+        ],
+        "resistance_levels": [
+          1539.7,
+          1329.95
+        ]
+      },
+      "patterns": [
+        "candlestick",
+        "double_tops",
+        "double_bottoms",
+        "triangles",
+        "head_shoulders"
+      ],
+      "risk_metrics": {
+        "current_price": 1411.0,
+        "volatility": 0.2120816983138726,
+        "max_drawdown": -0.238697418424846
+      }
+    }
+  },
+  "cross_timeframe_validation": {
+    "consensus_trend": "neutral",
+    "signal_strength": 0.5,
+    "confidence_score": 0.5,
+    "supporting_timeframes": [
+      "1min",
+      "5min",
+      "15min",
+      "30min",
+      "1hour",
+      "1day"
+    ],
+    "conflicting_timeframes": [],
+    "neutral_timeframes": [
+      "1min",
+      "5min",
+      "15min",
+      "30min",
+      "1hour",
+      "1day"
+    ],
+    "divergence_detected": false,
+    "divergence_type": null,
+    "key_conflicts": []
+  },
+  "summary": {
+    "overall_signal": "neutral",
+    "confidence": 0.5,
+    "timeframes_analyzed": 6,
+    "signal_alignment": "aligned",
+    "risk_level": "High",
+    "recommendation": "Wait for better signals"
+  }
+}

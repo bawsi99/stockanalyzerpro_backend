@@ -513,7 +513,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 period=request.period,
                 interval=request.interval,
                 output_dir=request.output,
-                sector_override=request.sector
+                sector=request.sector
             )
         else:
             # Fallback to regular analysis
@@ -523,7 +523,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 period=request.period,
                 interval=request.interval,
                 output_dir=request.output,
-                sector_override=request.sector
+                sector=request.sector
             )
         
         # Validate and enhance the result
@@ -663,6 +663,92 @@ async def analyze_async(request: AnalysisRequest):
     except Exception as e:
         logger.error(f"Error in async analysis: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@app.post("/analyze/enhanced-mtf")
+async def enhanced_mtf_analyze(request: AnalysisRequest):
+    """
+    Enhanced multi-timeframe analysis with comprehensive signal validation.
+    This endpoint performs analysis across all available timeframes (1min, 5min, 15min, 30min, 1hour, 1day)
+    and provides cross-timeframe validation, divergence detection, and confidence-weighted recommendations.
+    """
+    try:
+        print(f"[ENHANCED MTF] Starting enhanced multi-timeframe analysis for {request.stock}")
+        
+        # Import the enhanced analyzer
+        from enhanced_mtf_analysis import enhanced_mtf_analyzer
+        
+        # Perform comprehensive multi-timeframe analysis
+        mtf_results = await enhanced_mtf_analyzer.comprehensive_mtf_analysis(
+            symbol=request.stock,
+            exchange=request.exchange
+        )
+        
+        if not mtf_results.get('success', False):
+            error_msg = f"Enhanced multi-timeframe analysis failed: {mtf_results.get('error', 'Unknown error')}"
+            print(f"[ENHANCED MTF ERROR] {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
+        
+        # Resolve user ID from request
+        try:
+            resolved_user_id = resolve_user_id(
+                user_id=request.user_id,
+                email=request.email
+            )
+
+            # Store analysis in Supabase using simple database manager
+            analysis_id = simple_db_manager.store_analysis(
+                analysis=mtf_results,
+                user_id=resolved_user_id,
+                symbol=request.stock,
+                exchange=request.exchange,
+                period=request.period,
+                interval=request.interval
+            )
+            
+            if not analysis_id:
+                print(f"⚠️ Warning: Failed to store enhanced MTF analysis for {request.stock}")
+            else:
+                print(f"✅ Successfully stored enhanced MTF analysis for {request.stock} with ID: {analysis_id}")
+                
+        except ValueError as e:
+            print(f"❌ User ID resolution failed: {e}")
+            # Continue with analysis but don't store it
+            print(f"⚠️ Enhanced MTF analysis completed but not stored due to user ID resolution failure")
+        except Exception as e:
+            print(f"❌ Error storing enhanced MTF analysis: {e}")
+            # Continue with analysis but don't store it
+            print(f"⚠️ Enhanced MTF analysis completed but not stored due to storage error")
+        
+        print(f"[ENHANCED MTF] Completed enhanced multi-timeframe analysis for {request.stock}")
+        
+        # Add metadata to response
+        mtf_results['request_metadata'] = {
+            'stock_symbol': request.stock,
+            'exchange': request.exchange,
+            'period_days': request.period,
+            'interval': request.interval,
+            'analysis_type': 'enhanced_multi_timeframe',
+            'timestamp': pd.Timestamp.now().isoformat()
+        }
+        
+        return JSONResponse(content=mtf_results, status_code=200)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Enhanced multi-timeframe analysis failed for {request.stock}: {str(e)}"
+        print(f"[ENHANCED MTF ERROR] {error_msg}")
+        print(f"[ENHANCED MTF ERROR] Traceback: {traceback.format_exc()}")
+        
+        return JSONResponse(
+            content={
+                "error": error_msg,
+                "analysis_type": "enhanced_multi_timeframe",
+                "status": "failed",
+                "timestamp": time.time()
+            },
+            status_code=500
+        )
 
 @app.post("/sector/benchmark")
 async def sector_benchmark(request: AnalysisRequest):

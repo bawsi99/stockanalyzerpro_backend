@@ -4,6 +4,7 @@ import pandas as pd
 from typing import List, Tuple
 import matplotlib.dates as mdates
 from typing import Dict, Any
+# Local import to avoid circular dependency
 
 class PatternVisualizer:
     """
@@ -1228,3 +1229,297 @@ class ChartVisualizer:
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.show() 
+
+    @staticmethod
+    def plot_comprehensive_technical_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str, stock_symbol: str = 'Stock'):
+        """
+        Create comprehensive technical overview chart combining price, indicators, and support/resistance.
+        """
+        fig, axes = plt.subplots(4, 1, figsize=(16, 12), gridspec_kw={'height_ratios': [3, 1, 1, 1]})
+        
+        # Main price chart with indicators
+        ax1 = axes[0]
+        ax1.plot(data.index, data['close'], label='Close Price', color='blue', linewidth=1.5)
+        
+        # Add moving averages
+        if 'sma_20' in indicators:
+            ax1.plot(data.index, indicators['sma_20'], label='SMA 20', color='orange', alpha=0.7)
+        if 'sma_50' in indicators:
+            ax1.plot(data.index, indicators['sma_50'], label='SMA 50', color='red', alpha=0.7)
+        if 'ema_12' in indicators:
+            ax1.plot(data.index, indicators['ema_12'], label='EMA 12', color='purple', alpha=0.7)
+        
+        # Add Bollinger Bands
+        if 'bb_upper' in indicators and 'bb_lower' in indicators:
+            ax1.plot(data.index, indicators['bb_upper'], label='BB Upper', color='gray', linestyle='--', alpha=0.6)
+            ax1.plot(data.index, indicators['bb_lower'], label='BB Lower', color='gray', linestyle='--', alpha=0.6)
+            ax1.fill_between(data.index, indicators['bb_upper'], indicators['bb_lower'], alpha=0.1, color='gray')
+        
+        # Add support/resistance levels
+        from technical_indicators import TechnicalIndicators
+        support, resistance = TechnicalIndicators.detect_support_resistance(data)
+        for level in support:
+            ax1.axhline(y=level, color='green', linestyle='--', alpha=0.6, label='Support' if level == support[0] else "")
+        for level in resistance:
+            ax1.axhline(y=level, color='red', linestyle='--', alpha=0.6, label='Resistance' if level == resistance[0] else "")
+        
+        ax1.set_title(f'{stock_symbol} - Comprehensive Technical Overview', fontsize=14, fontweight='bold')
+        ax1.set_ylabel('Price')
+        ax1.legend(loc='upper left')
+        ax1.grid(True, alpha=0.3)
+        
+        # Volume chart
+        ax2 = axes[1]
+        ax2.bar(data.index, data['volume'], color='lightblue', alpha=0.7, label='Volume')
+        ax2.set_ylabel('Volume')
+        ax2.legend(loc='upper left')
+        ax2.grid(True, alpha=0.3)
+        
+        # RSI chart
+        ax3 = axes[2]
+        if 'rsi_14' in indicators:
+            ax3.plot(data.index, indicators['rsi_14'], label='RSI', color='purple', linewidth=1.5)
+            ax3.axhline(y=70, color='red', linestyle='--', alpha=0.6, label='Overbought')
+            ax3.axhline(y=30, color='green', linestyle='--', alpha=0.6, label='Oversold')
+            ax3.set_ylabel('RSI')
+            ax3.set_ylim(0, 100)
+            ax3.legend(loc='upper left')
+            ax3.grid(True, alpha=0.3)
+        
+        # MACD chart
+        ax4 = axes[3]
+        if 'macd_line' in indicators and 'macd_signal_line' in indicators:
+            ax4.plot(data.index, indicators['macd_line'], label='MACD', color='blue', linewidth=1.5)
+            ax4.plot(data.index, indicators['macd_signal_line'], label='Signal', color='red', linewidth=1.5)
+            if 'macd_histogram' in indicators:
+                ax4.bar(data.index, indicators['macd_histogram'], color='gray', alpha=0.5, label='Histogram')
+            ax4.axhline(y=0, color='black', linestyle='-', alpha=0.5)
+            ax4.set_ylabel('MACD')
+            ax4.set_xlabel('Date')
+            ax4.legend(loc='upper left')
+            ax4.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+    @staticmethod
+    def plot_comprehensive_pattern_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str, stock_symbol: str = 'Stock'):
+        """
+        Create comprehensive pattern analysis chart showing all reversal and continuation patterns.
+        """
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10), gridspec_kw={'height_ratios': [2, 1]})
+        
+        # Main price chart with patterns
+        ax1.plot(data.index, data['close'], label='Close Price', color='blue', linewidth=1.5)
+        
+        # Detect and plot all patterns
+        from patterns.recognition import PatternRecognition
+        
+        # Divergences
+        from technical_indicators import TechnicalIndicators
+        rsi = TechnicalIndicators.calculate_rsi(data)
+        divergences = PatternRecognition.detect_divergence(data['close'], rsi)
+        for idx1, idx2, dtype in divergences:
+            # Validate indices
+            if (isinstance(idx1, (int, np.integer)) and isinstance(idx2, (int, np.integer)) and
+                0 <= idx1 < len(data) and 0 <= idx2 < len(data)):
+                color = 'red' if dtype == 'bearish' else 'green'
+                ax1.plot([data.index[idx1], data.index[idx2]], [data['close'].iloc[idx1], data['close'].iloc[idx2]], 
+                        color=color, linestyle='--', linewidth=2, alpha=0.8)
+                ax1.annotate('↓' if dtype == 'bearish' else '↑', 
+                            xy=(data.index[idx2], data['close'].iloc[idx2]), 
+                            xytext=(0, 10), textcoords="offset points", ha='center', fontsize=12, color=color)
+        
+        # Double tops/bottoms
+        double_tops = PatternRecognition.detect_double_top(data['close'])
+        double_bottoms = PatternRecognition.detect_double_bottom(data['close'])
+        
+        for idx1, idx2 in double_tops:
+            # Validate indices
+            if (isinstance(idx1, (int, np.integer)) and isinstance(idx2, (int, np.integer)) and
+                0 <= idx1 < len(data) and 0 <= idx2 < len(data)):
+                ax1.scatter([data.index[idx1], data.index[idx2]], [data['close'].iloc[idx1], data['close'].iloc[idx2]], 
+                           color='red', marker='^', s=100, label='Double Top' if idx1 == double_tops[0][0] else "")
+                ax1.plot([data.index[idx1], data.index[idx2]], [data['close'].iloc[idx1], data['close'].iloc[idx2]], 
+                        color='red', linestyle='--', alpha=0.7)
+        
+        for idx1, idx2 in double_bottoms:
+            # Validate indices
+            if (isinstance(idx1, (int, np.integer)) and isinstance(idx2, (int, np.integer)) and
+                0 <= idx1 < len(data) and 0 <= idx2 < len(data)):
+                ax1.scatter([data.index[idx1], data.index[idx2]], [data['close'].iloc[idx1], data['close'].iloc[idx2]], 
+                           color='green', marker='v', s=100, label='Double Bottom' if idx1 == double_bottoms[0][0] else "")
+                ax1.plot([data.index[idx1], data.index[idx2]], [data['close'].iloc[idx1], data['close'].iloc[idx2]], 
+                        color='green', linestyle='--', alpha=0.7)
+        
+        # Triangles and flags
+        triangles = PatternRecognition.detect_triangle(data['close'])
+        flags = PatternRecognition.detect_flag(data['close'])
+        
+        for tri in triangles:
+            if len(tri) >= 2:
+                # Validate indices
+                if (isinstance(tri[0], (int, np.integer)) and isinstance(tri[-1], (int, np.integer)) and
+                    0 <= tri[0] < len(data) and 0 <= tri[-1] < len(data)):
+                    ax1.plot([data.index[tri[0]], data.index[tri[-1]]], [data['close'].iloc[tri[0]], data['close'].iloc[tri[-1]]], 
+                            color='orange', linestyle='-', linewidth=2, alpha=0.8, label='Triangle' if tri == triangles[0] else "")
+        
+        for flag in flags:
+            if len(flag) >= 2:
+                # Validate indices
+                if (isinstance(flag[0], (int, np.integer)) and isinstance(flag[-1], (int, np.integer)) and
+                    0 <= flag[0] < len(data) and 0 <= flag[-1] < len(data)):
+                    ax1.plot([data.index[flag[0]], data.index[flag[-1]]], [data['close'].iloc[flag[0]], data['close'].iloc[flag[-1]]], 
+                            color='purple', linestyle='-', linewidth=2, alpha=0.8, label='Flag' if flag == flags[0] else "")
+        
+        ax1.set_title(f'{stock_symbol} - Comprehensive Pattern Analysis', fontsize=14, fontweight='bold')
+        ax1.set_ylabel('Price')
+        ax1.legend(loc='upper left')
+        ax1.grid(True, alpha=0.3)
+        
+        # RSI for pattern confirmation
+        ax2.plot(data.index, rsi, label='RSI', color='purple', linewidth=1.5)
+        ax2.axhline(y=70, color='red', linestyle='--', alpha=0.6, label='Overbought')
+        ax2.axhline(y=30, color='green', linestyle='--', alpha=0.6, label='Oversold')
+        ax2.set_ylabel('RSI')
+        ax2.set_xlabel('Date')
+        ax2.set_ylim(0, 100)
+        ax2.legend(loc='upper left')
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+    @staticmethod
+    def plot_comprehensive_volume_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str, stock_symbol: str = 'Stock'):
+        """
+        Create comprehensive volume analysis chart showing all volume patterns and correlations.
+        """
+        fig, axes = plt.subplots(3, 1, figsize=(16, 12), gridspec_kw={'height_ratios': [2, 1, 1]})
+        
+        # Price and volume correlation
+        ax1 = axes[0]
+        ax1_twin = ax1.twinx()
+        
+        # Price line
+        ax1.plot(data.index, data['close'], label='Price', color='blue', linewidth=1.5)
+        ax1.set_ylabel('Price', color='blue')
+        ax1.tick_params(axis='y', labelcolor='blue')
+        
+        # Volume bars
+        ax1_twin.bar(data.index, data['volume'], color='lightblue', alpha=0.7, label='Volume')
+        ax1_twin.set_ylabel('Volume', color='lightblue')
+        ax1_twin.tick_params(axis='y', labelcolor='lightblue')
+        
+        # Volume anomalies
+        from patterns.recognition import PatternRecognition
+        anomalies = PatternRecognition.detect_volume_anomalies(data['volume'])
+        for anomaly in anomalies:
+            # Ensure anomaly is a valid integer index
+            if isinstance(anomaly, (int, np.integer)) and 0 <= anomaly < len(data):
+                ax1_twin.bar(data.index[anomaly], data['volume'].iloc[anomaly], color='red', alpha=0.8)
+        
+        ax1.set_title(f'{stock_symbol} - Comprehensive Volume Analysis', fontsize=14, fontweight='bold')
+        ax1.grid(True, alpha=0.3)
+        
+        # Volume trend
+        ax2 = axes[1]
+        volume_ma = data['volume'].rolling(window=20).mean()
+        ax2.plot(data.index, data['volume'], label='Volume', color='lightblue', alpha=0.7)
+        ax2.plot(data.index, volume_ma, label='Volume MA 20', color='red', linewidth=1.5)
+        ax2.set_ylabel('Volume')
+        ax2.legend(loc='upper left')
+        ax2.grid(True, alpha=0.3)
+        
+        # Volume ratio
+        ax3 = axes[2]
+        volume_ratio = data['volume'] / volume_ma
+        ax3.plot(data.index, volume_ratio, label='Volume Ratio', color='green', linewidth=1.5)
+        ax3.axhline(y=1, color='black', linestyle='-', alpha=0.5, label='Average')
+        ax3.axhline(y=1.5, color='red', linestyle='--', alpha=0.6, label='High Volume')
+        ax3.axhline(y=0.5, color='orange', linestyle='--', alpha=0.6, label='Low Volume')
+        ax3.set_ylabel('Volume Ratio')
+        ax3.set_xlabel('Date')
+        ax3.legend(loc='upper left')
+        ax3.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+    @staticmethod
+    def plot_mtf_comparison_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str, stock_symbol: str = 'Stock'):
+        """
+        Create multi-timeframe comparison chart for cross-timeframe validation.
+        """
+        fig, axes = plt.subplots(3, 1, figsize=(16, 12), gridspec_kw={'height_ratios': [2, 1, 1]})
+        
+        # Main price chart with multiple timeframes
+        ax1 = axes[0]
+        ax1.plot(data.index, data['close'], label='Close Price', color='blue', linewidth=1.5)
+        
+        # Add different timeframe moving averages
+        if 'sma_20' in indicators:
+            ax1.plot(data.index, indicators['sma_20'], label='SMA 20 (Short-term)', color='orange', alpha=0.7)
+        if 'sma_50' in indicators:
+            ax1.plot(data.index, indicators['sma_50'], label='SMA 50 (Medium-term)', color='red', alpha=0.7)
+        if 'sma_200' in indicators:
+            ax1.plot(data.index, indicators['sma_200'], label='SMA 200 (Long-term)', color='purple', alpha=0.7)
+        
+        # Add trend lines for different timeframes
+        # Short-term trend (last 20 days)
+        if len(data) >= 20:
+            short_trend = np.polyfit(range(20), data['close'].iloc[-20:], 1)
+            short_trend_line = np.poly1d(short_trend)(range(20))
+            ax1.plot(data.index[-20:], short_trend_line, color='orange', linestyle='--', alpha=0.8, label='Short-term Trend')
+        
+        # Medium-term trend (last 50 days)
+        if len(data) >= 50:
+            medium_trend = np.polyfit(range(50), data['close'].iloc[-50:], 1)
+            medium_trend_line = np.poly1d(medium_trend)(range(50))
+            ax1.plot(data.index[-50:], medium_trend_line, color='red', linestyle='--', alpha=0.8, label='Medium-term Trend')
+        
+        # Long-term trend (last 200 days)
+        if len(data) >= 200:
+            long_trend = np.polyfit(range(200), data['close'].iloc[-200:], 1)
+            long_trend_line = np.poly1d(long_trend)(range(200))
+            ax1.plot(data.index[-200:], long_trend_line, color='purple', linestyle='--', alpha=0.8, label='Long-term Trend')
+        
+        ax1.set_title(f'{stock_symbol} - Multi-Timeframe Comparison', fontsize=14, fontweight='bold')
+        ax1.set_ylabel('Price')
+        ax1.legend(loc='upper left')
+        ax1.grid(True, alpha=0.3)
+        
+        # Volume across timeframes
+        ax2 = axes[1]
+        ax2.bar(data.index, data['volume'], color='lightblue', alpha=0.7, label='Volume')
+        
+        # Volume moving averages for different timeframes
+        if len(data) >= 20:
+            volume_ma_20 = data['volume'].rolling(window=20).mean()
+            ax2.plot(data.index, volume_ma_20, label='Volume MA 20', color='orange', linewidth=1.5)
+        if len(data) >= 50:
+            volume_ma_50 = data['volume'].rolling(window=50).mean()
+            ax2.plot(data.index, volume_ma_50, label='Volume MA 50', color='red', linewidth=1.5)
+        
+        ax2.set_ylabel('Volume')
+        ax2.legend(loc='upper left')
+        ax2.grid(True, alpha=0.3)
+        
+        # RSI for momentum across timeframes
+        ax3 = axes[2]
+        if 'rsi_14' in indicators:
+            ax3.plot(data.index, indicators['rsi_14'], label='RSI 14', color='purple', linewidth=1.5)
+            ax3.axhline(y=70, color='red', linestyle='--', alpha=0.6, label='Overbought')
+            ax3.axhline(y=30, color='green', linestyle='--', alpha=0.6, label='Oversold')
+            ax3.set_ylabel('RSI')
+            ax3.set_xlabel('Date')
+            ax3.set_ylim(0, 100)
+            ax3.legend(loc='upper left')
+            ax3.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close() 

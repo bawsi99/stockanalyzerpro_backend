@@ -7,6 +7,7 @@ from .image_utils import ImageUtils
 from .error_utils import ErrorUtils
 from .debug_logger import debug_logger
 from .token_tracker import get_or_create_tracker, AnalysisTokenTracker
+from .context_engineer import ContextEngineer, AnalysisType, ContextConfig
 
 import asyncio
 import time
@@ -45,44 +46,63 @@ class GeminiClient:
         else:
             return obj
     
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, context_config: ContextConfig = None):
         self.core = GeminiCore(api_key)
         self.prompt_manager = PromptManager()
         self.image_utils = ImageUtils()
         self.error_utils = ErrorUtils()
+        self.context_engineer = ContextEngineer(context_config)
 
-    async def build_indicators_summary(self, symbol, indicators, period, interval, knowledge_context=None, token_tracker=None):
-        # print("[DEBUG] Entering build_indicators_summary")
-        try:
-            # Convert NumPy types to JSON-serializable types and clean for JSON
-            serializable_indicators = clean_for_json(self.convert_numpy_types(indicators))
-            raw_indicators_json = json.dumps(serializable_indicators, indent=2)
-            # print(f"[DEBUG] raw_indicators_json: {raw_indicators_json}")
-        except Exception as ex:
-            print(f"[DEBUG-ERROR] Exception during json.dumps(indicators): {ex}")
-            import traceback; traceback.print_exc()
-            raise
-        timeframe = f"{period} days, {interval}"
+    async def build_indicators_summary(self, symbol, indicators, period, interval, knowledge_context=None, token_tracker=None, mtf_context=None):
+        """
+        Build comprehensive indicator summary with multi-timeframe and sector analysis support.
         
-        # print("[DEBUG] About to call self.prompt_manager.format_prompt")
+        Args:
+            symbol: Stock symbol
+            indicators: Technical indicators data (can be single or multi-timeframe)
+            period: Analysis period
+            interval: Analysis interval
+            knowledge_context: Additional context (includes sector context)
+            token_tracker: Token usage tracker
+            mtf_context: Multi-timeframe context data
+        """
         try:
+            # Use context engineering to curate and structure indicators
+            curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.INDICATOR_SUMMARY)
+            timeframe = f"{period} days, {interval}"
+            
+            # Enhance context with MTF data if available
+            enhanced_context = knowledge_context or ""
+            if mtf_context and mtf_context.get('success', False):
+                enhanced_context += self._build_mtf_context_for_indicators(mtf_context)
+            
+            # Extract and enhance sector context if available
+            if "SECTOR CONTEXT" in knowledge_context:
+                enhanced_context += self._build_sector_context_for_indicators(knowledge_context)
+            
+            # Structure context using context engineering
+            context = self.context_engineer.structure_context(
+                curated_indicators, 
+                AnalysisType.INDICATOR_SUMMARY, 
+                symbol, 
+                timeframe, 
+                enhanced_context
+            )
+            
+            # Use optimized prompt template
             prompt = self.prompt_manager.format_prompt(
-                "indicators_to_summary_and_json",
-                symbol=symbol,
-                timeframe=timeframe,
-                knowledge_context=knowledge_context or "",
-                raw_indicators=raw_indicators_json
+                "optimized_indicators_summary",
+                context=context
             )
             # Add the solving line at the very end
             prompt += self.prompt_manager.SOLVING_LINE
         except Exception as ex:
-            # print(f"[DEBUG-ERROR] Exception during format_prompt: {ex}")
+            print(f"[DEBUG-ERROR] Exception during context engineering: {ex}")
             import traceback; traceback.print_exc()
             raise
-        # print("[DEBUG] After format_prompt, prompt:\n" + prompt)
+        
         loop = asyncio.get_event_loop()
         try:
-            # print("[DEBUG] About to call self.core.call_llm(prompt)")
             try:
                 # Use code execution for enhanced mathematical analysis
                 response, code_results, execution_results = await self.core.call_llm_with_code_execution(prompt, return_full_response=True)
@@ -110,23 +130,18 @@ class GeminiClient:
                 print(f"[DEBUG] Fallback response length: {len(text_response) if text_response else 0}")
             
             if not text_response or not isinstance(text_response, str) or text_response.strip() == "":
-                # print(f"[DEBUG-ERROR] LLM response is empty or invalid: {text_response!r}")
                 print("[DEBUG] Empty response, using fallback JSON")
                 # Create a fallback response
                 fallback_json = self._create_fallback_json()
                 return "Analysis completed with fallback data due to empty response.", json.loads(fallback_json)
             
-            # print("[DEBUG] About to call extract_markdown_and_json")
             markdown_part, json_blob = self.extract_markdown_and_json(text_response)
-            # print(f"[DEBUG] After extract_markdown_and_json, json_blob: {json_blob}")
 
-            # print("[DEBUG] About to call json.loads on json_blob")
             try:
                 parsed = json.loads(json_blob)
-                # print(f"[DEBUG] After json.loads, parsed: {parsed}")
             except json.JSONDecodeError as e:
                 print(f"JSON parsing error: {e}")
-                print(f"JSON blob: {json_blob[:500]}...")  # Print first 500 chars for debugging
+                print(f"JSON blob: {json_blob[:500]}...")
                 # Use fallback JSON
                 fallback_json = self._create_fallback_json()
                 parsed = json.loads(fallback_json)
@@ -136,12 +151,9 @@ class GeminiClient:
             if code_results or execution_results:
                 parsed = self._enhance_with_calculations(parsed, code_results, execution_results)
             
-            # print("[DEBUG] Leaving build_indicators_summary")
             return markdown_part, parsed
         except Exception as ex:
-            # print(f"[DEBUG-ERROR] Exception in build_indicators_summary: {ex}")
             import traceback; traceback.print_exc()
-            # print(f"[DEBUG-ERROR] Prompt: {prompt}")
             # Return fallback response
             fallback_json = self._create_fallback_json()
             return "Analysis completed with fallback data due to error.", json.loads(fallback_json)
@@ -300,118 +312,64 @@ class GeminiClient:
         chart_analysis_tasks = []
         
         # GROUP 1: Comprehensive Technical Overview (1 chart - most important)
-        print(f"[ASYNC-OPTIMIZED] Checking for comparison_chart: {chart_paths.get('comparison_chart')}")
-        if chart_paths.get('comparison_chart'):
+        print(f"[ASYNC-OPTIMIZED] Checking for technical_overview: {chart_paths.get('technical_overview')}")
+        if chart_paths.get('technical_overview'):
             try:
-                with open(chart_paths['comparison_chart'], 'rb') as f:
-                    comparison_chart = f.read()
-                print(f"[ASYNC-OPTIMIZED] Successfully read comparison_chart: {len(comparison_chart)} bytes")
-                task = self.analyze_comprehensive_overview(comparison_chart)
-                chart_analysis_tasks.append(("comprehensive_overview", task))
-                print("[ASYNC-OPTIMIZED] Added comprehensive_overview task")
+                with open(chart_paths['technical_overview'], 'rb') as f:
+                    technical_chart = f.read()
+                print(f"[ASYNC-OPTIMIZED] Successfully read technical_overview: {len(technical_chart)} bytes")
+                task = self.analyze_technical_overview(technical_chart)
+                chart_analysis_tasks.append(("technical_overview", task))
+                print("[ASYNC-OPTIMIZED] Added technical_overview task")
             except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading comparison_chart: {e}")
+                print(f"[ASYNC-OPTIMIZED] Error reading technical_overview: {e}")
         else:
-            print("[ASYNC-OPTIMIZED] comparison_chart not found in chart_paths")
+            print("[ASYNC-OPTIMIZED] technical_overview not found in chart_paths")
         
-        # GROUP 2: Volume Analysis (3 charts together - complete volume story)
-        volume_charts = []
-        print(f"[ASYNC-OPTIMIZED] Checking volume charts:")
-        print(f"  - volume_anomalies: {chart_paths.get('volume_anomalies')}")
-        print(f"  - price_volume_correlation: {chart_paths.get('price_volume_correlation')}")
-        print(f"  - candlestick_volume: {chart_paths.get('candlestick_volume')}")
-        
-        if chart_paths.get('volume_anomalies'):
+        # GROUP 2: Pattern Analysis (1 chart - comprehensive pattern recognition)
+        print(f"[ASYNC-OPTIMIZED] Checking pattern_analysis: {chart_paths.get('pattern_analysis')}")
+        if chart_paths.get('pattern_analysis'):
             try:
-                with open(chart_paths['volume_anomalies'], 'rb') as f:
-                    volume_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED] Successfully read volume_anomalies: {len(volume_charts[-1])} bytes")
+                with open(chart_paths['pattern_analysis'], 'rb') as f:
+                    pattern_chart = f.read()
+                print(f"[ASYNC-OPTIMIZED] Successfully read pattern_analysis: {len(pattern_chart)} bytes")
+                task = self.analyze_pattern_analysis(pattern_chart, indicators)
+                chart_analysis_tasks.append(("pattern_analysis", task))
+                print("[ASYNC-OPTIMIZED] Added pattern_analysis task")
             except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading volume_anomalies: {e}")
-        
-        if chart_paths.get('price_volume_correlation'):
-            try:
-                with open(chart_paths['price_volume_correlation'], 'rb') as f:
-                    volume_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED] Successfully read price_volume_correlation: {len(volume_charts[-1])} bytes")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading price_volume_correlation: {e}")
-        
-        if chart_paths.get('candlestick_volume'):
-            try:
-                with open(chart_paths['candlestick_volume'], 'rb') as f:
-                    volume_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED] Successfully read candlestick_volume: {len(volume_charts[-1])} bytes")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading candlestick_volume: {e}")
-        
-        if volume_charts:
-            print(f"[ASYNC-OPTIMIZED] Creating volume analysis task with {len(volume_charts)} charts")
-            task = self.analyze_volume_comprehensive(volume_charts)
-            chart_analysis_tasks.append(("volume_analysis", task))
-            print("[ASYNC-OPTIMIZED] Added volume_analysis task")
+                print(f"[ASYNC-OPTIMIZED] Error reading pattern_analysis: {e}")
         else:
-            print("[ASYNC-OPTIMIZED] No volume charts available for analysis")
+            print("[ASYNC-OPTIMIZED] pattern_analysis not found in chart_paths")
         
-        # GROUP 3: Reversal Pattern Analysis (2 charts together)
-        reversal_charts = []
-        print(f"[ASYNC-OPTIMIZED] Checking reversal charts:")
-        print(f"  - divergence: {chart_paths.get('divergence')}")
-        print(f"  - double_tops_bottoms: {chart_paths.get('double_tops_bottoms')}")
-        
-        if chart_paths.get('divergence'):
+        # GROUP 3: Volume Analysis (1 chart - comprehensive volume story)
+        print(f"[ASYNC-OPTIMIZED] Checking volume_analysis: {chart_paths.get('volume_analysis')}")
+        if chart_paths.get('volume_analysis'):
             try:
-                with open(chart_paths['divergence'], 'rb') as f:
-                    reversal_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED] Successfully read divergence: {len(reversal_charts[-1])} bytes")
+                with open(chart_paths['volume_analysis'], 'rb') as f:
+                    volume_chart = f.read()
+                print(f"[ASYNC-OPTIMIZED] Successfully read volume_analysis: {len(volume_chart)} bytes")
+                task = self.analyze_volume_analysis(volume_chart, indicators)
+                chart_analysis_tasks.append(("volume_analysis", task))
+                print("[ASYNC-OPTIMIZED] Added volume_analysis task")
             except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading divergence: {e}")
-        
-        if chart_paths.get('double_tops_bottoms'):
-            try:
-                with open(chart_paths['double_tops_bottoms'], 'rb') as f:
-                    reversal_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED] Successfully read double_tops_bottoms: {len(reversal_charts[-1])} bytes")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading double_tops_bottoms: {e}")
-        
-        if reversal_charts:
-            print(f"[ASYNC-OPTIMIZED] Creating reversal patterns task with {len(reversal_charts)} charts")
-            task = self.analyze_reversal_patterns(reversal_charts)
-            chart_analysis_tasks.append(("reversal_patterns", task))
-            print("[ASYNC-OPTIMIZED] Added reversal_patterns task")
+                print(f"[ASYNC-OPTIMIZED] Error reading volume_analysis: {e}")
         else:
-            print("[ASYNC-OPTIMIZED] No reversal charts available for analysis")
+            print("[ASYNC-OPTIMIZED] volume_analysis not found in chart_paths")
         
-        # GROUP 4: Continuation & Level Analysis (2 charts together)
-        continuation_charts = []
-        print(f"[ASYNC-OPTIMIZED] Checking continuation charts:")
-        print(f"  - triangles_flags: {chart_paths.get('triangles_flags')}")
-        print(f"  - support_resistance: {chart_paths.get('support_resistance')}")
-        
-        if chart_paths.get('triangles_flags'):
+        # GROUP 4: Multi-Timeframe Comparison (1 chart - MTF validation)
+        print(f"[ASYNC-OPTIMIZED] Checking mtf_comparison: {chart_paths.get('mtf_comparison')}")
+        if chart_paths.get('mtf_comparison'):
             try:
-                with open(chart_paths['triangles_flags'], 'rb') as f:
-                    continuation_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED] Successfully read triangles_flags: {len(continuation_charts[-1])} bytes")
+                with open(chart_paths['mtf_comparison'], 'rb') as f:
+                    mtf_chart = f.read()
+                print(f"[ASYNC-OPTIMIZED] Successfully read mtf_comparison: {len(mtf_chart)} bytes")
+                task = self.analyze_mtf_comparison(mtf_chart, indicators)
+                chart_analysis_tasks.append(("mtf_comparison", task))
+                print("[ASYNC-OPTIMIZED] Added mtf_comparison task")
             except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading triangles_flags: {e}")
-        
-        if chart_paths.get('support_resistance'):
-            try:
-                with open(chart_paths['support_resistance'], 'rb') as f:
-                    continuation_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED] Successfully read support_resistance: {len(continuation_charts[-1])} bytes")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading support_resistance: {e}")
-        
-        if continuation_charts:
-            print(f"[ASYNC-OPTIMIZED] Creating continuation levels task with {len(continuation_charts)} charts")
-            task = self.analyze_continuation_levels(continuation_charts)
-            chart_analysis_tasks.append(("continuation_levels", task))
-            print("[ASYNC-OPTIMIZED] Added continuation_levels task")
+                print(f"[ASYNC-OPTIMIZED] Error reading mtf_comparison: {e}")
         else:
-            print("[ASYNC-OPTIMIZED] No continuation charts available for analysis")
+            print("[ASYNC-OPTIMIZED] mtf_comparison not found in chart_paths")
         
         # EXECUTE ALL INDEPENDENT TASKS IN PARALLEL
         print(f"[ASYNC-OPTIMIZED] Total tasks created: {len(chart_analysis_tasks) + 1}")
@@ -425,21 +383,21 @@ class GeminiClient:
             mock_chart_data = b"mock_chart_data_for_testing"
             
             # Add mock tasks for all chart analysis types
-            mock_comprehensive_task = self.analyze_comprehensive_overview(mock_chart_data)
-            chart_analysis_tasks.append(("comprehensive_overview_mock", mock_comprehensive_task))
-            print("[ASYNC-OPTIMIZED] Added mock comprehensive_overview task")
+            mock_technical_task = self.analyze_technical_overview(mock_chart_data)
+            chart_analysis_tasks.append(("technical_overview_mock", mock_technical_task))
+            print("[ASYNC-OPTIMIZED] Added mock technical_overview task")
             
-            mock_volume_task = self.analyze_volume_comprehensive([mock_chart_data, mock_chart_data, mock_chart_data])
+            mock_pattern_task = self.analyze_pattern_analysis(mock_chart_data, indicators)
+            chart_analysis_tasks.append(("pattern_analysis_mock", mock_pattern_task))
+            print("[ASYNC-OPTIMIZED] Added mock pattern_analysis task")
+            
+            mock_volume_task = self.analyze_volume_analysis(mock_chart_data, indicators)
             chart_analysis_tasks.append(("volume_analysis_mock", mock_volume_task))
             print("[ASYNC-OPTIMIZED] Added mock volume_analysis task")
             
-            mock_reversal_task = self.analyze_reversal_patterns([mock_chart_data, mock_chart_data])
-            chart_analysis_tasks.append(("reversal_patterns_mock", mock_reversal_task))
-            print("[ASYNC-OPTIMIZED] Added mock reversal_patterns task")
-            
-            mock_continuation_task = self.analyze_continuation_levels([mock_chart_data, mock_chart_data])
-            chart_analysis_tasks.append(("continuation_levels_mock", mock_continuation_task))
-            print("[ASYNC-OPTIMIZED] Added mock continuation_levels task")
+            mock_mtf_task = self.analyze_mtf_comparison(mock_chart_data, indicators)
+            chart_analysis_tasks.append(("mtf_comparison_mock", mock_mtf_task))
+            print("[ASYNC-OPTIMIZED] Added mock mtf_comparison task")
             
             print(f"[ASYNC-OPTIMIZED] Created {len(chart_analysis_tasks)} mock chart tasks for testing")
         
@@ -482,14 +440,14 @@ class GeminiClient:
                 print(f"[ASYNC-OPTIMIZED] Warning: {task_name} failed: {result}")
                 continue
             
-            if task_name == "comprehensive_overview" or task_name == "comprehensive_overview_mock":
+            if task_name == "technical_overview" or task_name == "technical_overview_mock":
                 chart_insights_list.append("**Comprehensive Technical Overview:**\n" + result)
+            elif task_name == "pattern_analysis" or task_name == "pattern_analysis_mock":
+                chart_insights_list.append("**Pattern Analysis:**\n" + result)
             elif task_name == "volume_analysis" or task_name == "volume_analysis_mock":
-                chart_insights_list.append("**Comprehensive Volume Analysis:**\n" + result)
-            elif task_name == "reversal_patterns" or task_name == "reversal_patterns_mock":
-                chart_insights_list.append("**Reversal Pattern Analysis:**\n" + result)
-            elif task_name == "continuation_levels" or task_name == "continuation_levels_mock":
-                chart_insights_list.append("**Continuation & Level Analysis:**\n" + result)
+                chart_insights_list.append("**Volume Analysis:**\n" + result)
+            elif task_name == "mtf_comparison" or task_name == "mtf_comparison_mock":
+                chart_insights_list.append("**Multi-Timeframe Comparison:**\n" + result)
         
         chart_insights_md = "\n\n".join(chart_insights_list) if chart_insights_list else ""
 
@@ -497,10 +455,46 @@ class GeminiClient:
         print("[ASYNC-OPTIMIZED] Starting final decision analysis...")
         decision_start_time = time.time()
         
+        # Create final decision context using context engineering with MTF and sector integration
+        final_decision_data = {
+            "analysis_focus": "final_decision_synthesis",
+            "consensus_analysis": {
+                "trend_alignment": self._analyze_trend_alignment(ind_json, chart_insights_md),
+                "confidence_score": self._calculate_consensus_confidence(ind_json, chart_insights_md),
+                "key_conflicts": self._identify_key_conflicts(ind_json, chart_insights_md)
+            },
+            "risk_assessment": {
+                "primary_risks": self._identify_primary_risks(ind_json, chart_insights_md),
+                "risk_level": self._assess_overall_risk(ind_json, chart_insights_md)
+            },
+            "decision_framework": {
+                "entry_strategy": self._determine_entry_strategy(ind_json, chart_insights_md),
+                "timeframe": "short_term",
+                "position_size": "moderate"
+            },
+            "multi_timeframe_context": self._extract_mtf_context_from_analysis(ind_json, chart_insights_md),
+            "sector_context": self._extract_sector_context_from_analysis(ind_json, chart_insights_md)
+        }
+        
+        # Enhance context with MTF and sector data if available in knowledge_context
+        enhanced_knowledge_context = knowledge_context
+        if "ENHANCED MULTI-TIMEFRAME ANALYSIS CONTEXT" in knowledge_context:
+            enhanced_knowledge_context += self._build_mtf_context_for_final_decision(knowledge_context)
+        
+        if "SECTOR CONTEXT" in knowledge_context:
+            enhanced_knowledge_context += self._build_sector_context_for_final_decision(knowledge_context)
+        
+        context = self.context_engineer.structure_context(
+            final_decision_data, 
+            AnalysisType.FINAL_DECISION, 
+            symbol, 
+            f"{period} days, {interval}", 
+            enhanced_knowledge_context
+        )
+        
         decision_prompt = self.prompt_manager.format_prompt(
-            "final_stock_decision",
-            indicator_json=json.dumps(clean_for_json(self.convert_numpy_types(ind_json)), indent=2),
-            chart_insights=chart_insights_md
+            "optimized_final_decision",
+            context=context
         )
         try:
             # Use code execution for final decision analysis
@@ -530,9 +524,17 @@ class GeminiClient:
                     print(f"[DEBUG] Full response: {text_response}")
                     raise ValueError(f"Could not parse final decision response as JSON: {e}. Response: {text_response[:500]}")
             
-            # Enhance result with code execution data
+            # Enhance result with code execution data and MTF context
             if code_results or execution_results:
                 result = self._enhance_final_decision_with_calculations(result, code_results, execution_results)
+            
+            # Add MTF context to result if available
+            if "ENHANCED MULTI-TIMEFRAME ANALYSIS CONTEXT" in knowledge_context:
+                result = self._enhance_result_with_mtf_context(result, knowledge_context)
+            
+            # Add sector context to result if available
+            if "SECTOR CONTEXT" in knowledge_context:
+                result = self._enhance_result_with_sector_context(result, knowledge_context)
                 
         except Exception as ex:
             import traceback; traceback.print_exc()
@@ -576,6 +578,130 @@ class GeminiClient:
         except Exception as e:
             print(f"Error enhancing final decision with calculations: {e}")
             return result
+    
+    def _analyze_trend_alignment(self, ind_json: dict, chart_insights: str) -> dict:
+        """Analyze trend alignment between indicators and chart patterns."""
+        try:
+            # Extract trend from indicator analysis
+            indicator_trend = ind_json.get('market_outlook', {}).get('primary_trend', {}).get('direction', 'neutral')
+            indicator_confidence = ind_json.get('market_outlook', {}).get('primary_trend', {}).get('confidence', 50)
+            
+            # Simple trend alignment analysis
+            alignment = {
+                "indicator_trend": indicator_trend,
+                "indicator_confidence": indicator_confidence,
+                "chart_confirmation": "confirming" if "bullish" in chart_insights.lower() and indicator_trend == "bullish" else "mixed",
+                "overall_alignment": "strong" if indicator_confidence > 70 else "moderate"
+            }
+            
+            return alignment
+        except Exception as e:
+            print(f"Error analyzing trend alignment: {e}")
+            return {"indicator_trend": "neutral", "confidence": 50, "alignment": "weak"}
+    
+    def _calculate_consensus_confidence(self, ind_json: dict, chart_insights: str) -> float:
+        """Calculate consensus confidence from multiple analyses."""
+        try:
+            # Get confidence from indicator analysis
+            indicator_confidence = ind_json.get('market_outlook', {}).get('primary_trend', {}).get('confidence', 50)
+            
+            # Simple confidence calculation (can be enhanced)
+            base_confidence = indicator_confidence
+            
+            # Adjust based on chart insights
+            if "high confidence" in chart_insights.lower():
+                base_confidence += 10
+            elif "low confidence" in chart_insights.lower():
+                base_confidence -= 10
+            
+            return min(max(base_confidence, 0), 100)
+        except Exception as e:
+            print(f"Error calculating consensus confidence: {e}")
+            return 50.0
+    
+    def _identify_key_conflicts(self, ind_json: dict, chart_insights: str) -> list:
+        """Identify key conflicts between different analyses."""
+        conflicts = []
+        
+        try:
+            # Check for signal conflicts in indicator analysis
+            signal_conflicts = ind_json.get('signal_conflicts', {})
+            if signal_conflicts.get('has_conflicts', False):
+                conflicts.append(signal_conflicts.get('conflict_description', 'Signal conflicts detected'))
+            
+            # Check for conflicts between indicators and charts
+            indicator_trend = ind_json.get('market_outlook', {}).get('primary_trend', {}).get('direction', 'neutral')
+            if "bearish" in chart_insights.lower() and indicator_trend == "bullish":
+                conflicts.append("Chart patterns suggest bearish while indicators are bullish")
+            elif "bullish" in chart_insights.lower() and indicator_trend == "bearish":
+                conflicts.append("Chart patterns suggest bullish while indicators are bearish")
+            
+            return conflicts
+        except Exception as e:
+            print(f"Error identifying key conflicts: {e}")
+            return ["Unable to analyze conflicts"]
+    
+    def _identify_primary_risks(self, ind_json: dict, chart_insights: str) -> list:
+        """Identify primary risks from analysis."""
+        risks = []
+        
+        try:
+            # Extract risks from indicator analysis
+            risk_management = ind_json.get('risk_management', {})
+            key_risks = risk_management.get('key_risks', [])
+            
+            for risk in key_risks:
+                if isinstance(risk, dict):
+                    risks.append(risk.get('risk', 'Unknown risk'))
+                else:
+                    risks.append(str(risk))
+            
+            # Add chart-specific risks
+            if "pattern failure" in chart_insights.lower():
+                risks.append("Pattern failure risk")
+            if "false signal" in chart_insights.lower():
+                risks.append("False signal risk")
+            
+            return risks[:5]  # Limit to top 5 risks
+        except Exception as e:
+            print(f"Error identifying primary risks: {e}")
+            return ["Market volatility", "Technical analysis limitations"]
+    
+    def _assess_overall_risk(self, ind_json: dict, chart_insights: str) -> str:
+        """Assess overall risk level."""
+        try:
+            # Get risk indicators
+            indicator_confidence = ind_json.get('market_outlook', {}).get('primary_trend', {}).get('confidence', 50)
+            signal_conflicts = ind_json.get('signal_conflicts', {}).get('has_conflicts', False)
+            
+            # Risk assessment logic
+            if indicator_confidence < 30 or signal_conflicts:
+                return "high"
+            elif indicator_confidence < 60:
+                return "medium"
+            else:
+                return "low"
+        except Exception as e:
+            print(f"Error assessing overall risk: {e}")
+            return "medium"
+    
+    def _determine_entry_strategy(self, ind_json: dict, chart_insights: str) -> str:
+        """Determine optimal entry strategy."""
+        try:
+            # Get trading strategy from indicator analysis
+            short_term = ind_json.get('trading_strategy', {}).get('short_term', {})
+            entry_strategy = short_term.get('entry_strategy', {}).get('type', 'breakout')
+            
+            # Adjust based on chart patterns
+            if "reversal" in chart_insights.lower():
+                entry_strategy = "reversal"
+            elif "continuation" in chart_insights.lower():
+                entry_strategy = "breakout"
+            
+            return entry_strategy
+        except Exception as e:
+            print(f"Error determining entry strategy: {e}")
+            return "breakout"
 
     async def analyze_stock_with_enhanced_calculations(self, symbol, indicators, chart_paths, period, interval, knowledge_context=""):
         """
@@ -839,6 +965,14 @@ class GeminiClient:
             if code_results or execution_results:
                 result = self._enhance_final_decision_with_calculations(result, code_results, execution_results)
                 
+            # Add MTF context to result if available
+            if "ENHANCED MULTI-TIMEFRAME ANALYSIS CONTEXT" in knowledge_context:
+                result = self._enhance_result_with_mtf_context(result, knowledge_context)
+            
+            # Add sector context to result if available
+            if "SECTOR CONTEXT" in knowledge_context:
+                result = self._enhance_result_with_sector_context(result, knowledge_context)
+                
         except Exception as ex:
             import traceback; traceback.print_exc()
             raise
@@ -857,29 +991,74 @@ class GeminiClient:
         prompt += self.prompt_manager.SOLVING_LINE
         return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
 
-    async def analyze_volume_comprehensive(self, images: list) -> str:
+    async def analyze_volume_comprehensive(self, images: list, indicators: dict = None) -> str:
         """Analyze all volume-related charts together for complete volume story."""
-        prompt = self.prompt_manager.format_prompt("image_analysis_volume_comprehensive")
-        # Add the solving line at the very end
-        prompt += self.prompt_manager.SOLVING_LINE
-        pil_images = [self.image_utils.bytes_to_image(img) for img in images]
-        return await self.core.call_llm_with_images(prompt, pil_images)
+        try:
+            # Use context engineering for volume analysis
+            if indicators:
+                curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.VOLUME_ANALYSIS)
+                context = self.context_engineer.structure_context(curated_indicators, AnalysisType.VOLUME_ANALYSIS, "", "", "")
+                prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=context)
+            else:
+                prompt = self.prompt_manager.format_prompt("image_analysis_volume_comprehensive")
+            
+            # Add the solving line at the very end
+            prompt += self.prompt_manager.SOLVING_LINE
+            pil_images = [self.image_utils.bytes_to_image(img) for img in images]
+            return await self.core.call_llm_with_images(prompt, pil_images)
+        except Exception as ex:
+            print(f"[DEBUG-ERROR] Exception during volume analysis context engineering: {ex}")
+            # Fallback to original method
+            prompt = self.prompt_manager.format_prompt("image_analysis_volume_comprehensive")
+            prompt += self.prompt_manager.SOLVING_LINE
+            pil_images = [self.image_utils.bytes_to_image(img) for img in images]
+            return await self.core.call_llm_with_images(prompt, pil_images)
 
-    async def analyze_reversal_patterns(self, images: list) -> str:
+    async def analyze_reversal_patterns(self, images: list, indicators: dict = None) -> str:
         """Analyze divergence and double tops/bottoms charts together for reversal signals."""
-        prompt = self.prompt_manager.format_prompt("image_analysis_reversal_patterns")
-        # Add the solving line at the very end
-        prompt += self.prompt_manager.SOLVING_LINE
-        pil_images = [self.image_utils.bytes_to_image(img) for img in images]
-        return await self.core.call_llm_with_images(prompt, pil_images)
+        try:
+            # Use context engineering for reversal pattern analysis
+            if indicators:
+                curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.REVERSAL_PATTERNS)
+                context = self.context_engineer.structure_context(curated_indicators, AnalysisType.REVERSAL_PATTERNS, "", "", "")
+                prompt = self.prompt_manager.format_prompt("optimized_reversal_patterns", context=context)
+            else:
+                prompt = self.prompt_manager.format_prompt("image_analysis_reversal_patterns")
+            
+            # Add the solving line at the very end
+            prompt += self.prompt_manager.SOLVING_LINE
+            pil_images = [self.image_utils.bytes_to_image(img) for img in images]
+            return await self.core.call_llm_with_images(prompt, pil_images)
+        except Exception as ex:
+            print(f"[DEBUG-ERROR] Exception during reversal pattern analysis context engineering: {ex}")
+            # Fallback to original method
+            prompt = self.prompt_manager.format_prompt("image_analysis_reversal_patterns")
+            prompt += self.prompt_manager.SOLVING_LINE
+            pil_images = [self.image_utils.bytes_to_image(img) for img in images]
+            return await self.core.call_llm_with_images(prompt, pil_images)
 
-    async def analyze_continuation_levels(self, images: list) -> str:
+    async def analyze_continuation_levels(self, images: list, indicators: dict = None) -> str:
         """Analyze triangles/flags and support/resistance charts together for continuation and levels."""
-        prompt = self.prompt_manager.format_prompt("image_analysis_continuation_levels")
-        # Add the solving line at the very end
-        prompt += self.prompt_manager.SOLVING_LINE
-        pil_images = [self.image_utils.bytes_to_image(img) for img in images]
-        return await self.core.call_llm_with_images(prompt, pil_images)
+        try:
+            # Use context engineering for continuation level analysis
+            if indicators:
+                curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.CONTINUATION_LEVELS)
+                context = self.context_engineer.structure_context(curated_indicators, AnalysisType.CONTINUATION_LEVELS, "", "", "")
+                prompt = self.prompt_manager.format_prompt("optimized_continuation_levels", context=context)
+            else:
+                prompt = self.prompt_manager.format_prompt("image_analysis_continuation_levels")
+            
+            # Add the solving line at the very end
+            prompt += self.prompt_manager.SOLVING_LINE
+            pil_images = [self.image_utils.bytes_to_image(img) for img in images]
+            return await self.core.call_llm_with_images(prompt, pil_images)
+        except Exception as ex:
+            print(f"[DEBUG-ERROR] Exception during continuation level analysis context engineering: {ex}")
+            # Fallback to original method
+            prompt = self.prompt_manager.format_prompt("image_analysis_continuation_levels")
+            prompt += self.prompt_manager.SOLVING_LINE
+            pil_images = [self.image_utils.bytes_to_image(img) for img in images]
+            return await self.core.call_llm_with_images(prompt, pil_images)
 
     async def analyze_comprehensive_overview_with_calculations(self, image: bytes, indicators: dict) -> str:
         """Analyze the comprehensive comparison chart with mathematical validation."""
@@ -979,5 +1158,453 @@ Use Python code for all calculations and include the results in your analysis.
         enhanced_prompt += self.prompt_manager.SOLVING_LINE
         pil_images = [self.image_utils.bytes_to_image(img) for img in images]
         return await self.core.call_llm_with_images(enhanced_prompt, pil_images, enable_code_execution=True)
+
+    async def analyze_technical_overview(self, image: bytes) -> str:
+        """Analyze the comprehensive technical overview chart that shows all major indicators and support/resistance."""
+        # Provide default context to prevent KeyError
+        default_context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
+        prompt = self.prompt_manager.format_prompt("optimized_technical_overview", context=default_context)
+        # Add the solving line at the very end
+        prompt += self.prompt_manager.SOLVING_LINE
+        return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+
+    async def analyze_pattern_analysis(self, image: bytes, indicators: dict = None) -> str:
+        """Analyze the comprehensive pattern analysis chart showing all reversal and continuation patterns."""
+        try:
+            # Use context engineering for pattern analysis
+            if indicators:
+                curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.REVERSAL_PATTERNS)
+                context = self.context_engineer.structure_context(curated_indicators, AnalysisType.REVERSAL_PATTERNS, "", "", "")
+                prompt = self.prompt_manager.format_prompt("optimized_pattern_analysis", context=context)
+            else:
+                # Provide default context when no indicators are available
+                default_context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
+                prompt = self.prompt_manager.format_prompt("optimized_pattern_analysis", context=default_context)
+            
+            # Add the solving line at the very end
+            prompt += self.prompt_manager.SOLVING_LINE
+            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+        except Exception as ex:
+            print(f"[DEBUG-ERROR] Exception during pattern analysis context engineering: {ex}")
+            print(f"[DEBUG-ERROR] Exception type: {type(ex).__name__}")
+            import traceback
+            print(f"[DEBUG-ERROR] Traceback: {traceback.format_exc()}")
+            # Fallback to original method with default context
+            default_context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
+            prompt = self.prompt_manager.format_prompt("optimized_pattern_analysis", context=default_context)
+            prompt += self.prompt_manager.SOLVING_LINE
+            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+
+    async def analyze_volume_analysis(self, image: bytes, indicators: dict = None) -> str:
+        """Analyze the comprehensive volume analysis chart showing all volume patterns and correlations."""
+        try:
+            # Use context engineering for volume analysis
+            if indicators:
+                curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.VOLUME_ANALYSIS)
+                context = self.context_engineer.structure_context(curated_indicators, AnalysisType.VOLUME_ANALYSIS, "", "", "")
+                prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=context)
+            else:
+                # Provide default context when no indicators are available
+                default_context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
+                prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=default_context)
+            
+            # Add the solving line at the very end
+            prompt += self.prompt_manager.SOLVING_LINE
+            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+        except Exception as ex:
+            print(f"[DEBUG-ERROR] Exception during volume analysis context engineering: {ex}")
+            print(f"[DEBUG-ERROR] Exception type: {type(ex).__name__}")
+            import traceback
+            print(f"[DEBUG-ERROR] Traceback: {traceback.format_exc()}")
+            # Fallback to original method with default context
+            default_context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
+            prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=default_context)
+            prompt += self.prompt_manager.SOLVING_LINE
+            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+
+    async def analyze_mtf_comparison(self, image: bytes, indicators: dict = None) -> str:
+        """Analyze the multi-timeframe comparison chart for cross-timeframe validation."""
+        try:
+            # Use context engineering for MTF analysis
+            if indicators:
+                curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.FINAL_DECISION)
+                context = self.context_engineer.structure_context(curated_indicators, AnalysisType.FINAL_DECISION, "", "", "")
+                prompt = self.prompt_manager.format_prompt("optimized_mtf_comparison", context=context)
+            else:
+                # Provide default context when no indicators are available
+                default_context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
+                prompt = self.prompt_manager.format_prompt("optimized_mtf_comparison", context=default_context)
+            
+            # Add the solving line at the very end
+            prompt += self.prompt_manager.SOLVING_LINE
+            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+        except Exception as ex:
+            print(f"[DEBUG-ERROR] Exception during MTF comparison context engineering: {ex}")
+            print(f"[DEBUG-ERROR] Exception type: {type(ex).__name__}")
+            import traceback
+            print(f"[DEBUG-ERROR] Traceback: {traceback.format_exc()}")
+            # Fallback to original method with default context
+            default_context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
+            prompt = self.prompt_manager.format_prompt("optimized_mtf_comparison", context=default_context)
+            prompt += self.prompt_manager.SOLVING_LINE
+            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+
+    def _build_mtf_context_for_indicators(self, mtf_context):
+        """
+        Build MTF context specifically for indicator analysis.
+        """
+        mtf_summary = mtf_context.get('summary', {})
+        mtf_validation = mtf_context.get('cross_timeframe_validation', {})
+        mtf_timeframes = mtf_context.get('timeframe_analyses', {})
+        
+        mtf_context_str = f"""
+
+MULTI-TIMEFRAME INDICATOR CONTEXT:
+This analysis includes multi-timeframe indicator data across 6 timeframes: 1min, 5min, 15min, 30min, 1hour, and 1day.
+
+OVERALL MTF INDICATOR SUMMARY:
+- Consensus Trend: {mtf_summary.get('overall_signal', 'Unknown')}
+- Confidence Score: {mtf_summary.get('confidence', 0):.2%}
+- Signal Alignment: {mtf_summary.get('signal_alignment', 'Unknown')}
+- Risk Level: {mtf_summary.get('risk_level', 'Unknown')}
+
+CROSS-TIMEFRAME INDICATOR VALIDATION:
+- Signal Strength: {mtf_validation.get('signal_strength', 0):.2%}
+- Supporting Timeframes: {', '.join(mtf_validation.get('supporting_timeframes', []))}
+- Conflicting Timeframes: {', '.join(mtf_validation.get('conflicting_timeframes', []))}
+- Divergence Detected: {'Yes' if mtf_validation.get('divergence_detected', False) else 'No'}
+
+TIMEFRAME-SPECIFIC INDICATOR ANALYSIS:
+"""
+        
+        # Add individual timeframe indicator analysis
+        for timeframe, analysis in mtf_timeframes.items():
+            trend = analysis.get('trend', 'Unknown')
+            confidence = analysis.get('confidence', 0)
+            key_indicators = analysis.get('key_indicators', {})
+            
+            # Determine importance based on signal quality and confidence
+            if confidence > 0.8:
+                importance = "🔥 HIGH IMPORTANCE"
+            elif confidence > 0.6:
+                importance = "⚡ MEDIUM-HIGH IMPORTANCE"
+            elif confidence > 0.4:
+                importance = "📊 MEDIUM IMPORTANCE"
+            else:
+                importance = "⚠️ LOW IMPORTANCE"
+            
+            mtf_context_str += f"""
+{timeframe} Timeframe ({importance}):
+- Trend: {trend}
+- Confidence: {confidence:.2%}
+- Key Indicators:
+  * RSI: {key_indicators.get('rsi', 'N/A')}
+  * MACD Signal: {key_indicators.get('macd_signal', 'Unknown')}
+  * Volume Status: {key_indicators.get('volume_status', 'Unknown')}
+  * Support Levels: {key_indicators.get('support_levels', [])}
+  * Resistance Levels: {key_indicators.get('resistance_levels', [])}
+"""
+        
+        mtf_context_str += f"""
+INDICATOR ANALYSIS GUIDELINES:
+1. Compare single-timeframe indicators with multi-timeframe consensus
+2. Identify indicator divergences across timeframes
+3. Weight indicators by timeframe importance and confidence
+4. Resolve conflicts between different timeframe signals
+5. Focus on high-importance timeframe indicators for primary signals
+6. Use lower-importance timeframes for confirmation or early warning
+"""
+        
+        return mtf_context_str
+
+    def _build_sector_context_for_indicators(self, knowledge_context: str) -> str:
+        """
+        Build sector context specifically for indicator analysis.
+        """
+        sector_context_str = """
+        
+SECTOR ANALYSIS INTEGRATION:
+This analysis includes comprehensive sector context to enhance technical indicator analysis.
+
+SECTOR INDICATOR GUIDELINES:
+1. **Sector Performance Alignment**: Compare stock indicators with sector performance
+2. **Sector Rotation Impact**: Assess how sector rotation affects stock indicators
+3. **Sector Correlation Analysis**: Consider sector correlations for risk assessment
+4. **Sector Momentum Integration**: Incorporate sector momentum in trend analysis
+5. **Sector-Based Confidence Adjustment**: Adjust confidence based on sector alignment
+6. **Sector Risk Assessment**: Evaluate sector-specific risks and opportunities
+
+SECTOR INDICATOR ANALYSIS FRAMEWORK:
+- **Strong Buy Signal**: Stock indicators bullish + Sector outperforming + Sector rotation positive
+- **Buy Signal**: Stock indicators bullish + Sector neutral/positive + No major sector conflicts
+- **Hold Signal**: Mixed stock indicators + Sector neutral + Wait for clearer signals
+- **Sell Signal**: Stock indicators bearish + Sector underperforming + Sector rotation negative
+- **Strong Sell Signal**: Stock indicators bearish + Sector underperforming + Sector rotation strongly negative
+
+SECTOR RISK CONSIDERATIONS:
+- **Sector Concentration Risk**: High correlation with sector index
+- **Sector Rotation Risk**: Sector moving from leading to lagging
+- **Sector Volatility Risk**: Sector experiencing high volatility
+- **Sector Correlation Risk**: Sector highly correlated with market
+- **Sector Momentum Risk**: Sector momentum declining
+
+SECTOR OPPORTUNITY ASSESSMENT:
+- **Sector Leadership**: Sector is leading market performance
+- **Sector Rotation**: Sector moving from lagging to leading
+- **Sector Momentum**: Sector momentum increasing
+- **Sector Diversification**: Sector provides portfolio diversification
+- **Sector Stability**: Sector showing stable performance
+"""
+        return sector_context_str
+
+    def _extract_mtf_context_from_analysis(self, ind_json: dict, chart_insights: str) -> dict:
+        """
+        Extract MTF context from indicator analysis and chart insights.
+        """
+        mtf_context = {
+            "timeframe_alignment": {},
+            "signal_consensus": {},
+            "conflicts": [],
+            "confidence_weighting": {}
+        }
+        
+        # Extract timeframe information from indicator analysis
+        if ind_json.get('market_outlook'):
+            primary_trend = ind_json['market_outlook'].get('primary_trend', {})
+            secondary_trend = ind_json['market_outlook'].get('secondary_trend', {})
+            
+            mtf_context['signal_consensus'] = {
+                'primary_trend': primary_trend.get('direction', 'Unknown'),
+                'primary_confidence': primary_trend.get('confidence', 0),
+                'secondary_trend': secondary_trend.get('direction', 'Unknown'),
+                'secondary_confidence': secondary_trend.get('confidence', 0)
+            }
+        
+        # Extract conflicts from indicator analysis
+        if ind_json.get('signal_conflicts', {}).get('has_conflicts', False):
+            mtf_context['conflicts'].append({
+                'type': 'indicator_conflict',
+                'description': ind_json['signal_conflicts'].get('conflict_description', 'Unknown'),
+                'resolution': ind_json['signal_conflicts'].get('resolution_guidance', 'Unknown')
+            })
+        
+        return mtf_context
+
+    def _extract_sector_context_from_analysis(self, ind_json: dict, chart_insights: str) -> dict:
+        """
+        Extract sector context from indicator analysis and chart insights.
+        """
+        sector_context = {
+            "sector_alignment": {},
+            "sector_risks": [],
+            "sector_opportunities": [],
+            "sector_confidence": 0
+        }
+        
+        # Extract sector information from indicator analysis
+        if ind_json.get('market_outlook', {}).get('sector_integration'):
+            sector_integration = ind_json['market_outlook']['sector_integration']
+            sector_context['sector_alignment'] = {
+                'performance_alignment': sector_integration.get('sector_performance_alignment', 'neutral'),
+                'rotation_impact': sector_integration.get('sector_rotation_impact', 'neutral'),
+                'momentum_support': sector_integration.get('sector_momentum_support', 'none'),
+                'confidence_boost': sector_integration.get('sector_confidence_boost', 0),
+                'risk_adjustment': sector_integration.get('sector_risk_adjustment', 'unchanged')
+            }
+        
+        # Extract sector risks from risk assessment
+        if ind_json.get('risk_assessment', {}).get('sector_risk_analysis'):
+            sector_risk_analysis = ind_json['risk_assessment']['sector_risk_analysis']
+            sector_context['sector_risks'] = [
+                sector_risk_analysis.get('sector_performance_risks', ''),
+                sector_risk_analysis.get('rotation_risks', ''),
+                sector_risk_analysis.get('correlation_risks', '')
+            ]
+        
+        # Extract sector confidence
+        if ind_json.get('confidence_metrics', {}).get('sector_confidence'):
+            sector_context['sector_confidence'] = ind_json['confidence_metrics']['sector_confidence']
+        
+        return sector_context
+
+    def _build_mtf_context_for_final_decision(self, knowledge_context: str) -> str:
+        """
+        Build enhanced MTF context specifically for final decision analysis.
+        """
+        # Extract MTF information from knowledge context
+        mtf_context_str = """
+        
+FINAL DECISION MTF INTEGRATION:
+This final decision must integrate multi-timeframe analysis with single-timeframe indicators and chart patterns.
+
+MTF DECISION GUIDELINES:
+1. **Primary Signal**: Use the highest confidence timeframe as primary signal
+2. **Confirmation**: Require at least 2 supporting timeframes for high-confidence decisions
+3. **Conflict Resolution**: When timeframes conflict, favor higher timeframes for trend direction
+4. **Risk Assessment**: Higher timeframe conflicts indicate increased risk
+5. **Entry Timing**: Use lower timeframes for precise entry timing
+6. **Position Sizing**: Adjust position size based on timeframe alignment
+
+MTF WEIGHTING FRAMEWORK:
+- 1day timeframe: 40% weight (trend direction)
+- 1hour timeframe: 25% weight (medium-term momentum)
+- 30min timeframe: 15% weight (short-term momentum)
+- 15min timeframe: 10% weight (entry timing)
+- 5min timeframe: 7% weight (entry precision)
+- 1min timeframe: 3% weight (micro-timing)
+
+DECISION CRITERIA:
+- Strong Buy: 3+ timeframes bullish, no major conflicts, >70% confidence
+- Buy: 2+ timeframes bullish, minor conflicts, >60% confidence
+- Hold: Mixed signals, significant conflicts, 40-60% confidence
+- Sell: 2+ timeframes bearish, minor conflicts, >60% confidence
+- Strong Sell: 3+ timeframes bearish, no major conflicts, >70% confidence
+"""
+        return mtf_context_str
+
+    def _enhance_result_with_mtf_context(self, result: dict, knowledge_context: str) -> dict:
+        """
+        Enhance the final decision result with MTF context information.
+        """
+        # Extract MTF summary from knowledge context
+        if "OVERALL MTF SUMMARY" in knowledge_context:
+            # Parse MTF consensus information
+            mtf_consensus = {
+                "mtf_trend": "Unknown",
+                "mtf_confidence": 0,
+                "mtf_alignment": "Unknown",
+                "supporting_timeframes": [],
+                "conflicting_timeframes": []
+            }
+            
+            # Extract information from knowledge context
+            lines = knowledge_context.split('\n')
+            for line in lines:
+                if "Consensus Trend:" in line:
+                    mtf_consensus["mtf_trend"] = line.split("Consensus Trend:")[1].strip()
+                elif "Confidence Score:" in line:
+                    try:
+                        confidence_str = line.split("Confidence Score:")[1].strip()
+                        mtf_consensus["mtf_confidence"] = float(confidence_str.replace('%', '')) / 100
+                    except:
+                        pass
+                elif "Signal Alignment:" in line:
+                    mtf_consensus["mtf_alignment"] = line.split("Signal Alignment:")[1].strip()
+                elif "Supporting Timeframes:" in line:
+                    timeframes = line.split("Supporting Timeframes:")[1].strip()
+                    mtf_consensus["supporting_timeframes"] = [tf.strip() for tf in timeframes.split(',') if tf.strip()]
+                elif "Conflicting Timeframes:" in line:
+                    timeframes = line.split("Conflicting Timeframes:")[1].strip()
+                    mtf_consensus["conflicting_timeframes"] = [tf.strip() for tf in timeframes.split(',') if tf.strip()]
+            
+            # Add MTF context to result
+            result["mtf_context"] = mtf_consensus
+            
+            # Adjust confidence based on MTF alignment
+            if mtf_consensus["mtf_confidence"] > 0:
+                # Weight the final confidence with MTF confidence
+                original_confidence = result.get("confidence_pct", 50)
+                mtf_weighted_confidence = (original_confidence * 0.7) + (mtf_consensus["mtf_confidence"] * 100 * 0.3)
+                result["confidence_pct"] = int(mtf_weighted_confidence)
+                
+                # Add MTF rationale
+                if "rationale" not in result:
+                    result["rationale"] = {}
+                result["rationale"]["mtf_integration"] = f"MTF consensus: {mtf_consensus['mtf_trend']} with {mtf_consensus['mtf_confidence']:.1%} confidence. Supporting timeframes: {', '.join(mtf_consensus['supporting_timeframes'])}"
+        
+        return result
+
+    def _build_sector_context_for_final_decision(self, knowledge_context: str) -> str:
+        """
+        Build enhanced sector context specifically for final decision analysis.
+        """
+        sector_context_str = """
+        
+FINAL DECISION SECTOR INTEGRATION:
+This final decision must integrate sector analysis with technical indicators and multi-timeframe analysis.
+
+SECTOR DECISION GUIDELINES:
+1. **Sector Performance**: Consider sector outperformance/underperformance vs market
+2. **Sector Rotation**: Assess sector rotation timing and impact
+3. **Sector Correlation**: Evaluate sector correlation with market and other sectors
+4. **Sector Momentum**: Consider sector momentum and trend strength
+5. **Sector Risk**: Assess sector-specific risks and volatility
+6. **Sector Opportunities**: Identify sector-specific opportunities
+
+SECTOR DECISION FRAMEWORK:
+- **Strong Buy**: Technical bullish + Sector outperforming + Sector rotation positive + Low sector risk
+- **Buy**: Technical bullish + Sector neutral/positive + No major sector conflicts + Moderate sector risk
+- **Hold**: Mixed technical signals + Sector neutral + Wait for clearer sector signals + Moderate sector risk
+- **Sell**: Technical bearish + Sector underperforming + Sector rotation negative + High sector risk
+- **Strong Sell**: Technical bearish + Sector underperforming + Sector rotation strongly negative + High sector risk
+
+SECTOR POSITION SIZING:
+- **Large Position**: Strong sector alignment + Low sector risk + Positive sector rotation
+- **Medium Position**: Moderate sector alignment + Moderate sector risk + Neutral sector rotation
+- **Small Position**: Weak sector alignment + High sector risk + Negative sector rotation
+- **No Position**: Conflicting sector signals + Very high sector risk + Strong negative sector rotation
+
+SECTOR TIMING CONSIDERATIONS:
+- **Entry Timing**: Consider sector rotation timing for optimal entry
+- **Exit Timing**: Monitor sector performance for exit signals
+- **Holding Period**: Adjust holding period based on sector momentum
+- **Risk Management**: Use sector volatility for position sizing
+"""
+        return sector_context_str
+
+    def _enhance_result_with_sector_context(self, result: dict, knowledge_context: str) -> dict:
+        """
+        Enhance the final decision result with sector context information.
+        """
+        # Extract sector summary from knowledge context
+        if "SECTOR CONTEXT" in knowledge_context:
+            # Parse sector consensus information
+            sector_consensus = {
+                "sector_performance": "Unknown",
+                "sector_outperformance": 0,
+                "sector_beta": 1.0,
+                "sector_rotation_impact": "neutral",
+                "sector_risks": []
+            }
+            
+            # Extract information from knowledge context
+            lines = knowledge_context.split('\n')
+            for line in lines:
+                if "Market Outperformance:" in line:
+                    try:
+                        outperformance_str = line.split("Market Outperformance:")[1].strip()
+                        sector_consensus["sector_outperformance"] = float(outperformance_str.replace('%', '')) / 100
+                    except:
+                        pass
+                elif "Sector Outperformance:" in line:
+                    try:
+                        sector_outperformance_str = line.split("Sector Outperformance:")[1].strip()
+                        if sector_outperformance_str != 'N/A':
+                            sector_consensus["sector_performance"] = float(sector_outperformance_str.replace('%', '')) / 100
+                    except:
+                        pass
+                elif "Sector Beta:" in line:
+                    try:
+                        beta_str = line.split("Sector Beta:")[1].strip()
+                        sector_consensus["sector_beta"] = float(beta_str)
+                    except:
+                        pass
+            
+            # Add sector context to result
+            result["sector_context"] = sector_consensus
+            
+            # Adjust confidence based on sector alignment
+            if sector_consensus["sector_outperformance"] > 0:
+                # Weight the final confidence with sector performance
+                original_confidence = result.get("confidence_pct", 50)
+                sector_weighted_confidence = (original_confidence * 0.6) + (sector_consensus["sector_outperformance"] * 100 * 0.4)
+                result["confidence_pct"] = int(sector_weighted_confidence)
+                
+                # Add sector rationale
+                if "rationale" not in result:
+                    result["rationale"] = {}
+                result["rationale"]["sector_integration"] = f"Sector outperformance: {sector_consensus['sector_outperformance']:.1%} with beta: {sector_consensus['sector_beta']:.2f}"
+        
+        return result
 
 

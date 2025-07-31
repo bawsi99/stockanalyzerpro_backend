@@ -7,6 +7,7 @@ import os
 import json
 from dataclasses import dataclass, field
 from gemini.gemini_client import GeminiClient
+from gemini.token_tracker import AnalysisTokenTracker
 from zerodha_client import ZerodhaDataClient
 from technical_indicators import TechnicalIndicators, DataCollector
 from patterns.recognition import PatternRecognition
@@ -14,6 +15,7 @@ from patterns.visualization import PatternVisualizer, ChartVisualizer
 from sector_benchmarking import sector_benchmarking_provider
 import asyncio
 from mtf_analysis_utils import multi_timeframe_analysis
+from enhanced_mtf_analysis import enhanced_mtf_analyzer
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -159,7 +161,9 @@ class StockAnalysisOrchestrator:
     def create_visualizations(self, data: pd.DataFrame, indicators: Dict[str, Any], 
                              symbol: str, output_dir: str) -> Dict[str, Any]:
         """
-        Create all visualization charts and prepare them for AI analysis.
+        Create optimized visualization charts for AI analysis.
+        Reduced from 8 charts to 4 comprehensive charts to eliminate redundancy.
+        
         Args:
             data: DataFrame containing price data
             indicators: Dictionary containing calculated indicators
@@ -169,57 +173,50 @@ class StockAnalysisOrchestrator:
             Dict[str, Any]: Dictionary containing chart data and metadata
         """
         import os
-        logger.info(f"Creating visualization charts for {symbol}")
+        logger.info(f"Creating optimized visualization charts for {symbol}")
         charts = {}
-        # 1. Multi-panel Technical Analysis Comparison Chart
-        comparison_chart_path = os.path.join(output_dir, f"{symbol}_comparison_chart.png")
-        ChartVisualizer.plot_comparison_chart(data, indicators, comparison_chart_path, stock_symbol=symbol)
-        charts['comparison_chart'] = comparison_chart_path
-        # 2. Divergence Chart (RSI)
-        divergence_chart_path = os.path.join(output_dir, f"{symbol}_divergence.png")
-        rsi = TechnicalIndicators.calculate_rsi(data)
-        divergences = PatternRecognition.detect_divergence(data['close'], rsi)
-        ChartVisualizer.plot_divergence_chart(data['close'], rsi, divergences, divergence_chart_path, title=f"{symbol} Divergences")
-        charts['divergence'] = divergence_chart_path
-        # 3. Double Tops/Bottoms Chart
-        double_tops_bottoms_chart_path = os.path.join(output_dir, f"{symbol}_double_tops_bottoms.png")
-        double_tops = PatternRecognition.detect_double_top(data['close'])
-        double_bottoms = PatternRecognition.detect_double_bottom(data['close'])
-        ChartVisualizer.plot_double_tops_bottoms_chart(data['close'], double_tops, double_bottoms, double_tops_bottoms_chart_path, title=f"{symbol} Double Tops/Bottoms")
-        charts['double_tops_bottoms'] = double_tops_bottoms_chart_path
-        # 4. Support & Resistance Chart
-        support_resistance_chart_path = os.path.join(output_dir, f"{symbol}_support_resistance.png")
-        support, resistance = TechnicalIndicators.detect_support_resistance(data)
-        ChartVisualizer.plot_support_resistance_chart(data['close'], support, resistance, support_resistance_chart_path, title=f"{symbol} Support & Resistance")
-        charts['support_resistance'] = support_resistance_chart_path
-        # 5. Triangles & Flags Chart
-        triangles_flags_chart_path = os.path.join(output_dir, f"{symbol}_triangles_flags.png")
-        triangles = PatternRecognition.detect_triangle(data['close'])
-        flags = PatternRecognition.detect_flag(data['close'])
-        ChartVisualizer.plot_triangles_flags_chart(data['close'], triangles, flags, triangles_flags_chart_path, title=f"{symbol} Triangles & Flags")
-        charts['triangles_flags'] = triangles_flags_chart_path
-        # 6. Volume Anomalies Chart
-        volume_anomalies_chart_path = os.path.join(output_dir, f"{symbol}_volume_anomalies.png")
-        anomalies = PatternRecognition.detect_volume_anomalies(data['volume'])
-        ChartVisualizer.plot_volume_anomalies_chart(data['volume'], anomalies, volume_anomalies_chart_path, title=f"{symbol} Volume Anomalies")
-        charts['volume_anomalies'] = volume_anomalies_chart_path
         
-        # 7. Price-Volume Correlation Chart (NEW)
-        price_volume_chart_path = os.path.join(output_dir, f"{symbol}_price_volume_correlation.png")
-        ChartVisualizer.plot_price_volume_correlation(data, anomalies, price_volume_chart_path, title=f"{symbol} Price-Volume Correlation")
-        charts['price_volume_correlation'] = price_volume_chart_path
+        try:
+            # 1. COMPREHENSIVE TECHNICAL OVERVIEW CHART
+            # Combines: comparison_chart + support/resistance levels
+            technical_chart_path = os.path.join(output_dir, f"{symbol}_technical_overview.png")
+            ChartVisualizer.plot_comprehensive_technical_chart(data, indicators, technical_chart_path, stock_symbol=symbol)
+            charts['technical_overview'] = technical_chart_path
+        except Exception as e:
+            logger.warning(f"Failed to create technical overview chart for {symbol}: {e}")
         
-        # 8. Candlestick with Volume Chart (NEW)
-        candlestick_volume_chart_path = os.path.join(output_dir, f"{symbol}_candlestick_volume.png")
-        ChartVisualizer.plot_candlestick_with_volume(data, anomalies, candlestick_volume_chart_path, title=f"{symbol} Price & Volume Analysis")
-        charts['candlestick_volume'] = candlestick_volume_chart_path
+        try:
+            # 2. COMPREHENSIVE PATTERN ANALYSIS CHART
+            # Combines: divergence + double_tops_bottoms + triangles_flags
+            pattern_chart_path = os.path.join(output_dir, f"{symbol}_pattern_analysis.png")
+            ChartVisualizer.plot_comprehensive_pattern_chart(data, indicators, pattern_chart_path, stock_symbol=symbol)
+            charts['pattern_analysis'] = pattern_chart_path
+        except Exception as e:
+            logger.warning(f"Failed to create pattern analysis chart for {symbol}: {e}")
         
-        logger.info(f"Created {len(charts)} charts for {symbol}")
+        try:
+            # 3. COMPREHENSIVE VOLUME ANALYSIS CHART
+            # Combines: volume_anomalies + price_volume_correlation + candlestick_volume
+            volume_chart_path = os.path.join(output_dir, f"{symbol}_volume_analysis.png")
+            ChartVisualizer.plot_comprehensive_volume_chart(data, indicators, volume_chart_path, stock_symbol=symbol)
+            charts['volume_analysis'] = volume_chart_path
+        except Exception as e:
+            logger.warning(f"Failed to create volume analysis chart for {symbol}: {e}")
+        
+        try:
+            # 4. MULTI-TIMEFRAME COMPARISON CHART
+            # New chart for multi-timeframe analysis
+            mtf_chart_path = os.path.join(output_dir, f"{symbol}_mtf_comparison.png")
+            ChartVisualizer.plot_mtf_comparison_chart(data, indicators, mtf_chart_path, stock_symbol=symbol)
+            charts['mtf_comparison'] = mtf_chart_path
+        except Exception as e:
+            logger.warning(f"Failed to create MTF comparison chart for {symbol}: {e}")
+        
+        logger.info(f"Created {len(charts)} optimized charts for {symbol}")
         return charts
     
-    @staticmethod
-    def serialize_indicators(indicators: Dict[str, Any]) -> Dict[str, Any]:
-        """Serialize indicators to JSON-serializable format."""
+    def serialize_indicators(self, indicators: Dict[str, Any]) -> Dict[str, Any]:
+        """Serialize indicators to JSON-serializable format with optimized data reduction."""
         def convert_numpy_types(obj):
             """Convert NumPy types to JSON-serializable Python types."""
             if isinstance(obj, np.integer):
@@ -239,32 +236,57 @@ class StockAnalysisOrchestrator:
             else:
                 return obj
         
+        def optimize_indicator_data(indicator_data):
+            """Optimize indicator data by reducing historical arrays and redundant information."""
+            if isinstance(indicator_data, dict):
+                optimized = {}
+                for key, value in indicator_data.items():
+                    # Skip historical arrays - only keep current and recent values
+                    if key in ['values', 'historical_values', 'price_history', 'volume_history']:
+                        if isinstance(value, (list, np.ndarray, pd.Series)):
+                            # Keep only last 5 values for trend analysis
+                            if len(value) > 5:
+                                optimized[key] = convert_numpy_types(value[-5:])
+                            else:
+                                optimized[key] = convert_numpy_types(value)
+                        else:
+                            optimized[key] = convert_numpy_types(value)
+                    # Skip redundant moving average historical data
+                    elif key in ['sma_values', 'ema_values', 'wma_values']:
+                        if isinstance(value, dict):
+                            optimized[key] = {k: convert_numpy_types(v[-5:] if isinstance(v, (list, np.ndarray, pd.Series)) and len(v) > 5 else v) 
+                                            for k, v in value.items()}
+                        else:
+                            optimized[key] = convert_numpy_types(value)
+                    # Keep essential data
+                    else:
+                        optimized[key] = convert_numpy_types(value)
+                return optimized
+            else:
+                return convert_numpy_types(indicator_data)
+        
         serializable = {}
         for key, value in indicators.items():
-            serializable[key] = convert_numpy_types(value)
+            serializable[key] = optimize_indicator_data(value)
         return serializable
-    
-    async def orchestrate_llm_analysis(self, symbol: str, indicators: dict, chart_paths: dict, period: int, interval: str, knowledge_context: str = "") -> tuple:
-        result, ind_summary_md, chart_insights_md = await self.gemini_client.analyze_stock(symbol, indicators, chart_paths, period, interval, knowledge_context)
-        return result, ind_summary_md, chart_insights_md
 
-    async def analyze_with_ai(self, symbol: str, indicators: dict, chart_paths: dict, period: int, interval: str, knowledge_context: str = "", sector_context: dict = None) -> tuple:
+    async def orchestrate_llm_analysis(self, symbol: str, indicators: dict, chart_paths: dict, period: int, interval: str, knowledge_context: str = "") -> tuple:
+        """Orchestrate the LLM analysis workflow."""
+        return await self.analyze_with_ai(symbol, indicators, chart_paths, period, interval, knowledge_context)
+
+    async def analyze_with_ai(self, symbol: str, indicators: dict, chart_paths: dict, period: int, interval: str, knowledge_context: str = "", sector_context: dict = None, mtf_context: dict = None) -> tuple:
         # Add sector context to knowledge context if available
         enhanced_knowledge_context = knowledge_context
         if sector_context:
-            sector_info = sector_context.get('sector_info', {})
-            market_benchmarking = sector_context.get('market_benchmarking', {})
             sector_benchmarking = sector_context.get('sector_benchmarking', {})
-            sector_analysis = sector_context.get('analysis_summary', {})
+            sector_rotation = sector_context.get('sector_rotation', {})
+            sector_correlation = sector_context.get('sector_correlation', {})
+            sector_analysis = sector_context.get('sector_analysis', {})
             
             sector_context_str = f"""
 SECTOR CONTEXT:
-- Sector: {sector_info.get('sector_name', 'Unknown')} ({sector_info.get('sector', 'Unknown')})
-- Sector Index: {sector_info.get('sector_index', 'N/A')}
-- Sector Stocks: {sector_info.get('sector_stocks_count', 0)} stocks
-
 SECTOR PERFORMANCE:
-- Market Outperformance: {float(market_benchmarking.get('excess_return', 0)):.2%}
+- Market Outperformance: {float(sector_benchmarking.get('excess_return', 0)):.2%}
 - Sector Outperformance: {f"{float(sector_benchmarking.get('sector_excess_return', 0)):.2%}" if sector_benchmarking else 'N/A'}
 - Sector Beta: {f"{sector_benchmarking.get('sector_beta', 1.0):.2f}" if sector_benchmarking else '1.00'}
 
@@ -277,8 +299,103 @@ Consider this sector context when analyzing the stock's technical indicators and
 """
             enhanced_knowledge_context = knowledge_context + "\n" + sector_context_str
         
-        result, ind_summary_md, chart_insights_md = await self.orchestrate_llm_analysis(symbol, indicators, chart_paths, period, interval, enhanced_knowledge_context)
+        # Add enhanced multi-timeframe context if available
+        if mtf_context and mtf_context.get('success', False):
+            mtf_summary = mtf_context.get('summary', {})
+            mtf_validation = mtf_context.get('cross_timeframe_validation', {})
+            mtf_timeframes = mtf_context.get('timeframe_analyses', {})
+            
+            mtf_context_str = f"""
+ENHANCED MULTI-TIMEFRAME ANALYSIS CONTEXT:
+This analysis covers 6 timeframes: 1min, 5min, 15min, 30min, 1hour, and 1day.
+
+OVERALL MTF SUMMARY:
+- Consensus Trend: {mtf_summary.get('overall_signal', 'Unknown')}
+- Confidence Score: {mtf_summary.get('confidence', 0):.2%}
+- Signal Alignment: {mtf_summary.get('signal_alignment', 'Unknown')}
+- Risk Level: {mtf_summary.get('risk_level', 'Unknown')}
+- Recommendation: {mtf_summary.get('recommendation', 'Unknown')}
+
+CROSS-TIMEFRAME VALIDATION:
+- Signal Strength: {mtf_validation.get('signal_strength', 0):.2%}
+- Supporting Timeframes: {', '.join(mtf_validation.get('supporting_timeframes', []))}
+- Conflicting Timeframes: {', '.join(mtf_validation.get('conflicting_timeframes', []))}
+- Divergence Detected: {'Yes' if mtf_validation.get('divergence_detected', False) else 'No'}
+- Divergence Type: {mtf_validation.get('divergence_type', 'None')}
+
+DYNAMIC TIMEFRAME ANALYSIS (Signal Quality Based):
+"""
+            
+            # Add individual timeframe signals with dynamic importance
+            for timeframe, analysis in mtf_timeframes.items():
+                trend = analysis.get('trend', 'Unknown')
+                confidence = analysis.get('confidence', 0)
+                rsi = analysis.get('key_indicators', {}).get('rsi', 'N/A')
+                macd_signal = analysis.get('key_indicators', {}).get('macd_signal', 'Unknown')
+                
+                # Determine importance based on signal quality and confidence
+                if confidence > 0.8:
+                    importance = "🔥 HIGH IMPORTANCE"
+                elif confidence > 0.6:
+                    importance = "⚡ MEDIUM-HIGH IMPORTANCE"
+                elif confidence > 0.4:
+                    importance = "📊 MEDIUM IMPORTANCE"
+                else:
+                    importance = "⚠️ LOW IMPORTANCE"
+                
+                mtf_context_str += f"- {timeframe}: {trend} (Confidence: {confidence:.2%}, RSI: {rsi:.2f}, MACD: {macd_signal}) - {importance}\n"
+            
+            mtf_context_str += f"""
+KEY CONFLICTS:
+{chr(10).join(mtf_validation.get('key_conflicts', ['None identified']))}
+
+DYNAMIC WEIGHTING INSIGHTS:
+- Timeframes with higher confidence and signal quality have more influence
+- Supporting timeframes strengthen the consensus signal
+- Conflicting timeframes indicate potential reversals or uncertainty
+- Divergence between timeframes suggests trend change potential
+
+IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay special attention to:
+1. Whether the single-timeframe indicators align with the multi-timeframe consensus
+2. Any divergences between timeframes that might indicate trend changes
+3. The confidence level and signal alignment across timeframes
+4. Risk assessment based on timeframe conflicts or alignments
+5. Which timeframes are showing HIGH IMPORTANCE signals
+"""
+            
+            enhanced_knowledge_context = enhanced_knowledge_context + "\n" + mtf_context_str
+        
+        # Pass MTF context to the LLM analysis
+        result, ind_summary_md, chart_insights_md = await self.orchestrate_llm_analysis_with_mtf(symbol, indicators, chart_paths, period, interval, enhanced_knowledge_context, mtf_context)
         return result, ind_summary_md, chart_insights_md
+
+    async def orchestrate_llm_analysis_with_mtf(self, symbol: str, indicators: dict, chart_paths: dict, period: int, interval: str, knowledge_context: str = "", mtf_context: dict = None) -> tuple:
+        """Orchestrate the LLM analysis workflow with MTF context integration."""
+        try:
+            # Initialize token tracker
+            import time
+            analysis_id = f"{symbol}_{int(time.time())}"
+            token_tracker = AnalysisTokenTracker(analysis_id=analysis_id, symbol=symbol)
+            
+            # 1. Indicator summary analysis with MTF context
+            print(f"[LLM-ANALYSIS] Starting indicator summary analysis for {symbol}...")
+            ind_summary_md, ind_json = await self.gemini_client.build_indicators_summary(
+                symbol, indicators, period, interval, knowledge_context, token_tracker, mtf_context
+            )
+            
+            # 2. Chart analysis (already optimized for MTF)
+            print(f"[LLM-ANALYSIS] Starting chart analysis for {symbol}...")
+            result, ind_summary_md, chart_insights_md = await self.gemini_client.analyze_stock(
+                symbol, indicators, chart_paths, period, interval, knowledge_context
+            )
+            
+            return result, ind_summary_md, chart_insights_md
+            
+        except Exception as e:
+            logger.error(f"Error in LLM analysis orchestration: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     async def analyze_stock(self, symbol: str, exchange: str = "NSE",
                      period: int = 365, interval: str = "day", output_dir: str = None, 
@@ -310,8 +427,8 @@ Consider this sector context when analyzing the stock's technical indicators and
             except Exception as e:
                 mtf_result = {'messages': [f"Error in multi-timeframe analysis: {e}"]}
             
-            # Calculate technical indicators (for AI analysis, not consensus)
-            state.indicators = self.calculate_indicators(stock_data, symbol)
+            # Calculate technical indicators with optimized data reduction (95-98% reduction in historical data)
+            state.indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, symbol)
             
             # Create visualizations for AI analysis
             chart_paths = {}
@@ -326,19 +443,46 @@ Consider this sector context when analyzing the stock's technical indicators and
             
             if sector:
                 try:
-                    # Get sector benchmarking using the correct provider
-                    sector_benchmarking = await self.sector_benchmarking_provider.get_comprehensive_benchmarking_async(symbol, stock_data)
-                    sector_rotation = await self.sector_benchmarking_provider.analyze_sector_rotation_async("3M")
-                    sector_correlation = await self.sector_benchmarking_provider.generate_sector_correlation_matrix_async("6M")
+                    # OPTIMIZED: Use unified sector data fetcher instead of separate calls
+                    logging.info(f"OPTIMIZED: Using unified sector data fetcher for {symbol}")
+                    comprehensive_sector_data = await self.sector_benchmarking_provider.get_optimized_comprehensive_sector_analysis(
+                        symbol, stock_data, sector
+                    )
+                    
+                    # Extract individual components from unified analysis
+                    sector_benchmarking = comprehensive_sector_data.get('sector_benchmarking', {})
+                    sector_rotation = comprehensive_sector_data.get('sector_rotation', {})
+                    sector_correlation = comprehensive_sector_data.get('sector_correlation', {})
+                    
+                    # Log optimization metrics
+                    optimization_metrics = comprehensive_sector_data.get('optimization_metrics', {})
+                    logging.info(f"OPTIMIZATION METRICS: {optimization_metrics}")
+                    
                     enhanced_sector_context = self._build_enhanced_sector_context(
                         sector, sector_benchmarking, sector_rotation, sector_correlation
                     )
+                    
+                    # Add optimization note to context
+                    if optimization_metrics:
+                        enhanced_sector_context['optimization_metrics'] = optimization_metrics
+                        
                 except Exception as e:
-                    print(f"Warning: Could not get sector context for {sector}: {e}")
+                    print(f"Warning: Could not get optimized sector context for {sector}: {e}")
+                    # Fallback to old method if optimized method fails
+                    try:
+                        logging.info(f"FALLBACK: Using legacy sector data fetching for {symbol}")
+                        sector_benchmarking = await self.sector_benchmarking_provider.get_comprehensive_benchmarking_async(symbol, stock_data)
+                        sector_rotation = await self.sector_benchmarking_provider.analyze_sector_rotation_async("1M")
+                        sector_correlation = await self.sector_benchmarking_provider.generate_sector_correlation_matrix_async("3M")
+                        enhanced_sector_context = self._build_enhanced_sector_context(
+                            sector, sector_benchmarking, sector_rotation, sector_correlation
+                        )
+                    except Exception as fallback_error:
+                        print(f"Warning: Fallback sector context also failed for {sector}: {fallback_error}")
             
-            # Get AI analysis (primary analysis method)
+            # Get AI analysis (primary analysis method) with MTF context
             ai_analysis, ind_summary_md, chart_insights_md = await self.analyze_with_ai(
-                symbol, state.indicators, chart_paths, period, interval, knowledge_context, enhanced_sector_context
+                symbol, state.indicators, chart_paths, period, interval, knowledge_context, enhanced_sector_context, mtf_result
             )
             
             # Convert indicators to serializable format
@@ -347,40 +491,16 @@ Consider this sector context when analyzing the stock's technical indicators and
             # Create overlays for visualization
             overlays = self._create_overlays(stock_data, state.indicators)
             
-            # Build comprehensive analysis results
-            analysis_results = {
-                'ai_analysis': ai_analysis,
-                'indicators': serializable_indicators,
-                'overlays': overlays,
-                'indicator_summary_md': ind_summary_md,
-                'chart_insights': chart_insights_md,
-                'sector_benchmarking': sector_benchmarking,
-                'multi_timeframe_analysis': mtf_result,
-                'summary': {
-                    'overall_signal': ai_analysis.get('trend', 'Unknown'),
-                    'confidence': ai_analysis.get('confidence_pct', 0),
-                    'analysis_method': 'AI-Powered Analysis',
-                    'analysis_quality': 'High',
-                    'risk_level': self._determine_risk_level(ai_analysis),
-                    'recommendation': self._generate_recommendation(ai_analysis)
-                },
-                'trading_guidance': {
-                    'short_term': ai_analysis.get('short_term', {}),
-                    'medium_term': ai_analysis.get('medium_term', {}),
-                    'long_term': ai_analysis.get('long_term', {}),
-                    'risk_management': ai_analysis.get('risks', []),
-                    'key_levels': ai_analysis.get('must_watch_levels', [])
-                },
-                'metadata': {
-                    'symbol': symbol,
-                    'exchange': exchange,
-                    'analysis_date': datetime.now().isoformat(),
-                    'data_period': f"{period} days",
-                    'period_days': period,
-                    'interval': interval,
-                    'sector': sector
-                }
-            }
+            # Build enhanced analysis results with MTF context
+            analysis_results = self._build_enhanced_analysis_result(
+                symbol, exchange, stock_data, state.indicators, ai_analysis, 
+                ind_summary_md, chart_insights_md, chart_paths, 
+                enhanced_sector_context, period, interval
+            )
+            
+            # Add MTF context to the analysis results
+            if mtf_result:
+                analysis_results['multi_timeframe_analysis'] = mtf_result
             
             # Update state
             state.update(
@@ -636,9 +756,9 @@ Consider this sector context when analyzing the stock's technical indicators and
             if data.empty:
                 raise ValueError(f"No data available for {symbol}")
             
-            # Step 2: Calculate technical indicators
-            logger.info(f"[ENHANCED ANALYSIS] Calculating indicators for {symbol}")
-            indicators = self.calculate_indicators(data, symbol)
+            # Step 2: Calculate technical indicators with optimized data reduction
+            logger.info(f"[ENHANCED ANALYSIS] Calculating optimized indicators for {symbol}")
+            indicators = TechnicalIndicators.calculate_all_indicators_optimized(data, symbol)
             
             # Step 3: Create visualizations
             logger.info(f"[ENHANCED ANALYSIS] Creating visualizations for {symbol}")
@@ -661,8 +781,8 @@ Consider this sector context when analyzing the stock's technical indicators and
                 symbol, indicators, chart_paths, period, interval, knowledge_context, sector_context
             )
             
-            # Step 6: Build comprehensive result
-            logger.info(f"[ENHANCED ANALYSIS] Building comprehensive result for {symbol}")
+            # Step 6: Build enhanced result with mathematical validation
+            logger.info(f"[ENHANCED ANALYSIS] Building enhanced result for {symbol}")
             result = self._build_enhanced_analysis_result(
                 symbol, exchange, data, indicators, ai_analysis, 
                 indicator_summary, chart_insights, chart_paths, 
@@ -951,7 +1071,7 @@ if __name__ == "__main__":
                      period: int = 365, interval: str = "day", output_dir: str = None, 
                      knowledge_context: str = "", sector: str = None) -> tuple:
         """
-        Enhanced analysis method that uses async index data fetching for better performance.
+        Enhanced analysis with async index data fetching and comprehensive multi-timeframe analysis.
         """
         try:
             # Get or create analysis state
@@ -962,45 +1082,57 @@ if __name__ == "__main__":
             if stock_data.empty:
                 return None, None, f"No data available for {symbol}"
             
-            # Warn if data is not real-time
-            if stock_data.attrs.get('data_freshness') != 'real_time':
-                logger.warning(f"Data for {symbol} is not real-time (freshness: {stock_data.attrs.get('data_freshness')}). Analysis may be based on stale data.")
+            # Perform enhanced multi-timeframe analysis
+            print(f"[ENHANCED MTF] Starting comprehensive multi-timeframe analysis for {symbol}")
+            mtf_results = await enhanced_mtf_analyzer.comprehensive_mtf_analysis(symbol, exchange)
             
-            # --- MTF/LONG-TERM ANALYSIS ---
-            # Map interval to base_interval for MTF utility
-            interval_map = {
-                'minute': 'minute', '3minute': 'minute', '5minute': 'minute', '10minute': 'minute', '15minute': 'minute', '30minute': 'minute', '60minute': 'hour',
-                'day': 'day', 'week': 'week', 'month': 'month'
-            }
-            base_interval = interval_map.get(interval, 'day')
-            try:
-                mtf_result = multi_timeframe_analysis(stock_data, base_interval=base_interval)
-            except Exception as e:
-                mtf_result = {'messages': [f"Error in multi-timeframe analysis: {e}"]}
+            if not mtf_results.get('success', False):
+                print(f"[ENHANCED MTF] Warning: Multi-timeframe analysis failed: {mtf_results.get('error', 'Unknown error')}")
+                # Fallback to basic MTF analysis
+                interval_map = {
+                    'minute': 'minute', '3minute': 'minute', '5minute': 'minute', '10minute': 'minute', '15minute': 'minute', '30minute': 'minute', '60minute': 'hour',
+                    'day': 'day', 'week': 'week', 'month': 'month'
+                }
+                base_interval = interval_map.get(interval, 'day')
+                try:
+                    mtf_result = multi_timeframe_analysis(stock_data, base_interval=base_interval)
+                except Exception as e:
+                    mtf_result = {'messages': [f"Error in multi-timeframe analysis: {e}"]}
+            else:
+                print(f"[ENHANCED MTF] Multi-timeframe analysis completed successfully")
+                mtf_result = mtf_results
             
-            # Calculate technical indicators (for AI analysis, not consensus)
-            state.indicators = self.calculate_indicators(stock_data, symbol)
+            # Calculate technical indicators with optimized data reduction (95-98% reduction in historical data)
+            state.indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, symbol)
             
             # Create visualizations for AI analysis
             chart_paths = {}
             if output_dir:
                 chart_paths = self.create_visualizations(stock_data, state.indicators, symbol, output_dir)
             
-            # Get sector context asynchronously if available
-            sector_context = {}
+            # Get sector context if available
+            sector_benchmarking = None
+            sector_rotation = None
+            sector_correlation = None
+            enhanced_sector_context = None
+            
             if sector:
                 try:
-                    sector_context = await self.get_sector_context_async(symbol, stock_data, sector)
-                    enhanced_sector_context = sector_context.get('enhanced_sector_context')
+                    # Get sector benchmarking using the correct provider
+                    sector_benchmarking = await self.sector_benchmarking_provider.get_comprehensive_benchmarking_async(symbol, stock_data)
+                    # OPTIMIZED: Use 1M instead of 3M for sector rotation (reduced from 140 to 50 days)
+                    sector_rotation = await self.sector_benchmarking_provider.analyze_sector_rotation_async("1M")
+                    # OPTIMIZED: Use 3M instead of 6M for correlation (reduced from 230 to 80 days)
+                    sector_correlation = await self.sector_benchmarking_provider.generate_sector_correlation_matrix_async("3M")
+                    enhanced_sector_context = self._build_enhanced_sector_context(
+                        sector, sector_benchmarking, sector_rotation, sector_correlation
+                    )
                 except Exception as e:
-                    logger.warning(f"Could not get async sector context for {sector}: {e}")
-                    enhanced_sector_context = None
-            else:
-                enhanced_sector_context = None
+                    print(f"Warning: Could not get sector context for {sector}: {e}")
             
             # Get AI analysis (primary analysis method)
             ai_analysis, ind_summary_md, chart_insights_md = await self.analyze_with_ai(
-                symbol, state.indicators, chart_paths, period, interval, knowledge_context, enhanced_sector_context
+                symbol, state.indicators, chart_paths, period, interval, knowledge_context, enhanced_sector_context, mtf_result
             )
             
             # Convert indicators to serializable format
@@ -1009,55 +1141,328 @@ if __name__ == "__main__":
             # Create overlays for visualization
             overlays = self._create_overlays(stock_data, state.indicators)
             
-            # Build comprehensive analysis results
-            analysis_results = {
-                'ai_analysis': ai_analysis,
-                'indicators': serializable_indicators,
-                'overlays': overlays,
-                'indicator_summary_md': ind_summary_md,
-                'chart_insights': chart_insights_md,
-                'sector_benchmarking': sector_context.get('sector_benchmarking'),
-                'sector_rotation': sector_context.get('sector_rotation'),
-                'sector_correlation': sector_context.get('sector_correlation'),
-                'multi_timeframe_analysis': mtf_result,
-                'summary': {
-                    'overall_signal': ai_analysis.get('trend', 'Unknown'),
-                    'confidence': ai_analysis.get('confidence_pct', 0),
-                    'analysis_method': 'AI-Powered Analysis with Async Index Data',
-                    'analysis_quality': 'High',
-                    'risk_level': self._determine_risk_level(ai_analysis),
-                    'recommendation': self._generate_recommendation(ai_analysis)
-                },
-                'trading_guidance': {
-                    'short_term': ai_analysis.get('short_term', {}),
-                    'medium_term': ai_analysis.get('medium_term', {}),
-                    'long_term': ai_analysis.get('long_term', {}),
-                    'risk_management': ai_analysis.get('risks', []),
-                    'key_levels': ai_analysis.get('must_watch_levels', [])
-                },
-                'metadata': {
-                    'symbol': symbol,
-                    'exchange': exchange,
-                    'analysis_date': datetime.now().isoformat(),
-                    'data_period': f"{period} days",
-                    'period_days': period,
-                    'interval': interval,
-                    'sector': sector,
-                    'analysis_type': 'async_index_data',
-                    'data_freshness': stock_data.attrs.get('data_freshness', 'unknown')
-                }
-            }
+            # Build optimized analysis results with enhanced MTF data
+            analysis_results = self.build_optimized_analysis_result(
+                symbol, exchange, stock_data, state.indicators, ai_analysis, 
+                ind_summary_md, chart_insights_md, chart_paths, 
+                enhanced_sector_context, mtf_results, period, interval
+            )
+            
+            # Add enhanced MTF specific data to the optimized structure
+            if mtf_results.get('success', False):
+                analysis_results['enhanced_mtf_analysis'] = mtf_results
+                analysis_results['summary']['mtf_consensus'] = mtf_results.get('summary', {}).get('overall_signal', 'Unknown')
+                analysis_results['summary']['mtf_confidence'] = mtf_results.get('summary', {}).get('confidence', 0)
+                analysis_results['summary']['signal_alignment'] = mtf_results.get('summary', {}).get('signal_alignment', 'Unknown')
+                analysis_results['trading_guidance']['mtf_recommendation'] = mtf_results.get('summary', {}).get('recommendation', 'Unknown')
+                analysis_results['metadata']['timeframes_analyzed'] = mtf_results.get('summary', {}).get('timeframes_analyzed', 0)
+                analysis_results['metadata']['analysis_type'] = 'enhanced_mtf_analysis'
             
             # Update state
             state.update(
-                indicators=state.indicators,
-                analysis_results=analysis_results
+                analysis_results=analysis_results,
+                last_updated=datetime.now()
             )
             
-            return analysis_results, "Analysis completed successfully with async index data", None
+            success_message = f"Enhanced multi-timeframe analysis completed for {symbol}. AI Signal: {ai_analysis.get('trend', 'Unknown')} (Confidence: {ai_analysis.get('confidence_pct', 0)}%). MTF Consensus: {mtf_results.get('summary', {}).get('overall_signal', 'Unknown') if mtf_results.get('success', False) else 'Unknown'}"
+            
+            return analysis_results, success_message, None
             
         except Exception as e:
-            error_msg = f"Error in async index data analysis: {str(e)}"
-            logger.error(error_msg)
-            return None, None, error_msg
+            error_message = f"Error in enhanced MTF analysis for {symbol}: {str(e)}"
+            print(f"Error in analyze_stock_with_async_index_data: {e}")
+            import traceback
+            traceback.print_exc()
+            return None, None, error_message
+
+    def build_optimized_analysis_result(self, symbol: str, exchange: str, data: pd.DataFrame, 
+                                      indicators: dict, ai_analysis: dict, indicator_summary: str, 
+                                      chart_insights: str, chart_paths: dict, sector_context: dict, 
+                                      mtf_context: dict, period: int, interval: str) -> dict:
+        """
+        Build optimized analysis result with significant data reduction.
+        """
+        try:
+            import time
+            
+            # Get latest price and basic info
+            latest_price = data['close'].iloc[-1] if not data.empty else None
+            price_change = data['close'].iloc[-1] - data['close'].iloc[-2] if len(data) > 1 else 0
+            price_change_pct = (price_change / data['close'].iloc[-2]) * 100 if len(data) > 1 and data['close'].iloc[-2] != 0 else 0
+            
+            # Determine risk level
+            risk_level = self._determine_risk_level_static(ai_analysis)
+            
+            # Generate recommendation
+            recommendation = self._generate_recommendation_static(ai_analysis)
+            
+            # Optimize AI analysis by removing redundant information
+            optimized_ai_analysis = self._optimize_ai_analysis(ai_analysis)
+            
+            # Optimize sector context by removing duplicates
+            optimized_sector_context = self._optimize_sector_context(sector_context)
+            
+            # Build optimized result structure
+            result = {
+                # Essential metadata (single location)
+                "metadata": {
+                    "symbol": symbol,
+                    "exchange": exchange,
+                    "analysis_date": datetime.now().isoformat(),
+                    "period_days": period,
+                    "interval": interval,
+                    "sector": sector_context.get('sector') if sector_context else None
+                },
+                
+                # Optimized AI analysis
+                "ai_analysis": optimized_ai_analysis,
+                
+                # Optimized indicators (reduced historical data)
+                "indicators": self.serialize_indicators(indicators),
+                
+                # Optimized overlays (essential pattern data only)
+                "overlays": self._optimize_overlays(data, indicators),
+                
+                # Consolidated trading guidance
+                "trading_guidance": self._consolidate_trading_guidance(ai_analysis),
+                
+                # Optimized sector context
+                "sector_context": optimized_sector_context,
+                
+                # Keep multi-timeframe analysis intact (as requested)
+                "multi_timeframe_analysis": mtf_context,
+                
+                # Consolidated summary
+                "summary": {
+                    "overall_signal": ai_analysis.get('trend', 'Unknown'),
+                    "confidence": ai_analysis.get('confidence_pct', 0),
+                    "risk_level": risk_level,
+                    "recommendation": recommendation
+                },
+                
+                # Charts (keep as is)
+                "charts": chart_paths,
+                
+                # Markdown summaries (keep as is)
+                "indicator_summary_md": indicator_summary,
+                "chart_insights": chart_insights
+            }
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"[OPTIMIZED ANALYSIS] Error building optimized result for {symbol}: {e}")
+            raise
+
+    def _optimize_ai_analysis(self, ai_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Optimize AI analysis by removing redundant information."""
+        if not ai_analysis:
+            return {}
+        
+        optimized = {}
+        
+        # Keep essential trend information
+        if 'trend' in ai_analysis:
+            optimized['trend'] = ai_analysis['trend']
+        if 'confidence_pct' in ai_analysis:
+            optimized['confidence_pct'] = ai_analysis['confidence_pct']
+        
+        # Consolidate primary trend information
+        if 'primary_trend' in ai_analysis:
+            primary = ai_analysis['primary_trend']
+            optimized['primary_trend'] = {
+                'signal': primary.get('signal'),
+                'strength': primary.get('strength'),
+                'key_drivers': primary.get('key_drivers', [])
+            }
+        
+        # Consolidate market outlook
+        if 'market_outlook' in ai_analysis:
+            outlook = ai_analysis['market_outlook']
+            optimized['market_outlook'] = {
+                'bias': outlook.get('bias'),
+                'timeframe': outlook.get('timeframe'),
+                'key_factors': outlook.get('key_factors', [])
+            }
+        
+        # Remove redundant sector information (will be in separate sector_context)
+        if 'sector_integration' in ai_analysis:
+            del ai_analysis['sector_integration']
+        if 'sector_context' in ai_analysis:
+            del ai_analysis['sector_context']
+        
+        return optimized
+
+    def _optimize_sector_context(self, sector_context: Dict[str, Any]) -> Dict[str, Any]:
+        """Optimize sector context by removing redundant information."""
+        if not sector_context:
+            return {}
+        
+        optimized = {}
+        
+        # Extract essential sector information
+        if 'sector' in sector_context:
+            optimized['sector'] = sector_context['sector']
+        
+        # Consolidate sector performance
+        if 'sector_benchmarking' in sector_context:
+            benchmarking = sector_context['sector_benchmarking']
+            optimized['benchmarking'] = {
+                'excess_return': benchmarking.get('excess_return'),
+                'sector_excess_return': benchmarking.get('sector_excess_return'),
+                'sector_beta': benchmarking.get('sector_beta')
+            }
+        
+        # Consolidate sector rotation
+        if 'sector_rotation' in sector_context:
+            rotation = sector_context['sector_rotation']
+            optimized['rotation'] = {
+                'rotation_strength': rotation.get('rotation_strength'),
+                'rotation_direction': rotation.get('rotation_direction'),
+                'momentum_score': rotation.get('momentum_score')
+            }
+        
+        # Consolidate sector correlation
+        if 'sector_correlation' in sector_context:
+            correlation = sector_context['sector_correlation']
+            optimized['correlation'] = {
+                'market_correlation': correlation.get('market_correlation'),
+                'sector_correlation': correlation.get('sector_correlation')
+            }
+        
+        return optimized
+
+    def _optimize_overlays(self, data: pd.DataFrame, indicators: Dict[str, Any]) -> Dict[str, Any]:
+        """Optimize overlays by keeping only essential pattern data."""
+        try:
+            # --- TRIANGLES ---
+            triangle_indices = PatternRecognition.detect_triangle(data['close'])
+            triangles = []
+            for tri in triangle_indices:
+                # Keep only essential triangle data
+                triangles.append({
+                    "type": tri.get('type'),
+                    "breakout_price": tri.get('breakout_price'),
+                    "target": tri.get('target'),
+                    "confidence": tri.get('confidence')
+                })
+            
+            # --- SUPPORT/RESISTANCE ---
+            support_levels = []
+            resistance_levels = []
+            
+            if 'support_resistance' in indicators:
+                sr_data = indicators['support_resistance']
+                if 'support_levels' in sr_data:
+                    for level in sr_data['support_levels'][:5]:  # Keep only top 5
+                        support_levels.append({
+                            "level": level.get('level'),
+                            "strength": level.get('strength')
+                        })
+                if 'resistance_levels' in sr_data:
+                    for level in sr_data['resistance_levels'][:5]:  # Keep only top 5
+                        resistance_levels.append({
+                            "level": level.get('level'),
+                            "strength": level.get('strength')
+                        })
+            
+            return {
+                "triangles": triangles,
+                "support_levels": support_levels,
+                "resistance_levels": resistance_levels
+            }
+            
+        except Exception as e:
+            logger.error(f"Error optimizing overlays: {e}")
+            return {"triangles": [], "support_levels": [], "resistance_levels": []}
+
+    def _consolidate_trading_guidance(self, ai_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Consolidate trading guidance by removing redundant information."""
+        consolidated = {}
+        
+        # Extract primary signal and confidence
+        if 'trend' in ai_analysis:
+            consolidated['primary_signal'] = 'Buy' if ai_analysis['trend'] == 'Bullish' else 'Sell' if ai_analysis['trend'] == 'Bearish' else 'Hold'
+        if 'confidence_pct' in ai_analysis:
+            consolidated['confidence'] = ai_analysis['confidence_pct']
+        
+        # Consolidate entry/exit levels from different timeframes
+        entry_ranges = []
+        stop_losses = []
+        targets = []
+        
+        for timeframe in ['short_term', 'medium_term', 'long_term']:
+            if timeframe in ai_analysis:
+                tf_data = ai_analysis[timeframe]
+                if 'entry_range' in tf_data:
+                    entry_ranges.extend(tf_data['entry_range'])
+                if 'stop_loss' in tf_data:
+                    stop_losses.append(tf_data['stop_loss'])
+                if 'targets' in tf_data:
+                    targets.extend(tf_data['targets'])
+        
+        # Use most conservative/realistic values
+        if entry_ranges:
+            consolidated['entry_range'] = [min(entry_ranges), max(entry_ranges)]
+        if stop_losses:
+            consolidated['stop_loss'] = min(stop_losses)  # Most conservative
+        if targets:
+            consolidated['targets'] = sorted(list(set(targets)))[:4]  # Top 4 unique targets
+        
+        # Add timeframe breakdown (simplified)
+        timeframe_breakdown = {}
+        for timeframe in ['short_term', 'medium_term', 'long_term']:
+            if timeframe in ai_analysis:
+                tf_data = ai_analysis[timeframe]
+                timeframe_breakdown[timeframe] = {
+                    'signal': tf_data.get('signal'),
+                    'confidence': tf_data.get('confidence')
+                }
+        consolidated['timeframe_breakdown'] = timeframe_breakdown
+        
+        return consolidated
+
+    def _determine_risk_level_static(self, ai_analysis: Dict[str, Any]) -> str:
+        """Static version of risk level determination."""
+        confidence = ai_analysis.get('confidence_pct', 0)
+        
+        if confidence >= 80:
+            return 'Low'
+        elif confidence >= 60:
+            return 'Medium'
+        elif confidence >= 40:
+            return 'High'
+        else:
+            return 'Very High'
+
+    def _generate_recommendation_static(self, ai_analysis: Dict[str, Any]) -> str:
+        """Static version of recommendation generation."""
+        confidence = ai_analysis.get('confidence_pct', 0)
+        trend = ai_analysis.get('trend', 'Unknown')
+        
+        if confidence >= 80:
+            if trend == 'Bullish':
+                return 'Strong Buy'
+            elif trend == 'Bearish':
+                return 'Strong Sell'
+            else:
+                return 'Hold'
+        elif confidence >= 60:
+            if trend == 'Bullish':
+                return 'Buy'
+            elif trend == 'Bearish':
+                return 'Sell'
+            else:
+                return 'Hold'
+        elif confidence >= 40:
+            return 'Wait and Watch'
+        else:
+            return 'Avoid Trading'
+
+
+
+
+
+
+
 

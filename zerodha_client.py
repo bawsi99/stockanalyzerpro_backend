@@ -164,7 +164,7 @@ class ZerodhaDataClient:
 
         # Rate limiting
         self.last_request_time = datetime.now()
-        self.min_request_interval = timedelta(seconds=1)  # Minimum time between requests
+        self.min_request_interval = timedelta(seconds=0)  # Minimum time between requests
 
         # Cache for instruments and data
         self.instruments_cache = {}

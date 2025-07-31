@@ -34,7 +34,7 @@ class GeminiCore:
         self.rate_limiting_enabled = True
         print("[ASYNC-OPTIMIZED] Rate limiting enabled")
 
-    def call_llm(self, prompt: str, model: str = "gemini-2.5-flash", enable_code_execution: bool = False, return_full_response: bool = False):        
+    def call_llm(self, prompt: str, model: str = "gemini-2.5-flash", enable_code_execution: bool = True, return_full_response: bool = False):        
         start_time = time.time()
         
         # Log API request
@@ -128,7 +128,7 @@ class GeminiCore:
             debug_logger.log_error(ex, "call_llm_with_code_execution", prompt)
             return "", [], []
 
-    async def call_llm_with_image(self, prompt: str, image, model: str = "gemini-2.5-flash", enable_code_execution: bool = False):
+    async def call_llm_with_image(self, prompt: str, image, model: str = "gemini-2.5-flash", enable_code_execution: bool = True):
         """
         Call the LLM with a prompt and a PIL Image (multi-modal input).
         """
@@ -181,7 +181,7 @@ class GeminiCore:
             debug_logger.log_error(ex, "call_llm_with_image", prompt)
             raise
 
-    async def call_llm_with_images(self, prompt: str, images: list, model: str = "gemini-2.5-flash", enable_code_execution: bool = False):
+    async def call_llm_with_images(self, prompt: str, images: list, model: str = "gemini-2.5-flash", enable_code_execution: bool = True):
         """
         Call the LLM with a prompt and a list of PIL Images (multi-modal input).
         """
