@@ -1527,16 +1527,16 @@ class TechnicalIndicators:
         kurtosis = returns.kurtosis()
         
         # Get real market data for beta and correlation
-        # Temporarily disabled to debug timestamp issue
-        # market_metrics = TechnicalIndicators.get_market_metrics(data)
-        # beta = market_metrics["beta"]
-        # market_correlation = market_metrics["correlation"]
-        # risk_free_rate = market_metrics["risk_free_rate"]
-        
-        # Use default values temporarily
-        beta = 1.0
-        market_correlation = 0.6
-        risk_free_rate = 6.5
+        try:
+            market_metrics = TechnicalIndicators.get_market_metrics(data)
+            beta = market_metrics["beta"]
+            market_correlation = market_metrics["correlation"]
+            risk_free_rate = market_metrics["risk_free_rate"]
+        except Exception as e:
+            # Fallback to default values if market metrics calculation fails
+            beta = 1.0
+            market_correlation = 0.6
+            risk_free_rate = 6.5
         
         # Risk-adjusted returns using real risk-free rate
         risk_adjusted_return = (mean_return - risk_free_rate / 252) / annualized_volatility if annualized_volatility > 0 else 0
@@ -1563,12 +1563,15 @@ class TechnicalIndicators:
         tail_frequency = tail_events / len(returns)
         
         # Liquidity risk (if volume data available)
+        volume_volatility = 0  # Initialize to default value
         if 'volume' in data.columns:
             avg_volume = data['volume'].mean()
             volume_volatility = data['volume'].std() / avg_volume if avg_volume > 0 else 0
             liquidity_score = min(100, max(0, 100 - volume_volatility * 100))
+            print(f"DEBUG: Volume data available - avg_volume: {avg_volume}, volume_volatility: {volume_volatility}, liquidity_score: {liquidity_score}")
         else:
             liquidity_score = 50  # Neutral if no volume data
+            print(f"DEBUG: No volume data available in columns: {data.columns.tolist()}")
         
         # Overall risk score (0-100, higher = more risky)
         risk_score = 0
@@ -1656,7 +1659,7 @@ class TechnicalIndicators:
             },
             "liquidity_analysis": {
                 "liquidity_score": float(liquidity_score),
-                "volume_volatility": float(volume_volatility) if 'volume' in data.columns else None
+                "volume_volatility": float(volume_volatility) if 'volume' in data.columns else 0
             },
             "correlation_analysis": {
                 "market_correlation": float(market_correlation),

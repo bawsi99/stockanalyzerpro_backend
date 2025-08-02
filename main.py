@@ -12,7 +12,7 @@ def main():
     """
     parser = argparse.ArgumentParser(description='Stock Analysis Agent for Indian Stock Market (NSE)')
     parser.add_argument('--stock', type=str, required=True, help='Stock symbol to analyze (e.g., RELIANCE)')
-    parser.add_argument('--exchange', type=str, default='NSE', help='Stock exchange (default: NSE)')
+    parser.add_argument('--exchange', type=str, default='NSE', choices=['NSE'], help='Stock exchange (default: NSE)')
     parser.add_argument('--period', type=int, default=365, help='Analysis period in days (default: 365)')
     parser.add_argument(
         '--interval',
@@ -34,7 +34,7 @@ def main():
         orchestrator = StockAnalysisOrchestrator()
         orchestrator.authenticate()
         try:
-            results, success_message, error_message = asyncio.run(orchestrator.analyze_stock(
+            results, success_message, error_message = asyncio.run(orchestrator.enhanced_analyze_stock(
                 symbol=args.stock,
                 exchange=args.exchange,
                 period=args.period,

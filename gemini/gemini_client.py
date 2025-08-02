@@ -287,265 +287,7 @@ class GeminiClient:
             "analysis_notes": "JSON parsing failed, using fallback analysis"
         })
 
-    async def analyze_stock(self, symbol, indicators, chart_paths, period, interval, knowledge_context=""):
-        # Ensure chart_paths is a dict
-        if chart_paths is None:
-            chart_paths = {}
-        
-        print(f"[ASYNC-OPTIMIZED] Starting optimized analysis for {symbol}...")
-        print(f"[ASYNC-OPTIMIZED] Chart paths received: {list(chart_paths.keys()) if chart_paths else 'None'}")
-        print(f"[ASYNC-OPTIMIZED] Chart paths content: {chart_paths}")
-        
-        # START ALL INDEPENDENT LLM CALLS IMMEDIATELY
-        # 1. Indicator summary (no dependencies)
-        print("[ASYNC-OPTIMIZED] Starting indicator summary analysis...")
-        indicator_task = self.build_indicators_summary(
-            symbol=symbol,
-            indicators=indicators,
-            period=period,
-            interval=interval,
-            knowledge_context=knowledge_context
-        )
 
-        # 2. Chart insights (analyze images) - START ALL CHART TASKS IMMEDIATELY
-        print("[ASYNC-OPTIMIZED] Starting all chart analysis tasks...")
-        chart_analysis_tasks = []
-        
-        # GROUP 1: Comprehensive Technical Overview (1 chart - most important)
-        print(f"[ASYNC-OPTIMIZED] Checking for technical_overview: {chart_paths.get('technical_overview')}")
-        if chart_paths.get('technical_overview'):
-            try:
-                with open(chart_paths['technical_overview'], 'rb') as f:
-                    technical_chart = f.read()
-                print(f"[ASYNC-OPTIMIZED] Successfully read technical_overview: {len(technical_chart)} bytes")
-                task = self.analyze_technical_overview(technical_chart)
-                chart_analysis_tasks.append(("technical_overview", task))
-                print("[ASYNC-OPTIMIZED] Added technical_overview task")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading technical_overview: {e}")
-        else:
-            print("[ASYNC-OPTIMIZED] technical_overview not found in chart_paths")
-        
-        # GROUP 2: Pattern Analysis (1 chart - comprehensive pattern recognition)
-        print(f"[ASYNC-OPTIMIZED] Checking pattern_analysis: {chart_paths.get('pattern_analysis')}")
-        if chart_paths.get('pattern_analysis'):
-            try:
-                with open(chart_paths['pattern_analysis'], 'rb') as f:
-                    pattern_chart = f.read()
-                print(f"[ASYNC-OPTIMIZED] Successfully read pattern_analysis: {len(pattern_chart)} bytes")
-                task = self.analyze_pattern_analysis(pattern_chart, indicators)
-                chart_analysis_tasks.append(("pattern_analysis", task))
-                print("[ASYNC-OPTIMIZED] Added pattern_analysis task")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading pattern_analysis: {e}")
-        else:
-            print("[ASYNC-OPTIMIZED] pattern_analysis not found in chart_paths")
-        
-        # GROUP 3: Volume Analysis (1 chart - comprehensive volume story)
-        print(f"[ASYNC-OPTIMIZED] Checking volume_analysis: {chart_paths.get('volume_analysis')}")
-        if chart_paths.get('volume_analysis'):
-            try:
-                with open(chart_paths['volume_analysis'], 'rb') as f:
-                    volume_chart = f.read()
-                print(f"[ASYNC-OPTIMIZED] Successfully read volume_analysis: {len(volume_chart)} bytes")
-                task = self.analyze_volume_analysis(volume_chart, indicators)
-                chart_analysis_tasks.append(("volume_analysis", task))
-                print("[ASYNC-OPTIMIZED] Added volume_analysis task")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading volume_analysis: {e}")
-        else:
-            print("[ASYNC-OPTIMIZED] volume_analysis not found in chart_paths")
-        
-        # GROUP 4: Multi-Timeframe Comparison (1 chart - MTF validation)
-        print(f"[ASYNC-OPTIMIZED] Checking mtf_comparison: {chart_paths.get('mtf_comparison')}")
-        if chart_paths.get('mtf_comparison'):
-            try:
-                with open(chart_paths['mtf_comparison'], 'rb') as f:
-                    mtf_chart = f.read()
-                print(f"[ASYNC-OPTIMIZED] Successfully read mtf_comparison: {len(mtf_chart)} bytes")
-                task = self.analyze_mtf_comparison(mtf_chart, indicators)
-                chart_analysis_tasks.append(("mtf_comparison", task))
-                print("[ASYNC-OPTIMIZED] Added mtf_comparison task")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED] Error reading mtf_comparison: {e}")
-        else:
-            print("[ASYNC-OPTIMIZED] mtf_comparison not found in chart_paths")
-        
-        # EXECUTE ALL INDEPENDENT TASKS IN PARALLEL
-        print(f"[ASYNC-OPTIMIZED] Total tasks created: {len(chart_analysis_tasks) + 1}")
-        print(f"[ASYNC-OPTIMIZED] Chart analysis tasks: {[name for name, _ in chart_analysis_tasks]}")
-        
-        # FALLBACK: If no chart tasks were created, create mock tasks for testing
-        if len(chart_analysis_tasks) == 0:
-            print("[ASYNC-OPTIMIZED] WARNING: No chart tasks created! Creating fallback mock tasks for testing...")
-            
-            # Create mock chart data for testing
-            mock_chart_data = b"mock_chart_data_for_testing"
-            
-            # Add mock tasks for all chart analysis types
-            mock_technical_task = self.analyze_technical_overview(mock_chart_data)
-            chart_analysis_tasks.append(("technical_overview_mock", mock_technical_task))
-            print("[ASYNC-OPTIMIZED] Added mock technical_overview task")
-            
-            mock_pattern_task = self.analyze_pattern_analysis(mock_chart_data, indicators)
-            chart_analysis_tasks.append(("pattern_analysis_mock", mock_pattern_task))
-            print("[ASYNC-OPTIMIZED] Added mock pattern_analysis task")
-            
-            mock_volume_task = self.analyze_volume_analysis(mock_chart_data, indicators)
-            chart_analysis_tasks.append(("volume_analysis_mock", mock_volume_task))
-            print("[ASYNC-OPTIMIZED] Added mock volume_analysis task")
-            
-            mock_mtf_task = self.analyze_mtf_comparison(mock_chart_data, indicators)
-            chart_analysis_tasks.append(("mtf_comparison_mock", mock_mtf_task))
-            print("[ASYNC-OPTIMIZED] Added mock mtf_comparison task")
-            
-            print(f"[ASYNC-OPTIMIZED] Created {len(chart_analysis_tasks)} mock chart tasks for testing")
-        
-        print(f"[ASYNC-OPTIMIZED] Executing {len(chart_analysis_tasks) + 1} independent tasks in parallel...")
-        
-        # DISABLE RATE LIMITING FOR TRUE PARALLEL EXECUTION
-        self.core.disable_rate_limiting()
-        
-        import asyncio
-        parallel_start_time = time.time()
-        
-        # Log the exact time when parallel execution starts
-        print(f"[ASYNC-OPTIMIZED] Parallel execution started at: {time.strftime('%H:%M:%S.%f')[:-3]}")
-        
-        # Combine indicator task with chart tasks
-        all_tasks = [indicator_task] + [task for _, task in chart_analysis_tasks]
-        
-        # Log that we're about to gather all tasks
-        print(f"[ASYNC-OPTIMIZED] Sending all {len(all_tasks)} tasks to asyncio.gather() at: {time.strftime('%H:%M:%S.%f')[:-3]}")
-        
-        all_results = await asyncio.gather(*all_tasks, return_exceptions=True)
-        
-        parallel_elapsed_time = time.time() - parallel_start_time
-        print(f"[ASYNC-OPTIMIZED] Completed all independent tasks in {parallel_elapsed_time:.2f} seconds")
-        print(f"[ASYNC-OPTIMIZED] Parallel execution ended at: {time.strftime('%H:%M:%S.%f')[:-3]}")
-        
-        # RE-ENABLE RATE LIMITING AFTER PARALLEL EXECUTION
-        self.core.enable_rate_limiting()
-        
-        # Process results and handle exceptions
-        ind_summary_md, ind_json = all_results[0] if not isinstance(all_results[0], Exception) else ("", {})
-        if isinstance(all_results[0], Exception):
-            print(f"[ASYNC-OPTIMIZED] Warning: Indicator summary failed: {all_results[0]}")
-        
-        # Process chart results
-        chart_insights_list = []
-        for i, (task_name, _) in enumerate(chart_analysis_tasks, 1):
-            result = all_results[i]
-            if isinstance(result, Exception):
-                print(f"[ASYNC-OPTIMIZED] Warning: {task_name} failed: {result}")
-                continue
-            
-            if task_name == "technical_overview" or task_name == "technical_overview_mock":
-                chart_insights_list.append("**Comprehensive Technical Overview:**\n" + result)
-            elif task_name == "pattern_analysis" or task_name == "pattern_analysis_mock":
-                chart_insights_list.append("**Pattern Analysis:**\n" + result)
-            elif task_name == "volume_analysis" or task_name == "volume_analysis_mock":
-                chart_insights_list.append("**Volume Analysis:**\n" + result)
-            elif task_name == "mtf_comparison" or task_name == "mtf_comparison_mock":
-                chart_insights_list.append("**Multi-Timeframe Comparison:**\n" + result)
-        
-        chart_insights_md = "\n\n".join(chart_insights_list) if chart_insights_list else ""
-
-        # 3. Final decision prompt with enhanced mathematical validation (depends on all previous results)
-        print("[ASYNC-OPTIMIZED] Starting final decision analysis...")
-        decision_start_time = time.time()
-        
-        # Create final decision context using context engineering with MTF and sector integration
-        final_decision_data = {
-            "analysis_focus": "final_decision_synthesis",
-            "consensus_analysis": {
-                "trend_alignment": self._analyze_trend_alignment(ind_json, chart_insights_md),
-                "confidence_score": self._calculate_consensus_confidence(ind_json, chart_insights_md),
-                "key_conflicts": self._identify_key_conflicts(ind_json, chart_insights_md)
-            },
-            "risk_assessment": {
-                "primary_risks": self._identify_primary_risks(ind_json, chart_insights_md),
-                "risk_level": self._assess_overall_risk(ind_json, chart_insights_md)
-            },
-            "decision_framework": {
-                "entry_strategy": self._determine_entry_strategy(ind_json, chart_insights_md),
-                "timeframe": "short_term",
-                "position_size": "moderate"
-            },
-            "multi_timeframe_context": self._extract_mtf_context_from_analysis(ind_json, chart_insights_md),
-            "sector_context": self._extract_sector_context_from_analysis(ind_json, chart_insights_md)
-        }
-        
-        # Enhance context with MTF and sector data if available in knowledge_context
-        enhanced_knowledge_context = knowledge_context
-        if "ENHANCED MULTI-TIMEFRAME ANALYSIS CONTEXT" in knowledge_context:
-            enhanced_knowledge_context += self._build_mtf_context_for_final_decision(knowledge_context)
-        
-        if "SECTOR CONTEXT" in knowledge_context:
-            enhanced_knowledge_context += self._build_sector_context_for_final_decision(knowledge_context)
-        
-        context = self.context_engineer.structure_context(
-            final_decision_data, 
-            AnalysisType.FINAL_DECISION, 
-            symbol, 
-            f"{period} days, {interval}", 
-            enhanced_knowledge_context
-        )
-        
-        decision_prompt = self.prompt_manager.format_prompt(
-            "optimized_final_decision",
-            context=context
-        )
-        try:
-            # Use code execution for final decision analysis
-            text_response, code_results, execution_results = await self.core.call_llm_with_code_execution(decision_prompt)
-            
-            # Debug: Log the response to understand what we're getting
-            print(f"[DEBUG] Final decision response type: {type(text_response)}")
-            print(f"[DEBUG] Final decision response length: {len(text_response) if text_response else 0}")
-            print(f"[DEBUG] Final decision response preview: {text_response[:200] if text_response else 'None'}")
-            print(f"[DEBUG] Code execution results: {len(code_results) if code_results else 0} code snippets")
-            print(f"[DEBUG] Execution outputs: {len(execution_results) if execution_results else 0} outputs")
-            
-            # The final decision should output ONLY JSON, not markdown with JSON inside
-            # So we try to parse it directly as JSON first
-            try:
-                result = json.loads(text_response.strip())
-                print("[DEBUG] Successfully parsed response as direct JSON")
-            except json.JSONDecodeError as e:
-                print(f"[DEBUG] Direct JSON parsing failed: {e}")
-                # If direct parsing fails, try to extract JSON from markdown code block
-                try:
-                    _, json_blob = self.extract_markdown_and_json(text_response)
-                    result = json.loads(json_blob)
-                    print("[DEBUG] Successfully extracted JSON from markdown code block")
-                except Exception as extract_error:
-                    print(f"[DEBUG] Failed to extract JSON from markdown: {extract_error}")
-                    print(f"[DEBUG] Full response: {text_response}")
-                    raise ValueError(f"Could not parse final decision response as JSON: {e}. Response: {text_response[:500]}")
-            
-            # Enhance result with code execution data and MTF context
-            if code_results or execution_results:
-                result = self._enhance_final_decision_with_calculations(result, code_results, execution_results)
-            
-            # Add MTF context to result if available
-            if "ENHANCED MULTI-TIMEFRAME ANALYSIS CONTEXT" in knowledge_context:
-                result = self._enhance_result_with_mtf_context(result, knowledge_context)
-            
-            # Add sector context to result if available
-            if "SECTOR CONTEXT" in knowledge_context:
-                result = self._enhance_result_with_sector_context(result, knowledge_context)
-                
-        except Exception as ex:
-            import traceback; traceback.print_exc()
-            raise
-        
-        decision_elapsed_time = time.time() - decision_start_time
-        total_elapsed_time = time.time() - parallel_start_time
-        print(f"[ASYNC-OPTIMIZED] Final decision analysis completed in {decision_elapsed_time:.2f} seconds")
-        print(f"[ASYNC-OPTIMIZED] Total analysis completed in {total_elapsed_time:.2f} seconds")
-        
-        return result, ind_summary_md, chart_insights_md
 
     def _enhance_final_decision_with_calculations(self, result, code_results, execution_results):
         """
@@ -730,119 +472,65 @@ class GeminiClient:
         print("[ASYNC-OPTIMIZED-ENHANCED] Starting all enhanced chart analysis tasks...")
         chart_analysis_tasks = []
         
-        # GROUP 1: Comprehensive Technical Overview with calculations
-        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for comparison_chart: {chart_paths.get('comparison_chart')}")
-        if chart_paths.get('comparison_chart'):
+        # GROUP 1: Technical Overview (comprehensive technical analysis)
+        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for technical_overview: {chart_paths.get('technical_overview')}")
+        if chart_paths.get('technical_overview'):
             try:
-                with open(chart_paths['comparison_chart'], 'rb') as f:
-                    comparison_chart = f.read()
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read comparison_chart: {len(comparison_chart)} bytes")
-                task = self.analyze_comprehensive_overview_with_calculations(comparison_chart, indicators)
-                chart_analysis_tasks.append(("comprehensive_overview_enhanced", task))
-                print("[ASYNC-OPTIMIZED-ENHANCED] Added comprehensive_overview_enhanced task")
+                with open(chart_paths['technical_overview'], 'rb') as f:
+                    technical_chart = f.read()
+                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read technical_overview: {len(technical_chart)} bytes")
+                task = self.analyze_technical_overview(technical_chart)
+                chart_analysis_tasks.append(("technical_overview_enhanced", task))
+                print("[ASYNC-OPTIMIZED-ENHANCED] Added technical_overview_enhanced task")
             except Exception as e:
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading comparison_chart: {e}")
+                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading technical_overview: {e}")
         else:
-            print("[ASYNC-OPTIMIZED-ENHANCED] comparison_chart not found in chart_paths")
+            print("[ASYNC-OPTIMIZED-ENHANCED] technical_overview not found in chart_paths")
         
-        # GROUP 2: Volume Analysis with statistical validation
-        volume_charts = []
-        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking volume charts:")
-        print(f"  - volume_anomalies: {chart_paths.get('volume_anomalies')}")
-        print(f"  - price_volume_correlation: {chart_paths.get('price_volume_correlation')}")
-        print(f"  - candlestick_volume: {chart_paths.get('candlestick_volume')}")
-        
-        if chart_paths.get('volume_anomalies'):
+        # GROUP 2: Pattern Analysis (all pattern recognition)
+        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for pattern_analysis: {chart_paths.get('pattern_analysis')}")
+        if chart_paths.get('pattern_analysis'):
             try:
-                with open(chart_paths['volume_anomalies'], 'rb') as f:
-                    volume_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read volume_anomalies: {len(volume_charts[-1])} bytes")
+                with open(chart_paths['pattern_analysis'], 'rb') as f:
+                    pattern_chart = f.read()
+                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read pattern_analysis: {len(pattern_chart)} bytes")
+                task = self.analyze_pattern_analysis(pattern_chart, indicators)
+                chart_analysis_tasks.append(("pattern_analysis_enhanced", task))
+                print("[ASYNC-OPTIMIZED-ENHANCED] Added pattern_analysis_enhanced task")
             except Exception as e:
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading volume_anomalies: {e}")
-        
-        if chart_paths.get('price_volume_correlation'):
-            try:
-                with open(chart_paths['price_volume_correlation'], 'rb') as f:
-                    volume_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read price_volume_correlation: {len(volume_charts[-1])} bytes")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading price_volume_correlation: {e}")
-        
-        if chart_paths.get('candlestick_volume'):
-            try:
-                with open(chart_paths['candlestick_volume'], 'rb') as f:
-                    volume_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read candlestick_volume: {len(volume_charts[-1])} bytes")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading candlestick_volume: {e}")
-        
-        if volume_charts:
-            print(f"[ASYNC-OPTIMIZED-ENHANCED] Creating volume analysis task with {len(volume_charts)} charts")
-            task = self.analyze_volume_comprehensive_with_calculations(volume_charts, indicators)
-            chart_analysis_tasks.append(("volume_analysis_enhanced", task))
-            print("[ASYNC-OPTIMIZED-ENHANCED] Added volume_analysis_enhanced task")
+                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading pattern_analysis: {e}")
         else:
-            print("[ASYNC-OPTIMIZED-ENHANCED] No volume charts available for analysis")
+            print("[ASYNC-OPTIMIZED-ENHANCED] pattern_analysis not found in chart_paths")
         
-        # GROUP 3: Reversal Pattern Analysis with enhanced calculations
-        reversal_charts = []
-        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking reversal charts:")
-        print(f"  - divergence: {chart_paths.get('divergence')}")
-        print(f"  - double_tops_bottoms: {chart_paths.get('double_tops_bottoms')}")
-        
-        if chart_paths.get('divergence'):
+        # GROUP 3: Volume Analysis (complete volume story)
+        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for volume_analysis: {chart_paths.get('volume_analysis')}")
+        if chart_paths.get('volume_analysis'):
             try:
-                with open(chart_paths['divergence'], 'rb') as f:
-                    reversal_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read divergence: {len(reversal_charts[-1])} bytes")
+                with open(chart_paths['volume_analysis'], 'rb') as f:
+                    volume_chart = f.read()
+                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read volume_analysis: {len(volume_chart)} bytes")
+                task = self.analyze_volume_analysis(volume_chart, indicators)
+                chart_analysis_tasks.append(("volume_analysis_enhanced", task))
+                print("[ASYNC-OPTIMIZED-ENHANCED] Added volume_analysis_enhanced task")
             except Exception as e:
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading divergence: {e}")
-        
-        if chart_paths.get('double_tops_bottoms'):
-            try:
-                with open(chart_paths['double_tops_bottoms'], 'rb') as f:
-                    reversal_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read double_tops_bottoms: {len(reversal_charts[-1])} bytes")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading double_tops_bottoms: {e}")
-        
-        if reversal_charts:
-            print(f"[ASYNC-OPTIMIZED-ENHANCED] Creating reversal patterns task with {len(reversal_charts)} charts")
-            task = self.analyze_reversal_patterns_with_calculations(reversal_charts, indicators)
-            chart_analysis_tasks.append(("reversal_patterns_enhanced", task))
-            print("[ASYNC-OPTIMIZED-ENHANCED] Added reversal_patterns_enhanced task")
+                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading volume_analysis: {e}")
         else:
-            print("[ASYNC-OPTIMIZED-ENHANCED] No reversal charts available for analysis")
+            print("[ASYNC-OPTIMIZED-ENHANCED] volume_analysis not found in chart_paths")
         
-        # GROUP 4: Continuation & Level Analysis with enhanced calculations
-        continuation_charts = []
-        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking continuation charts:")
-        print(f"  - triangles_flags: {chart_paths.get('triangles_flags')}")
-        print(f"  - support_resistance: {chart_paths.get('support_resistance')}")
-        
-        if chart_paths.get('triangles_flags'):
+        # GROUP 4: Multi-Timeframe Comparison (MTF validation)
+        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for mtf_comparison: {chart_paths.get('mtf_comparison')}")
+        if chart_paths.get('mtf_comparison'):
             try:
-                with open(chart_paths['triangles_flags'], 'rb') as f:
-                    continuation_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read triangles_flags: {len(continuation_charts[-1])} bytes")
+                with open(chart_paths['mtf_comparison'], 'rb') as f:
+                    mtf_chart = f.read()
+                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read mtf_comparison: {len(mtf_chart)} bytes")
+                task = self.analyze_mtf_comparison(mtf_chart, indicators)
+                chart_analysis_tasks.append(("mtf_comparison_enhanced", task))
+                print("[ASYNC-OPTIMIZED-ENHANCED] Added mtf_comparison_enhanced task")
             except Exception as e:
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading triangles_flags: {e}")
-        
-        if chart_paths.get('support_resistance'):
-            try:
-                with open(chart_paths['support_resistance'], 'rb') as f:
-                    continuation_charts.append(f.read())
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read support_resistance: {len(continuation_charts[-1])} bytes")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading support_resistance: {e}")
-        
-        if continuation_charts:
-            print(f"[ASYNC-OPTIMIZED-ENHANCED] Creating continuation levels task with {len(continuation_charts)} charts")
-            task = self.analyze_continuation_levels_with_calculations(continuation_charts, indicators)
-            chart_analysis_tasks.append(("continuation_levels_enhanced", task))
-            print("[ASYNC-OPTIMIZED-ENHANCED] Added continuation_levels_enhanced task")
+                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading mtf_comparison: {e}")
         else:
-            print("[ASYNC-OPTIMIZED-ENHANCED] No continuation charts available for analysis")
+            print("[ASYNC-OPTIMIZED-ENHANCED] mtf_comparison not found in chart_paths")
         
         # EXECUTE ALL INDEPENDENT TASKS IN PARALLEL
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Total tasks created: {len(chart_analysis_tasks) + 1}")
@@ -856,21 +544,21 @@ class GeminiClient:
             mock_chart_data = b"mock_chart_data_for_testing"
             
             # Add mock tasks for all chart analysis types
-            mock_comprehensive_task = self.analyze_comprehensive_overview_with_calculations(mock_chart_data, indicators)
-            chart_analysis_tasks.append(("comprehensive_overview_enhanced_mock", mock_comprehensive_task))
-            print("[ASYNC-OPTIMIZED-ENHANCED] Added mock comprehensive_overview_enhanced task")
+            mock_technical_task = self.analyze_technical_overview(mock_chart_data)
+            chart_analysis_tasks.append(("technical_overview_enhanced_mock", mock_technical_task))
+            print("[ASYNC-OPTIMIZED-ENHANCED] Added mock technical_overview_enhanced task")
             
-            mock_volume_task = self.analyze_volume_comprehensive_with_calculations([mock_chart_data, mock_chart_data, mock_chart_data], indicators)
+            mock_pattern_task = self.analyze_pattern_analysis(mock_chart_data, indicators)
+            chart_analysis_tasks.append(("pattern_analysis_enhanced_mock", mock_pattern_task))
+            print("[ASYNC-OPTIMIZED-ENHANCED] Added mock pattern_analysis_enhanced task")
+            
+            mock_volume_task = self.analyze_volume_analysis(mock_chart_data, indicators)
             chart_analysis_tasks.append(("volume_analysis_enhanced_mock", mock_volume_task))
             print("[ASYNC-OPTIMIZED-ENHANCED] Added mock volume_analysis_enhanced task")
             
-            mock_reversal_task = self.analyze_reversal_patterns_with_calculations([mock_chart_data, mock_chart_data], indicators)
-            chart_analysis_tasks.append(("reversal_patterns_enhanced_mock", mock_reversal_task))
-            print("[ASYNC-OPTIMIZED-ENHANCED] Added mock reversal_patterns_enhanced task")
-            
-            mock_continuation_task = self.analyze_continuation_levels_with_calculations([mock_chart_data, mock_chart_data], indicators)
-            chart_analysis_tasks.append(("continuation_levels_enhanced_mock", mock_continuation_task))
-            print("[ASYNC-OPTIMIZED-ENHANCED] Added mock continuation_levels_enhanced task")
+            mock_mtf_task = self.analyze_mtf_comparison(mock_chart_data, indicators)
+            chart_analysis_tasks.append(("mtf_comparison_enhanced_mock", mock_mtf_task))
+            print("[ASYNC-OPTIMIZED-ENHANCED] Added mock mtf_comparison_enhanced task")
             
             print(f"[ASYNC-OPTIMIZED-ENHANCED] Created {len(chart_analysis_tasks)} mock chart tasks for testing")
         
@@ -913,14 +601,14 @@ class GeminiClient:
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Warning: {task_name} failed: {result}")
                 continue
             
-            if task_name == "comprehensive_overview_enhanced" or task_name == "comprehensive_overview_enhanced_mock":
-                chart_insights_list.append("**Comprehensive Technical Overview (Mathematically Validated):**\n" + result)
+            if task_name == "technical_overview_enhanced" or task_name == "technical_overview_enhanced_mock":
+                chart_insights_list.append("**Technical Overview (Comprehensive Analysis):**\n" + result)
+            elif task_name == "pattern_analysis_enhanced" or task_name == "pattern_analysis_enhanced_mock":
+                chart_insights_list.append("**Pattern Analysis (All Pattern Recognition):**\n" + result)
             elif task_name == "volume_analysis_enhanced" or task_name == "volume_analysis_enhanced_mock":
-                chart_insights_list.append("**Comprehensive Volume Analysis (Statistically Validated):**\n" + result)
-            elif task_name == "reversal_patterns_enhanced" or task_name == "reversal_patterns_enhanced_mock":
-                chart_insights_list.append("**Reversal Pattern Analysis (Enhanced):**\n" + result)
-            elif task_name == "continuation_levels_enhanced" or task_name == "continuation_levels_enhanced_mock":
-                chart_insights_list.append("**Continuation & Level Analysis (Enhanced):**\n" + result)
+                chart_insights_list.append("**Volume Analysis (Complete Volume Story):**\n" + result)
+            elif task_name == "mtf_comparison_enhanced" or task_name == "mtf_comparison_enhanced_mock":
+                chart_insights_list.append("**Multi-Timeframe Comparison (MTF Validation):**\n" + result)
         
         chart_insights_md = "\n\n".join(chart_insights_list) if chart_insights_list else ""
 

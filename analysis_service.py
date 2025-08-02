@@ -50,6 +50,7 @@ from enhanced_sector_classifier import enhanced_sector_classifier
 from patterns.recognition import PatternRecognition
 from technical_indicators import TechnicalIndicators
 from simple_database_manager import simple_db_manager
+from frontend_response_builder import FrontendResponseBuilder
 
 app = FastAPI(title="Stock Analysis Service", version="1.0.0")
 
@@ -382,115 +383,25 @@ async def health_check():
 
 @app.post("/analyze")
 async def analyze(request: AnalysisRequest):
-    """Perform comprehensive stock analysis."""
-    output_dir = request.output or f"./output/{request.stock}"
-    os.makedirs(output_dir, exist_ok=True)
-
-    try:
-        orchestrator = StockAnalysisOrchestrator()
-        # Authenticate
-        auth_success = orchestrator.authenticate()
-        if not auth_success:
-            raise HTTPException(status_code=401, detail="Failed to authenticate with Zerodha API")
-
-        # Analyze stock with sector awareness
-        results, success_message, error_message = await orchestrator.analyze_stock(
-            symbol=request.stock,
-            exchange=request.exchange,
-            period=request.period,
-            interval=request.interval,
-            output_dir=output_dir,
-            sector=request.sector  # Pass sector information
-        )
-        
-        if error_message:
-            raise HTTPException(status_code=500, detail=error_message)
-
-        # Make all data JSON serializable
-        serialized_results = make_json_serializable(results)
-
-        # Resolve user ID from request
-        try:
-            resolved_user_id = resolve_user_id(
-                user_id=request.user_id,
-                email=request.email
-            )
-
-            # Store analysis in Supabase using simple database manager
-            analysis_id = simple_db_manager.store_analysis(
-                analysis=serialized_results,
-                user_id=resolved_user_id,
-                symbol=request.stock,
-                exchange=request.exchange,
-                period=request.period,
-                interval=request.interval
-            )
-            
-            if not analysis_id:
-                print(f"⚠️ Warning: Failed to store analysis for {request.stock}")
-            else:
-                print(f"✅ Successfully stored analysis for {request.stock} with ID: {analysis_id}")
-                
-                # 🔍 DEBUGGING: Verify storage with correct user ID
-                print(f"🔍 DEBUGGING: Verifying analysis storage...")
-                print(f"   - Analysis ID: {analysis_id}")
-                print(f"   - Expected User ID: {resolved_user_id}")
-                
-                # Query database to fetch the stored analysis
-                try:
-                    stored_analysis = simple_db_manager.supabase.table("stock_analyses_simple").select("user_id").eq("id", analysis_id).execute()
-                    
-                    if stored_analysis.data and len(stored_analysis.data) > 0:
-                        actual_user_id = stored_analysis.data[0].get('user_id')
-                        print(f"   - Actual User ID from DB: {actual_user_id}")
-                        
-                        if actual_user_id == resolved_user_id:
-                            print(f"   ✅ VERIFICATION PASSED: User ID matches!")
-                        else:
-                            print(f"   ❌ VERIFICATION FAILED: User ID mismatch!")
-                            print(f"      Expected: {resolved_user_id}")
-                            print(f"      Actual: {actual_user_id}")
-                    else:
-                        print(f"   ❌ VERIFICATION FAILED: Analysis not found in database")
-                        
-                except Exception as db_error:
-                    print(f"   ❌ VERIFICATION ERROR: {db_error}")
-                
-                print(f"🔍 DEBUGGING: Verification complete")
-                
-        except ValueError as e:
-            print(f"❌ User ID resolution failed: {e}")
-            # Continue with analysis but don't store it
-            print(f"⚠️ Analysis completed but not stored due to user ID resolution failure")
-        except Exception as e:
-            print(f"❌ Error storing analysis: {e}")
-            # Continue with analysis but don't store it
-            print(f"⚠️ Analysis completed but not stored due to storage error")
-
-        # Clean, efficient response
-        response = {
-            "success": True,
-            "stock_symbol": request.stock,
-            "exchange": request.exchange,
-            "analysis_period": f"{request.period} days",
-            "interval": request.interval,
-            "timestamp": pd.Timestamp.now().isoformat(),
-            "message": success_message,
-            "results": serialized_results
-        }
-
-        return JSONResponse(content=response)
-
-    except Exception as e:
-        traceback.print_exc()
-        error_response = {
-            "success": False,
-            "error": str(e),
-            "stock_symbol": request.stock,
-            "exchange": request.exchange,
-            "timestamp": pd.Timestamp.now().isoformat()
-        }
-        raise HTTPException(status_code=500, detail=error_response)
+    """
+    Standard analysis endpoint - now redirects to enhanced analysis.
+    This endpoint is maintained for backward compatibility but uses enhanced analysis.
+    """
+    # Convert AnalysisRequest to EnhancedAnalysisRequest
+    enhanced_request = EnhancedAnalysisRequest(
+        stock=request.stock,
+        exchange=request.exchange,
+        period=request.period,
+        interval=request.interval,
+        output=request.output,
+        sector=request.sector,
+        enable_code_execution=True,  # Default to enhanced analysis
+        user_id=request.user_id,
+        email=request.email
+    )
+    
+    # Call the enhanced analysis endpoint
+    return await enhanced_analyze(enhanced_request)
 
 @app.post("/analyze/enhanced")
 async def enhanced_analyze(request: EnhancedAnalysisRequest):
@@ -506,44 +417,148 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         orchestrator = StockAnalysisOrchestrator()
         
         # Perform enhanced analysis with code execution
-        if request.enable_code_execution:
-            result = await orchestrator.enhanced_analyze_stock(
-                symbol=request.stock,
-                exchange=request.exchange,
-                period=request.period,
-                interval=request.interval,
-                output_dir=request.output,
-                sector=request.sector
+        result = await orchestrator.enhanced_analyze_stock(
+            symbol=request.stock,
+            exchange=request.exchange,
+            period=request.period,
+            interval=request.interval,
+            output_dir=request.output,
+            sector=request.sector
+        )
+        
+        # Extract components from the result
+        analysis_results, success_message, error_message = result
+        
+        if error_message:
+            raise HTTPException(status_code=500, detail=error_message)
+        
+        # Extract data and indicators from the analysis results
+        # The enhanced_analyze_stock method already retrieves data and calculates indicators
+        try:
+            # Get the data again for building frontend response
+            stock_data = await orchestrator.retrieve_stock_data(
+                request.stock, request.exchange, request.interval, request.period
             )
-        else:
-            # Fallback to regular analysis
-            result = await orchestrator.analyze_stock(
-                symbol=request.stock,
-                exchange=request.exchange,
-                period=request.period,
-                interval=request.interval,
-                output_dir=request.output,
-                sector=request.sector
+            
+            # Extract indicators from analysis_results if available, otherwise calculate them
+            if analysis_results and 'technical_indicators' in analysis_results:
+                indicators = analysis_results['technical_indicators']
+            else:
+                indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, request.stock)
+                
+        except ValueError as e:
+            error_msg = f"Data retrieval failed for {request.stock}: {str(e)}"
+            print(f"[ENHANCED ANALYSIS ERROR] {error_msg}")
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": error_msg,
+                    "stock_symbol": request.stock,
+                    "suggestion": "Please check if the stock symbol is correct and try again."
+                },
+                status_code=400
+            )
+        except Exception as e:
+            error_msg = f"Technical indicator calculation failed for {request.stock}: {str(e)}"
+            print(f"[ENHANCED ANALYSIS ERROR] {error_msg}")
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": error_msg,
+                    "stock_symbol": request.stock,
+                    "suggestion": "Unable to calculate technical indicators. Please try again later."
+                },
+                status_code=500
             )
         
-        # Validate and enhance the result
-        validated_result = validate_analysis_results(result)
+        # Create visualizations
+        chart_paths = {}
+        if request.output:
+            chart_paths = orchestrator.create_visualizations(stock_data, indicators, request.stock, request.output)
         
-        # Add enhanced analysis metadata
-        if 'analysis_metadata' not in validated_result:
-            validated_result['analysis_metadata'] = {}
+        # Get sector context
+        sector_context = None
+        if request.sector:
+            try:
+                # Use sector benchmarking provider directly since get_sector_context_async doesn't exist
+                from sector_benchmarking import sector_benchmarking_provider
+                
+                # Get sector benchmarking
+                sector_benchmarking = await sector_benchmarking_provider.get_comprehensive_benchmarking_async(
+                    request.stock, 
+                    stock_data
+                )
+                
+                # Get sector rotation
+                sector_rotation = await sector_benchmarking_provider.analyze_sector_rotation_async("1M")
+                
+                # Get sector correlation
+                sector_correlation = await sector_benchmarking_provider.generate_sector_correlation_matrix_async("3M")
+                
+                # Build sector context
+                sector_context = {
+                    'sector_benchmarking': sector_benchmarking,
+                    'sector_rotation': sector_rotation,
+                    'sector_correlation': sector_correlation,
+                    'sector': request.sector
+                }
+                
+                print(f"✅ Sector context generated successfully for {request.stock}")
+                
+            except Exception as e:
+                print(f"Warning: Could not get sector context: {e}")
+                sector_context = {}
         
-        validated_result['analysis_metadata'].update({
-            'analysis_type': 'enhanced_with_code_execution' if request.enable_code_execution else 'standard',
-            'mathematical_validation': request.enable_code_execution,
-            'calculation_method': 'code_execution' if request.enable_code_execution else 'llm_estimation',
-            'accuracy_improvement': 'high' if request.enable_code_execution else 'standard',
-            'enhanced_timestamp': time.time()
-        })
+        # Get Enhanced MTF context
+        mtf_context = None
+        try:
+            from enhanced_mtf_analysis import enhanced_mtf_analyzer
+            
+            # Perform comprehensive multi-timeframe analysis
+            mtf_results = await enhanced_mtf_analyzer.comprehensive_mtf_analysis(
+                symbol=request.stock,
+                exchange=request.exchange
+            )
+            
+            if mtf_results.get('success', False):
+                mtf_context = mtf_results
+                print(f"✅ Enhanced MTF analysis generated successfully for {request.stock}")
+            else:
+                print(f"Warning: Enhanced MTF analysis failed: {mtf_results.get('error', 'Unknown error')}")
+                mtf_context = {}
+                
+        except Exception as e:
+            print(f"Warning: Could not get Enhanced MTF context: {e}")
+            mtf_context = {}
         
-        # Convert charts to base64 if present
-        if 'charts' in validated_result:
-            validated_result['charts'] = convert_charts_to_base64(validated_result['charts'])
+        # Get Advanced Analysis for Advanced Tab
+        advanced_analysis = None
+        try:
+            from advanced_analysis import advanced_analysis_provider
+            advanced_analysis = await advanced_analysis_provider.generate_advanced_analysis(
+                stock_data, request.stock, indicators
+            )
+            print(f"✅ Advanced analysis generated successfully for {request.stock}")
+        except Exception as e:
+            print(f"Warning: Could not get advanced analysis: {e}")
+            advanced_analysis = {}
+        
+        # Build frontend-expected response structure
+        frontend_response = FrontendResponseBuilder.build_frontend_response(
+            symbol=request.stock,
+            exchange=request.exchange,
+            data=stock_data,
+            indicators=indicators,
+            ai_analysis=analysis_results.get('ai_analysis', {}),
+            indicator_summary=analysis_results.get('indicator_summary', ''),
+            chart_insights=analysis_results.get('chart_insights', ''),
+            chart_paths=chart_paths,
+            sector_context=sector_context,
+            mtf_context=mtf_context,
+            advanced_analysis=advanced_analysis,
+            period=request.period,
+            interval=request.interval
+        )
         
         # Resolve user ID from request
         try:
@@ -554,7 +569,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
 
             # Store analysis in Supabase using simple database manager
             analysis_id = simple_db_manager.store_analysis(
-                analysis=validated_result,
+                analysis=frontend_response,
                 user_id=resolved_user_id,
                 symbol=request.stock,
                 exchange=request.exchange,
@@ -567,33 +582,6 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             else:
                 print(f"✅ Successfully stored enhanced analysis for {request.stock} with ID: {analysis_id}")
                 
-                # 🔍 DEBUGGING: Verify storage with correct user ID
-                print(f"🔍 DEBUGGING: Verifying enhanced analysis storage...")
-                print(f"   - Analysis ID: {analysis_id}")
-                print(f"   - Expected User ID: {resolved_user_id}")
-                
-                # Query database to fetch the stored analysis
-                try:
-                    stored_analysis = simple_db_manager.supabase.table("stock_analyses_simple").select("user_id").eq("id", analysis_id).execute()
-                    
-                    if stored_analysis.data and len(stored_analysis.data) > 0:
-                        actual_user_id = stored_analysis.data[0].get('user_id')
-                        print(f"   - Actual User ID from DB: {actual_user_id}")
-                        
-                        if actual_user_id == resolved_user_id:
-                            print(f"   ✅ VERIFICATION PASSED: User ID matches!")
-                        else:
-                            print(f"   ❌ VERIFICATION FAILED: User ID mismatch!")
-                            print(f"      Expected: {resolved_user_id}")
-                            print(f"      Actual: {actual_user_id}")
-                    else:
-                        print(f"   ❌ VERIFICATION FAILED: Analysis not found in database")
-                        
-                except Exception as db_error:
-                    print(f"   ❌ VERIFICATION ERROR: {db_error}")
-                
-                print(f"🔍 DEBUGGING: Verification complete")
-                
         except ValueError as e:
             print(f"❌ User ID resolution failed: {e}")
             # Continue with analysis but don't store it
@@ -604,7 +592,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             print(f"⚠️ Enhanced analysis completed but not stored due to storage error")
         
         print(f"[ENHANCED ANALYSIS] Completed enhanced analysis for {request.stock}")
-        return JSONResponse(content=validated_result, status_code=200)
+        return JSONResponse(content=frontend_response, status_code=200)
         
     except Exception as e:
         error_msg = f"Enhanced analysis failed for {request.stock}: {str(e)}"
@@ -613,10 +601,11 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         
         return JSONResponse(
             content={
+                "success": False,
                 "error": error_msg,
-                "analysis_type": "enhanced_with_code_execution" if request.enable_code_execution else "standard",
-                "status": "failed",
-                "timestamp": time.time()
+                "stock_symbol": request.stock,
+                "exchange": request.exchange,
+                "timestamp": datetime.now().isoformat()
             },
             status_code=500
         )
@@ -759,15 +748,16 @@ async def sector_benchmark(request: AnalysisRequest):
         if not orchestrator.authenticate():
             raise HTTPException(status_code=401, detail="Authentication failed")
         
-        data = await orchestrator.retrieve_stock_data(
-            symbol=request.stock,
-            exchange=request.exchange,
-            period=request.period,
-            interval=request.interval
-        )
-        
-        if data is None:
-            raise HTTPException(status_code=404, detail="Stock data not found")
+        try:
+            data = await orchestrator.retrieve_stock_data(
+                symbol=request.stock,
+                exchange=request.exchange,
+                period=request.period,
+                interval=request.interval
+            )
+        except ValueError as e:
+            error_msg = f"Data retrieval failed for {request.stock}: {str(e)}"
+            raise HTTPException(status_code=400, detail=error_msg)
         
         # Get comprehensive sector benchmarking
         benchmarking = await sector_benchmarking_provider.get_comprehensive_benchmarking_async(request.stock, data)
@@ -809,15 +799,16 @@ async def sector_benchmark_async(request: AnalysisRequest):
         if not auth_success:
             raise HTTPException(status_code=401, detail="Failed to authenticate with Zerodha API")
         
-        stock_data = await orchestrator.retrieve_stock_data(
-            symbol=request.stock,
-            exchange=request.exchange,
-            interval=request.interval,
-            period=request.period
-        )
-        
-        if stock_data.empty:
-            raise HTTPException(status_code=404, detail=f"No data available for {request.stock}")
+        try:
+            stock_data = await orchestrator.retrieve_stock_data(
+                symbol=request.stock,
+                exchange=request.exchange,
+                interval=request.interval,
+                period=request.period
+            )
+        except ValueError as e:
+            error_msg = f"Data retrieval failed for {request.stock}: {str(e)}"
+            raise HTTPException(status_code=400, detail=error_msg)
         
         # Get comprehensive benchmarking with async index data
         benchmarking_results = await provider.get_comprehensive_benchmarking_async(
@@ -910,15 +901,16 @@ async def get_sector_performance(sector_name: str, period: int = 365):
         if not orchestrator.authenticate():
             raise HTTPException(status_code=401, detail="Authentication failed")
         
-        sector_data = await orchestrator.retrieve_stock_data(
-            symbol=sector_index,
-            exchange="NSE",
-            period=period,
-            interval="day"
-        )
-        
-        if sector_data is None:
-            raise HTTPException(status_code=404, detail="Sector data not found")
+        try:
+            sector_data = await orchestrator.retrieve_stock_data(
+                symbol=sector_index,
+                exchange="NSE",
+                period=period,
+                interval="day"
+            )
+        except ValueError as e:
+            error_msg = f"Data retrieval failed for sector {sector_name}: {str(e)}"
+            raise HTTPException(status_code=400, detail=error_msg)
         
         # Calculate sector performance metrics
         sector_returns = sector_data['close'].pct_change().dropna()
@@ -974,14 +966,28 @@ async def compare_sectors(request: SectorComparisonRequest):
                     if not orchestrator.authenticate():
                         raise HTTPException(status_code=401, detail="Authentication failed")
                     
-                    sector_data = await orchestrator.retrieve_stock_data(
-                        symbol=sector_index,
-                        exchange="NSE",
-                        period=request.period,
-                        interval="day"
-                    )
+                    try:
+                        sector_data = await orchestrator.retrieve_stock_data(
+                            symbol=sector_index,
+                            exchange="NSE",
+                            period=request.period,
+                            interval="day"
+                        )
+                    except ValueError as e:
+                        # Skip this sector if data retrieval fails
+                        comparison_data[sector] = {
+                            "sector": sector,
+                            "display_name": sector_classifier.get_sector_display_name(sector),
+                            "sector_index": sector_index,
+                            "error": f"Data retrieval failed: {str(e)}",
+                            "cumulative_return": None,
+                            "annualized_volatility": None,
+                            "stock_count": len(sector_classifier.get_sector_stocks(sector)),
+                            "last_price": None
+                        }
+                        continue
                     
-                    if sector_data is not None:
+                    if sector_data is not None and not sector_data.empty:
                         sector_returns = sector_data['close'].pct_change().dropna()
                         cumulative_return = (1 + sector_returns).prod() - 1
                         volatility = sector_returns.std() * np.sqrt(252)
@@ -1130,15 +1136,16 @@ async def get_stock_indicators(
         }
         
         period = period_mapping.get(backend_interval, 365)
-        df = orchestrator.retrieve_stock_data(
-            symbol=symbol,
-            exchange=exchange,
-            interval=backend_interval,
-            period=period
-        )
-        
-        if df is None or df.empty:
-            raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
+        try:
+            df = await orchestrator.retrieve_stock_data(
+                symbol=symbol,
+                exchange=exchange,
+                interval=backend_interval,
+                period=period
+            )
+        except ValueError as e:
+            error_msg = f"Data retrieval failed for {symbol}: {str(e)}"
+            raise HTTPException(status_code=400, detail=error_msg)
         
         # Calculate indicators
         indicators_data = {}
@@ -1262,15 +1269,16 @@ async def get_patterns(
             raise HTTPException(status_code=401, detail="Authentication failed")
         
         # Retrieve stock data
-        df = orchestrator.retrieve_stock_data(
-            symbol=symbol,
-            exchange=exchange,
-            interval=backend_interval,
-            period=365
-        )
-        
-        if df is None or df.empty:
-            raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
+        try:
+            df = await orchestrator.retrieve_stock_data(
+                symbol=symbol,
+                exchange=exchange,
+                interval=backend_interval,
+                period=365
+            )
+        except ValueError as e:
+            error_msg = f"Data retrieval failed for {symbol}: {str(e)}"
+            raise HTTPException(status_code=400, detail=error_msg)
         
         # Parse requested pattern types
         requested_patterns = [p.strip() for p in pattern_types.split(',')]
@@ -1377,15 +1385,16 @@ async def get_charts(
             raise HTTPException(status_code=401, detail="Authentication failed")
         
         # Retrieve stock data
-        df = orchestrator.retrieve_stock_data(
-            symbol=symbol,
-            exchange=exchange,
-            interval=backend_interval,
-            period=365
-        )
-        
-        if df is None or df.empty:
-            raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
+        try:
+            df = await orchestrator.retrieve_stock_data(
+                symbol=symbol,
+                exchange=exchange,
+                interval=backend_interval,
+                period=365
+            )
+        except ValueError as e:
+            error_msg = f"Data retrieval failed for {symbol}: {str(e)}"
+            raise HTTPException(status_code=400, detail=error_msg)
         
         # Calculate indicators for charts
         indicators = orchestrator.calculate_indicators(df, symbol)
