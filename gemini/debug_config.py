@@ -10,11 +10,12 @@ class GeminiDebugConfig:
     """Configuration class for Gemini debugging"""
     
     def __init__(self):
-        self._enable_debug = self._get_env_bool("GEMINI_DEBUG", True)
-        self._log_to_file = self._get_env_bool("GEMINI_LOG_TO_FILE", True)
-        self._log_level = os.environ.get("GEMINI_LOG_LEVEL", "INFO").upper()
-        self._max_prompt_length = int(os.environ.get("GEMINI_MAX_PROMPT_LOG", "1000"))
-        self._max_response_length = int(os.environ.get("GEMINI_MAX_RESPONSE_LOG", "2000"))
+        # Changed defaults to reduce debug output but show time and tokens
+        self._enable_debug = self._get_env_bool("GEMINI_DEBUG", True)  # Changed from False to True
+        self._log_to_file = self._get_env_bool("GEMINI_LOG_TO_FILE", False)  # Changed from True to False
+        self._log_level = os.environ.get("GEMINI_LOG_LEVEL", "DEBUG").upper()  # Changed from WARNING to DEBUG
+        self._max_prompt_length = int(os.environ.get("GEMINI_MAX_PROMPT_LOG", "500"))  # Reduced from 1000
+        self._max_response_length = int(os.environ.get("GEMINI_MAX_RESPONSE_LOG", "1000"))  # Reduced from 2000
     
     def _get_env_bool(self, key: str, default: bool) -> bool:
         """Get boolean value from environment variable"""
@@ -98,11 +99,11 @@ def show_gemini_debug_status():
 
 # Environment variable documentation
 ENV_VARS = {
-    "GEMINI_DEBUG": "Enable/disable Gemini debugging (true/false, default: true)",
-    "GEMINI_LOG_TO_FILE": "Enable/disable file logging (true/false, default: true)",
-    "GEMINI_LOG_LEVEL": "Log level (DEBUG/INFO/WARNING/ERROR, default: INFO)",
-    "GEMINI_MAX_PROMPT_LOG": "Maximum prompt length to log (default: 1000)",
-    "GEMINI_MAX_RESPONSE_LOG": "Maximum response length to log (default: 2000)"
+    "GEMINI_DEBUG": "Enable/disable Gemini debugging (true/false, default: true)",  # Updated default
+    "GEMINI_LOG_TO_FILE": "Enable/disable file logging (true/false, default: false)",  # Updated default
+    "GEMINI_LOG_LEVEL": "Log level (DEBUG/INFO/WARNING/ERROR, default: DEBUG)",  # Updated default
+    "GEMINI_MAX_PROMPT_LOG": "Maximum prompt length to log (default: 500)",  # Updated default
+    "GEMINI_MAX_RESPONSE_LOG": "Maximum response length to log (default: 1000)"  # Updated default
 }
 
 def print_env_help():

@@ -51,6 +51,9 @@ from patterns.recognition import PatternRecognition
 from technical_indicators import TechnicalIndicators
 from simple_database_manager import simple_db_manager
 from frontend_response_builder import FrontendResponseBuilder
+from chart_manager import get_chart_manager, initialize_chart_manager
+from deployment_config import DeploymentConfig
+from storage_config import StorageConfig
 
 app = FastAPI(title="Stock Analysis Service", version="1.0.0")
 
@@ -96,6 +99,18 @@ async def startup_event():
     
     # Initialize other components
     try:
+        # Initialize chart manager for deployment
+        print("📊 Initializing chart manager...")
+        chart_config = DeploymentConfig.get_chart_config()
+        chart_manager = initialize_chart_manager(**chart_config)
+        print(f"✅ Chart manager initialized: max_age={chart_manager.max_age_hours}h, max_size={chart_manager.max_total_size_mb}MB")
+        
+        # Initialize storage configuration
+        print("📁 Initializing storage configuration...")
+        StorageConfig.ensure_directories_exist()
+        storage_info = StorageConfig.get_storage_info()
+        print(f"✅ Storage initialized: {storage_info['storage_type']} storage in {storage_info['environment']} environment")
+        
         # Initialize sector classifiers
         print("🏭 Initializing sector classifiers...")
         sector_classifier.get_all_sectors()
@@ -1399,9 +1414,10 @@ async def get_charts(
         # Calculate indicators for charts
         indicators = orchestrator.calculate_indicators(df, symbol)
         
-        # Create output directory
-        output_dir = f"./output/charts/{symbol}_{interval}"
-        os.makedirs(output_dir, exist_ok=True)
+        # Use chart manager for directory management
+        chart_manager = get_chart_manager()
+        chart_dir = chart_manager.create_chart_directory(symbol, interval)
+        output_dir = str(chart_dir)
         
         # Generate charts
         chart_paths = orchestrator.create_visualizations(df, indicators, symbol, output_dir)
@@ -1645,6 +1661,93 @@ async def get_user_analysis_summary(user_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch user analysis summary: {str(e)}")
+
+# Chart Management Endpoints
+@app.get("/charts/storage/stats")
+async def get_chart_storage_stats():
+    """Get chart storage statistics."""
+    try:
+        chart_manager = get_chart_manager()
+        stats = chart_manager.get_storage_stats()
+        return {
+            "success": True,
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get chart storage stats: {str(e)}")
+
+@app.post("/charts/cleanup")
+async def cleanup_charts():
+    """Manually trigger chart cleanup."""
+    try:
+        chart_manager = get_chart_manager()
+        stats = chart_manager.cleanup_old_charts()
+        return {
+            "success": True,
+            "message": "Chart cleanup completed",
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup charts: {str(e)}")
+
+@app.delete("/charts/{symbol}/{interval}")
+async def cleanup_specific_charts(symbol: str, interval: str):
+    """Clean up charts for a specific symbol and interval."""
+    try:
+        chart_manager = get_chart_manager()
+        success = chart_manager.cleanup_specific_charts(symbol, interval)
+        if success:
+            return {
+                "success": True,
+                "message": f"Cleaned up charts for {symbol}_{interval}"
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"No charts found for {symbol}_{interval}"
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup specific charts: {str(e)}")
+
+@app.delete("/charts/all")
+async def cleanup_all_charts():
+    """Clean up all charts."""
+    try:
+        chart_manager = get_chart_manager()
+        stats = chart_manager.cleanup_all_charts()
+        return {
+            "success": True,
+            "message": "All charts cleaned up",
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup all charts: {str(e)}")
+
+# Storage Management Endpoints
+@app.get("/storage/info")
+async def get_storage_info():
+    """Get comprehensive storage information."""
+    try:
+        storage_info = StorageConfig.get_storage_info()
+        return {
+            "success": True,
+            "storage_info": storage_info
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get storage info: {str(e)}")
+
+@app.get("/storage/recommendations")
+async def get_storage_recommendations():
+    """Get storage recommendations for current environment."""
+    try:
+        from storage_config import get_storage_recommendations
+        recommendations = get_storage_recommendations()
+        return {
+            "success": True,
+            "recommendations": recommendations
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get storage recommendations: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
