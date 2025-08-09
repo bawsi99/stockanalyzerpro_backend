@@ -37,6 +37,7 @@ except ImportError:
 
 # FastAPI imports
 from fastapi import FastAPI, HTTPException, status
+import logging
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -56,6 +57,7 @@ from deployment_config import DeploymentConfig
 from storage_config import StorageConfig
 
 app = FastAPI(title="Stock Analysis Service", version="1.0.0")
+logger = logging.getLogger(__name__)
 
 # Load CORS origins from environment variable
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080").split(",")
@@ -236,6 +238,26 @@ def convert_charts_to_base64(charts_dict: dict) -> dict:
             }
     
     return converted_charts
+
+def cleanup_chart_files(chart_paths: dict) -> dict:
+    """Delete chart image files referenced in chart_paths.
+
+    Returns basic stats about cleanup operations performed.
+    """
+    stats = {"files_removed": 0, "errors": 0}
+    try:
+        for _, chart_path in (chart_paths or {}).items():
+            try:
+                if isinstance(chart_path, str) and os.path.exists(chart_path):
+                    # Remove only the file; do not remove directories
+                    os.remove(chart_path)
+                    stats["files_removed"] += 1
+            except Exception:
+                stats["errors"] += 1
+        return stats
+    except Exception:
+        stats["errors"] += 1
+        return stats
 
 def validate_analysis_results(results: dict) -> dict:
     """Validate and ensure all required fields are present in analysis results."""
@@ -609,6 +631,19 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         print(f"[ENHANCED ANALYSIS] Completed enhanced analysis for {request.stock}")
         # Make the response JSON serializable to handle NaN values
         serialized_response = make_json_serializable(frontend_response)
+
+        # Cleanup generated chart image files after the final response content is prepared
+        try:
+            # Cleanup charts created in this endpoint response
+            if 'results' in frontend_response and isinstance(frontend_response['results'].get('charts'), dict):
+                _ = cleanup_chart_files(frontend_response['results']['charts'])
+            # Also cleanup any charts created by the earlier enhanced_analyze_stock result
+            if isinstance(analysis_results, dict) and isinstance(analysis_results.get('charts'), dict):
+                _ = cleanup_chart_files(analysis_results['charts'])
+        except Exception:
+            # Non-fatal: cleanup best-effort
+            pass
+
         return JSONResponse(content=serialized_response, status_code=200)
         
     except Exception as e:
@@ -656,6 +691,13 @@ async def analyze_async(request: AnalysisRequest):
         # Make all data JSON serializable
         serialized_results = make_json_serializable(results)
         
+        # Best-effort cleanup of any chart files referenced in results
+        try:
+            if isinstance(results, dict) and isinstance(results.get('charts'), dict):
+                _ = cleanup_chart_files(results['charts'])
+        except Exception:
+            pass
+
         return {
             "success": True,
             "message": success_message,
