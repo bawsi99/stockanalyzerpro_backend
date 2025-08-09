@@ -607,7 +607,9 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             print(f"⚠️ Enhanced analysis completed but not stored due to storage error")
         
         print(f"[ENHANCED ANALYSIS] Completed enhanced analysis for {request.stock}")
-        return JSONResponse(content=frontend_response, status_code=200)
+        # Make the response JSON serializable to handle NaN values
+        serialized_response = make_json_serializable(frontend_response)
+        return JSONResponse(content=serialized_response, status_code=200)
         
     except Exception as e:
         error_msg = f"Enhanced analysis failed for {request.stock}: {str(e)}"

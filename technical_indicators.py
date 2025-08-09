@@ -2247,20 +2247,20 @@ class TechnicalIndicators:
         trend_direction = 'bullish' if plus_di.iloc[-1] > minus_di.iloc[-1] else 'bearish'
         
         indicators['adx'] = {
-            'adx': float(adx.iloc[-1]),
-            'plus_di': float(plus_di.iloc[-1]),
-            'minus_di': float(minus_di.iloc[-1]),
+            'adx': float(adx.iloc[-1]) if not pd.isna(adx.iloc[-1]) else None,
+            'plus_di': float(plus_di.iloc[-1]) if not pd.isna(plus_di.iloc[-1]) else None,
+            'minus_di': float(minus_di.iloc[-1]) if not pd.isna(minus_di.iloc[-1]) else None,
             'trend_direction': trend_direction,
-            'trend_strength': 'strong' if adx.iloc[-1] > 25 else 'weak'
+            'trend_strength': 'strong' if not pd.isna(adx.iloc[-1]) and adx.iloc[-1] > 25 else 'weak'
         }
         
         # Add trend data (consolidated)
         indicators['trend_data'] = {
             'direction': trend_direction,
-            'strength': 'strong' if adx.iloc[-1] > 25 else 'weak',
-            'adx': float(adx.iloc[-1]),
-            'plus_di': float(plus_di.iloc[-1]),
-            'minus_di': float(minus_di.iloc[-1])
+            'strength': 'strong' if not pd.isna(adx.iloc[-1]) and adx.iloc[-1] > 25 else 'weak',
+            'adx': float(adx.iloc[-1]) if not pd.isna(adx.iloc[-1]) else None,
+            'plus_di': float(plus_di.iloc[-1]) if not pd.isna(plus_di.iloc[-1]) else None,
+            'minus_di': float(minus_di.iloc[-1]) if not pd.isna(minus_di.iloc[-1]) else None
         }
         
         # Calculate Enhanced Volatility Indicators (only current values)

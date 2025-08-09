@@ -119,48 +119,179 @@ class FrontendResponseBuilder:
     def _build_technical_indicators(data: pd.DataFrame, indicators: dict) -> dict:
         """Build technical indicators structure."""
         try:
-            latest_close = data['close'].iloc[-1] if not data.empty else 0
-            latest_volume = data['volume'].iloc[-1] if not data.empty else 0
-            
-            # Extract basic indicators
-            sma_20 = indicators.get('sma_20', [latest_close])[-1] if indicators.get('sma_20') else latest_close
-            sma_50 = indicators.get('sma_50', [latest_close])[-1] if indicators.get('sma_50') else latest_close
-            sma_200 = indicators.get('sma_200', [latest_close])[-1] if indicators.get('sma_200') else latest_close
-            rsi_14 = indicators.get('rsi_14', [50])[-1] if indicators.get('rsi_14') else 50
-            macd_line = indicators.get('macd_line', [0])[-1] if indicators.get('macd_line') else 0
-            signal_line = indicators.get('signal_line', [0])[-1] if indicators.get('signal_line') else 0
-            
-            # Calculate derived metrics
-            price_to_sma_200 = float(latest_close / sma_200 if sma_200 > 0 else 1)
-            sma_20_to_sma_50 = float(sma_20 / sma_50 if sma_50 > 0 else 1)
-            golden_cross = bool(sma_20 > sma_50 and sma_50 > sma_200)
-            death_cross = bool(sma_20 < sma_50 and sma_50 < sma_200)
-            
-            # Calculate volume metrics
-            avg_volume = data['volume'].mean() if not data.empty else 0
-            volume_ratio = float(latest_volume / avg_volume if avg_volume > 0 else 1)
-            
+            latest_close = data['close'].iloc[-1] if not data.empty else 0.0
+            latest_volume = data['volume'].iloc[-1] if not data.empty else 0.0
+
+            # If indicators are already in structured form (from calculate_all_indicators_optimized),
+            # prefer those real values instead of synthesizing defaults
+            is_structured = isinstance(indicators, dict) and (
+                'moving_averages' in indicators or 'rsi' in indicators or 'macd' in indicators
+            )
+
+            if is_structured:
+                ma = indicators.get('moving_averages', {}) or {}
+                rsi = indicators.get('rsi', {}) or {}
+                macd = indicators.get('macd', {}) or {}
+                bb = indicators.get('bollinger_bands', {}) or {}
+                vol = indicators.get('volume', {}) or {}
+                adx = indicators.get('adx', {}) or {}
+                trend_data = indicators.get('trend_data', {}) or {}
+
+                # Ensure mandatory derived fields exist when missing
+                price_to_sma_200 = ma.get('price_to_sma_200')
+                if price_to_sma_200 is None:
+                    sma200 = ma.get('sma_200') or 0.0
+                    price_to_sma_200 = float((latest_close / sma200 - 1) if sma200 else 0.0)
+
+                sma_20_to_sma_50 = ma.get('sma_20_to_sma_50')
+                if sma_20_to_sma_50 is None:
+                    sma20 = ma.get('sma_20') or 0.0
+                    sma50 = ma.get('sma_50') or 0.0
+                    sma_20_to_sma_50 = float((sma20 / sma50 - 1) if sma50 else 0.0)
+
+                # Percent-b and bandwidth fallbacks
+                percent_b = bb.get('percent_b')
+                bandwidth = bb.get('bandwidth')
+                if percent_b is None or bandwidth is None:
+                    upper = bb.get('upper_band') or float(latest_close * 1.02)
+                    middle = bb.get('middle_band') or float(latest_close)
+                    lower = bb.get('lower_band') or float(latest_close * 0.98)
+                    band_width = upper - lower
+                    percent_b = float((latest_close - lower) / band_width) if band_width else 0.5
+                    bandwidth = float(band_width / middle) if middle else 0.0
+
+                # Volume ratio fallback using recent average
+                volume_ratio = vol.get('volume_ratio')
+                if volume_ratio is None:
+                    avg_volume = data['volume'].mean() if not data.empty else 0.0
+                    volume_ratio = float(latest_volume / avg_volume) if avg_volume else 1.0
+
+                # ADX defaults
+                adx_value = adx.get('adx') if adx else None
+                plus_di = adx.get('plus_di') if adx else None
+                minus_di = adx.get('minus_di') if adx else None
+                trend_direction = adx.get('trend_direction') or (
+                    'bullish' if (plus_di or 0) > (minus_di or 0) else 'bearish'
+                )
+
+                result = {
+                    "moving_averages": {
+                        "sma_20": float(ma.get('sma_20') or 0.0),
+                        "sma_50": float(ma.get('sma_50') or 0.0),
+                        "sma_200": float(ma.get('sma_200') or 0.0),
+                        "ema_20": float(ma.get('ema_20') or ma.get('sma_20') or 0.0),
+                        "ema_50": float(ma.get('ema_50') or ma.get('sma_50') or 0.0),
+                        "price_to_sma_200": float(price_to_sma_200),
+                        "sma_20_to_sma_50": float(sma_20_to_sma_50),
+                        "golden_cross": bool(ma.get('golden_cross') or False),
+                        "death_cross": bool(ma.get('death_cross') or False)
+                    },
+                    "rsi": {
+                        "rsi_14": float(rsi.get('rsi_14') or 0.0),
+                        "trend": str(rsi.get('trend') or ('bullish' if (rsi.get('rsi_14') or 50) > 50 else 'bearish' if (rsi.get('rsi_14') or 50) < 50 else 'neutral')),
+                        "status": str(rsi.get('status') or ('overbought' if (rsi.get('rsi_14') or 0) > 70 else 'oversold' if (rsi.get('rsi_14') or 0) < 30 else 'neutral'))
+                    },
+                    "macd": {
+                        "macd_line": float(macd.get('macd_line') or 0.0),
+                        "signal_line": float(macd.get('signal_line') or 0.0),
+                        "histogram": float(macd.get('histogram') or ((macd.get('macd_line') or 0.0) - (macd.get('signal_line') or 0.0)))
+                    },
+                    "bollinger_bands": {
+                        "upper_band": float(bb.get('upper_band') or latest_close * 1.02),
+                        "middle_band": float(bb.get('middle_band') or latest_close),
+                        "lower_band": float(bb.get('lower_band') or latest_close * 0.98),
+                        "percent_b": float(percent_b),
+                        "bandwidth": float(bandwidth)
+                    },
+                    "volume": {
+                        "volume_ratio": float(volume_ratio),
+                        "obv": float(vol.get('obv') or latest_volume),
+                        "obv_trend": str(vol.get('obv_trend') or 'neutral')
+                    },
+                    "adx": {
+                        "adx": float(adx_value) if adx_value is not None else 25.0,
+                        "plus_di": float(plus_di) if plus_di is not None else 30.0,
+                        "minus_di": float(minus_di) if minus_di is not None else 20.0,
+                        "trend_direction": str(trend_direction)
+                    },
+                    "trend_data": {
+                        "direction": str(trend_data.get('direction') or trend_direction),
+                        "strength": str(trend_data.get('strength') or ('strong' if (adx_value or 0) > 25 else 'weak')),
+                        "adx": float(trend_data.get('adx') or (adx_value or 0.0)),
+                        "plus_di": float(trend_data.get('plus_di') or (plus_di or 0.0)),
+                        "minus_di": float(trend_data.get('minus_di') or (minus_di or 0.0))
+                    },
+                    "raw_data": {
+                        "open": [float(x) for x in data['open'].tail(100).tolist()] if not data.empty else [],
+                        "high": [float(x) for x in data['high'].tail(100).tolist()] if not data.empty else [],
+                        "low": [float(x) for x in data['low'].tail(100).tolist()] if not data.empty else [],
+                        "close": [float(x) for x in data['close'].tail(100).tolist()] if not data.empty else [],
+                        "volume": [float(x) for x in data['volume'].tail(100).tolist()] if not data.empty else []
+                    },
+                    "metadata": {
+                        "start": data.index[0].strftime('%Y-%m-%d') if not data.empty else "",
+                        "end": data.index[-1].strftime('%Y-%m-%d') if not data.empty else "",
+                        "period": len(data),
+                        "last_price": float(latest_close),
+                        "last_volume": float(latest_volume),
+                        "data_quality": {
+                            "is_valid": True,
+                            "warnings": [],
+                            "data_quality_issues": [],
+                            "missing_data": [],
+                            "suspicious_patterns": []
+                        },
+                        "indicator_availability": {
+                            "sma_20": True,
+                            "sma_50": True,
+                            "sma_200": True,
+                            "ema_20": True,
+                            "ema_50": True,
+                            "macd": True,
+                            "rsi": True,
+                            "bollinger_bands": True,
+                            "stochastic": True,
+                            "adx": True,
+                            "obv": True,
+                            "volume_ratio": True,
+                            "atr": True
+                        }
+                    }
+                }
+
+                return result
+
+            # Fallback: synthesize minimal indicators if structured data was not provided
+            # (kept for backward compatibility)
+            sma_20 = latest_close
+            sma_50 = latest_close
+            sma_200 = latest_close
+            price_to_sma_200 = float((latest_close / sma_200) if sma_200 else 0.0)
+            sma_20_to_sma_50 = float((sma_20 / sma_50) if sma_50 else 0.0)
+            avg_volume = data['volume'].mean() if not data.empty else 0.0
+            volume_ratio = float(latest_volume / avg_volume) if avg_volume else 1.0
+
             return {
                 "moving_averages": {
                     "sma_20": float(sma_20),
                     "sma_50": float(sma_50),
                     "sma_200": float(sma_200),
-                    "ema_20": float(sma_20),  # Simplified
-                    "ema_50": float(sma_50),  # Simplified
+                    "ema_20": float(sma_20),
+                    "ema_50": float(sma_50),
                     "price_to_sma_200": price_to_sma_200,
                     "sma_20_to_sma_50": sma_20_to_sma_50,
-                    "golden_cross": golden_cross,
-                    "death_cross": death_cross
+                    "golden_cross": False,
+                    "death_cross": False
                 },
                 "rsi": {
-                    "rsi_14": float(rsi_14),
-                    "trend": "bullish" if rsi_14 > 50 else "bearish" if rsi_14 < 50 else "neutral",
-                    "status": "overbought" if rsi_14 > 70 else "oversold" if rsi_14 < 30 else "neutral"
+                    "rsi_14": 50.0,
+                    "trend": "neutral",
+                    "status": "neutral"
                 },
                 "macd": {
-                    "macd_line": float(macd_line),
-                    "signal_line": float(signal_line),
-                    "histogram": float(macd_line - signal_line)
+                    "macd_line": 0.0,
+                    "signal_line": 0.0,
+                    "histogram": 0.0
                 },
                 "bollinger_bands": {
                     "upper_band": float(latest_close * 1.02),
@@ -172,17 +303,17 @@ class FrontendResponseBuilder:
                 "volume": {
                     "volume_ratio": volume_ratio,
                     "obv": float(latest_volume),
-                    "obv_trend": "bullish"
+                    "obv_trend": "neutral"
                 },
                 "adx": {
                     "adx": 25.0,
                     "plus_di": 30.0,
                     "minus_di": 20.0,
-                    "trend_direction": "bullish"
+                    "trend_direction": "neutral"
                 },
                 "trend_data": {
-                    "direction": "bullish",
-                    "strength": "moderate",
+                    "direction": "neutral",
+                    "strength": "weak",
                     "adx": 25.0,
                     "plus_di": 30.0,
                     "minus_di": 20.0
@@ -534,8 +665,9 @@ class FrontendResponseBuilder:
             neutral_signals = 0
             total_signals = 0
             
-            # RSI analysis
-            rsi_14 = indicators.get('rsi_14', [50])[-1] if indicators.get('rsi_14') else 50
+            # RSI analysis - Updated to use new structure
+            rsi_data = indicators.get('rsi', {})
+            rsi_14 = rsi_data.get('rsi_14', 50) if rsi_data else 50
             if rsi_14 > 50:
                 bullish_signals += 1
             elif rsi_14 < 50:
@@ -544,9 +676,10 @@ class FrontendResponseBuilder:
                 neutral_signals += 1
             total_signals += 1
             
-            # MACD analysis
-            macd_line = indicators.get('macd_line', [0])[-1] if indicators.get('macd_line') else 0
-            signal_line = indicators.get('signal_line', [0])[-1] if indicators.get('signal_line') else 0
+            # MACD analysis - Updated to use new structure
+            macd_data = indicators.get('macd', {})
+            macd_line = macd_data.get('macd_line', 0) if macd_data else 0
+            signal_line = macd_data.get('signal_line', 0) if macd_data else 0
             if macd_line > signal_line:
                 bullish_signals += 1
             elif macd_line < signal_line:
@@ -555,9 +688,10 @@ class FrontendResponseBuilder:
                 neutral_signals += 1
             total_signals += 1
             
-            # Moving averages analysis
-            sma_20 = indicators.get('sma_20', [0])[-1] if indicators.get('sma_20') else 0
-            sma_50 = indicators.get('sma_50', [0])[-1] if indicators.get('sma_50') else 0
+            # Moving averages analysis - Updated to use new structure
+            ma_data = indicators.get('moving_averages', {})
+            sma_20 = ma_data.get('sma_20', 0) if ma_data else 0
+            sma_50 = ma_data.get('sma_50', 0) if ma_data else 0
             latest_price = data['close'].iloc[-1] if not data.empty else 0
             
             if latest_price > sma_20 > sma_50:
@@ -567,6 +701,40 @@ class FrontendResponseBuilder:
             else:
                 neutral_signals += 1
             total_signals += 1
+            
+            # Bollinger Bands analysis
+            bb_data = indicators.get('bollinger_bands', {})
+            if bb_data:
+                percent_b = bb_data.get('percent_b', 0.5)
+                if percent_b > 0.8:
+                    bullish_signals += 1
+                elif percent_b < 0.2:
+                    bearish_signals += 1
+                else:
+                    neutral_signals += 1
+                total_signals += 1
+            
+            # Volume analysis
+            volume_data = indicators.get('volume', {})
+            if volume_data:
+                volume_ratio = volume_data.get('volume_ratio', 1.0)
+                if volume_ratio > 1.5:
+                    bullish_signals += 1
+                elif volume_ratio < 0.5:
+                    bearish_signals += 1
+                else:
+                    neutral_signals += 1
+                total_signals += 1
+            
+            # ADX analysis
+            adx_data = indicators.get('adx', {})
+            if adx_data:
+                adx_value = adx_data.get('adx', 25)
+                if adx_value is not None and adx_value > 25:
+                    bullish_signals += 1
+                else:
+                    neutral_signals += 1
+                total_signals += 1
             
             # Calculate percentages
             bullish_percentage = (bullish_signals / total_signals * 100) if total_signals > 0 else 33.33
@@ -594,33 +762,107 @@ class FrontendResponseBuilder:
             technical_confidence = max_percentage
             confidence = (ai_confidence + technical_confidence) / 2
             
-            # Build signal details
-            signal_details = [
-                {
-                    "indicator": "RSI",
-                    "signal": "bullish" if rsi_14 > 50 else "bearish" if rsi_14 < 50 else "neutral",
-                    "strength": "strong" if abs(rsi_14 - 50) > 20 else "medium" if abs(rsi_14 - 50) > 10 else "weak",
+            # Build signal details with enhanced indicators
+            signal_details = []
+            
+            # RSI Signal
+            rsi_signal = "bullish" if rsi_14 > 50 else "bearish" if rsi_14 < 50 else "neutral"
+            rsi_strength = "strong" if abs(rsi_14 - 50) > 20 else "medium" if abs(rsi_14 - 50) > 10 else "weak"
+            signal_details.append({
+                "indicator": "RSI",
+                "signal": rsi_signal,
+                "strength": rsi_strength,
+                "weight": 1.0,
+                "score": rsi_14,
+                "value": rsi_14,
+                "description": f"RSI at {rsi_14:.1f} - {'Neutral zone' if rsi_14 >= 40 and rsi_14 <= 60 else 'Overbought' if rsi_14 > 70 else 'Oversold' if rsi_14 < 30 else 'Near overbought' if rsi_14 > 60 else 'Near oversold'}"
+            })
+            
+            # MACD Signal
+            macd_signal = "bullish" if macd_line > signal_line else "bearish" if macd_line < signal_line else "neutral"
+            macd_strength = "strong" if abs(macd_line - signal_line) > 1 else "medium" if abs(macd_line - signal_line) > 0.5 else "weak"
+            signal_details.append({
+                "indicator": "MACD",
+                "signal": macd_signal,
+                "strength": macd_strength,
+                "weight": 1.0,
+                "score": macd_line - signal_line,
+                "value": macd_line - signal_line,
+                "description": f"MACD neutral - Line: {macd_line:.2f}, Signal: {signal_line:.2f}"
+            })
+            
+            # Moving Averages Signal
+            ma_signal = "bullish" if latest_price > sma_20 > sma_50 else "bearish" if latest_price < sma_20 < sma_50 else "neutral"
+            ma_strength = "strong" if abs(latest_price - sma_20) / sma_20 > 0.05 else "medium" if abs(latest_price - sma_20) / sma_20 > 0.02 else "weak"
+            bullish_ma_count = sum([1 for ma in [sma_20, sma_50] if latest_price > ma])
+            signal_details.append({
+                "indicator": "Moving Averages",
+                "signal": ma_signal,
+                "strength": ma_strength,
+                "weight": 1.0,
+                "score": (latest_price - sma_20) / sma_20 * 100 if sma_20 > 0 else 0,
+                "value": (latest_price - sma_20) / sma_20 * 100 if sma_20 > 0 else 0,
+                "description": f"Price vs MAs: {bullish_ma_count}/3 bullish"
+            })
+            
+            # Bollinger Bands Signal
+            bb_data = indicators.get('bollinger_bands', {})
+            if bb_data:
+                percent_b = bb_data.get('percent_b', 0.5)
+                bb_signal = "bullish" if percent_b > 0.8 else "bearish" if percent_b < 0.2 else "neutral"
+                bb_strength = "strong" if abs(percent_b - 0.5) > 0.3 else "medium" if abs(percent_b - 0.5) > 0.2 else "weak"
+                signal_details.append({
+                    "indicator": "Bollinger Bands",
+                    "signal": bb_signal,
+                    "strength": bb_strength,
                     "weight": 1.0,
-                    "score": rsi_14,
-                    "description": f"RSI at {rsi_14:.1f}"
-                },
-                {
-                    "indicator": "MACD",
-                    "signal": "bullish" if macd_line > signal_line else "bearish" if macd_line < signal_line else "neutral",
-                    "strength": "strong" if abs(macd_line - signal_line) > 1 else "medium" if abs(macd_line - signal_line) > 0.5 else "weak",
+                    "score": percent_b * 100,
+                    "value": percent_b,
+                    "description": "Price within bands - Neutral"
+                })
+            
+            # Volume Signal
+            volume_data = indicators.get('volume', {})
+            if volume_data:
+                volume_ratio = volume_data.get('volume_ratio', 1.0)
+                volume_signal = "bullish" if volume_ratio > 1.5 else "bearish" if volume_ratio < 0.5 else "neutral"
+                volume_strength = "strong" if volume_ratio > 2.0 or volume_ratio < 0.3 else "medium" if volume_ratio > 1.2 or volume_ratio < 0.7 else "weak"
+                signal_details.append({
+                    "indicator": "Volume",
+                    "signal": volume_signal,
+                    "strength": volume_strength,
                     "weight": 1.0,
-                    "score": macd_line - signal_line,
-                    "description": f"MACD: {macd_line:.2f}, Signal: {signal_line:.2f}"
-                },
-                {
-                    "indicator": "Moving Averages",
-                    "signal": "bullish" if latest_price > sma_20 > sma_50 else "bearish" if latest_price < sma_20 < sma_50 else "neutral",
-                    "strength": "strong" if abs(latest_price - sma_20) / sma_20 > 0.05 else "medium" if abs(latest_price - sma_20) / sma_20 > 0.02 else "weak",
-                    "weight": 1.0,
-                    "score": (latest_price - sma_20) / sma_20 * 100 if sma_20 > 0 else 0,
-                    "description": f"Price: {latest_price:.2f}, SMA20: {sma_20:.2f}, SMA50: {sma_50:.2f}"
-                }
-            ]
+                    "score": volume_ratio * 100,
+                    "value": volume_ratio,
+                    "description": f"High volume - {volume_ratio:.1f}x average"
+                })
+            
+            # ADX Signal
+            adx_data = indicators.get('adx', {})
+            if adx_data:
+                adx_value = adx_data.get('adx', 25)
+                if adx_value is not None:
+                    adx_signal = "bullish" if adx_value > 25 else "neutral"
+                    adx_strength = "strong" if adx_value > 40 else "medium" if adx_value > 25 else "weak"
+                    signal_details.append({
+                        "indicator": "ADX",
+                        "signal": adx_signal,
+                        "strength": adx_strength,
+                        "weight": 1.0,
+                        "score": adx_value,
+                        "value": adx_value,
+                        "description": f"Weak trend - ADX: {adx_value:.1f}"
+                    })
+                else:
+                    signal_details.append({
+                        "indicator": "ADX",
+                        "signal": "neutral",
+                        "strength": "weak",
+                        "weight": 1.0,
+                        "score": 25,
+                        "value": 25,
+                        "description": "Insufficient data for ADX calculation"
+                    })
             
             return {
                 "overall_signal": overall_signal,

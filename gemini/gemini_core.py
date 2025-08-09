@@ -13,7 +13,7 @@ class GeminiCore:
         self.client = genai.Client(api_key=self.api_key)
         self.last_api_call = 0
         self.min_api_interval = 0.1  # 100ms between calls
-        self.rate_limiting_enabled = True  # Can be disabled for parallel execution
+        self.rate_limiting_enabled = False  # Disabled for maximum performance
 
     def rate_limit(self):
         if not self.rate_limiting_enabled:
