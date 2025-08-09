@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')  # Ensure headless-safe backend for saving figures
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -1241,19 +1243,20 @@ class ChartVisualizer:
         ax1 = axes[0]
         ax1.plot(data.index, data['close'], label='Close Price', color='blue', linewidth=1.5)
         
-        # Add moving averages
-        if 'sma_20' in indicators:
-            ax1.plot(data.index, indicators['sma_20'], label='SMA 20', color='orange', alpha=0.7)
-        if 'sma_50' in indicators:
-            ax1.plot(data.index, indicators['sma_50'], label='SMA 50', color='red', alpha=0.7)
-        if 'ema_12' in indicators:
-            ax1.plot(data.index, indicators['ema_12'], label='EMA 12', color='purple', alpha=0.7)
-        
-        # Add Bollinger Bands
-        if 'bb_upper' in indicators and 'bb_lower' in indicators:
-            ax1.plot(data.index, indicators['bb_upper'], label='BB Upper', color='gray', linestyle='--', alpha=0.6)
-            ax1.plot(data.index, indicators['bb_lower'], label='BB Lower', color='gray', linestyle='--', alpha=0.6)
-            ax1.fill_between(data.index, indicators['bb_upper'], indicators['bb_lower'], alpha=0.1, color='gray')
+        # Compute and plot moving averages and Bollinger Bands directly from data
+        from technical_indicators import TechnicalIndicators
+        sma_20_series = TechnicalIndicators.calculate_sma(data, 'close', 20)
+        sma_50_series = TechnicalIndicators.calculate_sma(data, 'close', 50)
+        sma_200_series = TechnicalIndicators.calculate_sma(data, 'close', 200)
+        ema_20_series = TechnicalIndicators.calculate_ema(data, 'close', 20)
+        upper_band, middle_band, lower_band = TechnicalIndicators.calculate_bollinger_bands(data)
+
+        ax1.plot(data.index, sma_20_series, label='SMA 20', color='orange', alpha=0.7)
+        ax1.plot(data.index, sma_50_series, label='SMA 50', color='red', alpha=0.7)
+        ax1.plot(data.index, sma_200_series, label='SMA 200', color='purple', alpha=0.7)
+        ax1.plot(data.index, upper_band, label='BB Upper', color='gray', linestyle='--', alpha=0.6)
+        ax1.plot(data.index, lower_band, label='BB Lower', color='gray', linestyle='--', alpha=0.6)
+        ax1.fill_between(data.index, upper_band, lower_band, alpha=0.1, color='gray')
         
         # Add support/resistance levels
         from technical_indicators import TechnicalIndicators
@@ -1277,8 +1280,9 @@ class ChartVisualizer:
         
         # RSI chart
         ax3 = axes[2]
-        if 'rsi_14' in indicators:
-            ax3.plot(data.index, indicators['rsi_14'], label='RSI', color='purple', linewidth=1.5)
+        rsi_series = TechnicalIndicators.calculate_rsi(data)
+        if rsi_series is not None and len(rsi_series) == len(data.index):
+            ax3.plot(data.index, rsi_series, label='RSI', color='purple', linewidth=1.5)
             ax3.axhline(y=70, color='red', linestyle='--', alpha=0.6, label='Overbought')
             ax3.axhline(y=30, color='green', linestyle='--', alpha=0.6, label='Oversold')
             ax3.set_ylabel('RSI')
@@ -1288,11 +1292,12 @@ class ChartVisualizer:
         
         # MACD chart
         ax4 = axes[3]
-        if 'macd_line' in indicators and 'macd_signal_line' in indicators:
-            ax4.plot(data.index, indicators['macd_line'], label='MACD', color='blue', linewidth=1.5)
-            ax4.plot(data.index, indicators['macd_signal_line'], label='Signal', color='red', linewidth=1.5)
-            if 'macd_histogram' in indicators:
-                ax4.bar(data.index, indicators['macd_histogram'], color='gray', alpha=0.5, label='Histogram')
+        macd_line_series, signal_line_series, histogram_series = TechnicalIndicators.calculate_macd(data)
+        if macd_line_series is not None and signal_line_series is not None:
+            ax4.plot(data.index, macd_line_series, label='MACD', color='blue', linewidth=1.5)
+            ax4.plot(data.index, signal_line_series, label='Signal', color='red', linewidth=1.5)
+            if histogram_series is not None:
+                ax4.bar(data.index, histogram_series, color='gray', alpha=0.5, label='Histogram')
             ax4.axhline(y=0, color='black', linestyle='-', alpha=0.5)
             ax4.set_ylabel('MACD')
             ax4.set_xlabel('Date')
@@ -1460,13 +1465,14 @@ class ChartVisualizer:
         ax1 = axes[0]
         ax1.plot(data.index, data['close'], label='Close Price', color='blue', linewidth=1.5)
         
-        # Add different timeframe moving averages
-        if 'sma_20' in indicators:
-            ax1.plot(data.index, indicators['sma_20'], label='SMA 20 (Short-term)', color='orange', alpha=0.7)
-        if 'sma_50' in indicators:
-            ax1.plot(data.index, indicators['sma_50'], label='SMA 50 (Medium-term)', color='red', alpha=0.7)
-        if 'sma_200' in indicators:
-            ax1.plot(data.index, indicators['sma_200'], label='SMA 200 (Long-term)', color='purple', alpha=0.7)
+        # Add different timeframe moving averages computed from data (ensures full-length series)
+        from technical_indicators import TechnicalIndicators
+        sma_20_series = TechnicalIndicators.calculate_sma(data, 'close', 20)
+        sma_50_series = TechnicalIndicators.calculate_sma(data, 'close', 50)
+        sma_200_series = TechnicalIndicators.calculate_sma(data, 'close', 200)
+        ax1.plot(data.index, sma_20_series, label='SMA 20 (Short-term)', color='orange', alpha=0.7)
+        ax1.plot(data.index, sma_50_series, label='SMA 50 (Medium-term)', color='red', alpha=0.7)
+        ax1.plot(data.index, sma_200_series, label='SMA 200 (Long-term)', color='purple', alpha=0.7)
         
         # Add trend lines for different timeframes
         # Short-term trend (last 20 days)
@@ -1510,15 +1516,21 @@ class ChartVisualizer:
         
         # RSI for momentum across timeframes
         ax3 = axes[2]
-        if 'rsi_14' in indicators:
-            ax3.plot(data.index, indicators['rsi_14'], label='RSI 14', color='purple', linewidth=1.5)
-            ax3.axhline(y=70, color='red', linestyle='--', alpha=0.6, label='Overbought')
-            ax3.axhline(y=30, color='green', linestyle='--', alpha=0.6, label='Oversold')
-            ax3.set_ylabel('RSI')
-            ax3.set_xlabel('Date')
-            ax3.set_ylim(0, 100)
-            ax3.legend(loc='upper left')
-            ax3.grid(True, alpha=0.3)
+        try:
+            from technical_indicators import TechnicalIndicators
+            rsi_series = TechnicalIndicators.calculate_rsi(data)
+        except Exception:
+            rsi_series = None
+        if rsi_series is not None and len(rsi_series) == len(data.index):
+            ax3.plot(data.index, rsi_series, label='RSI 14', color='purple', linewidth=1.5)
+        # Draw reference lines and cosmetics even if RSI failed to compute
+        ax3.axhline(y=70, color='red', linestyle='--', alpha=0.6, label='Overbought')
+        ax3.axhline(y=30, color='green', linestyle='--', alpha=0.6, label='Oversold')
+        ax3.set_ylabel('RSI')
+        ax3.set_xlabel('Date')
+        ax3.set_ylim(0, 100)
+        ax3.legend(loc='upper left')
+        ax3.grid(True, alpha=0.3)
         
         plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
