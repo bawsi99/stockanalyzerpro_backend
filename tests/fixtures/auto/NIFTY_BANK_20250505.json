@@ -1,0 +1,95 @@
+{
+  "day": {
+    "bollinger_bands": {
+      "upper_band": 57583.80466741336,
+      "middle_band": 53399.119999999995,
+      "lower_band": 49214.43533258663,
+      "percent_b": 0.6816600438068111,
+      "bandwidth": 0.15673234567960534,
+      "signal": "expansion"
+    },
+    "cmf": {
+      "value": -0.0,
+      "signal": "neutral"
+    },
+    "volume": {
+      "volume_ratio": 1.0,
+      "obv": 0.0,
+      "obv_trend": "neutral",
+      "signal": "normal"
+    },
+    "macd": {
+      "macd_line": 1309.491006871598,
+      "signal_line": 1286.488608060733,
+      "histogram": 23.00239881086509,
+      "signal": "bullish"
+    },
+    "adx": {
+      "adx": 34.01436227181343,
+      "plus_di": 50.33957088272752,
+      "minus_di": 13.580092093661298,
+      "trend_direction": "bullish",
+      "trend_strength": "strong"
+    },
+    "ichimoku": {
+      "tenkan_sen": 55137.575,
+      "kijun_sen": 52627.825,
+      "senkou_span_a": 49187.525,
+      "senkou_span_b": 49187.525,
+      "chikou_span": null,
+      "signal": "bullish"
+    },
+    "keltner": {
+      "upper": 55346.72623976659,
+      "middle": 53714.136239766594,
+      "lower": 52081.5462397666,
+      "signal": "inside"
+    },
+    "enhanced_momentum": {
+      "stochastic_k": 78.4211104197929,
+      "stochastic_d": 82.06070865276932,
+      "stochastic_status": "neutral",
+      "stochrsi_k": 97.14062066746146,
+      "stochrsi_d": 90.39246367574786,
+      "stochrsi_status": "overbought",
+      "williams_r": -21.578889580207104,
+      "williams_r_status": "neutral",
+      "rsi_divergence": {
+        "bearish_divergence": [],
+        "bullish_divergence": [],
+        "hidden_bearish": [],
+        "hidden_bullish": []
+      }
+    },
+    "rsi": {
+      "rsi_14": 80.27275138607652,
+      "recent_values": [
+        69.53284545144358,
+        69.91095613347878,
+        81.0160983106565,
+        79.50125902622494,
+        80.27275138607652
+      ],
+      "trend": "up",
+      "status": "overbought",
+      "signal": "overbought"
+    },
+    "supertrend": {
+      "line": 52687.145,
+      "direction": "up"
+    },
+    "moving_averages": {
+      "sma_20": 53399.119999999995,
+      "sma_50": 50966.85800000001,
+      "sma_200": null,
+      "ema_20": 53714.136239766594,
+      "ema_50": 51984.76372418065,
+      "price_to_sma_200": 0.0,
+      "sma_20_to_sma_50": 0.04772242385434056,
+      "golden_cross": false,
+      "death_cross": false,
+      "signal": "bullish"
+    }
+  },
+  "target_bias": "neutral"
+}

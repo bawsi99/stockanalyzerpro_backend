@@ -1,0 +1,95 @@
+{
+  "day": {
+    "adx": {
+      "adx": 31.482823523886985,
+      "plus_di": 26.409219247482003,
+      "minus_di": 17.87580848635324,
+      "trend_direction": "bullish",
+      "trend_strength": "strong"
+    },
+    "keltner": {
+      "upper": 22152.251214380398,
+      "middle": 21405.1712143804,
+      "lower": 20658.0912143804,
+      "signal": "inside"
+    },
+    "moving_averages": {
+      "sma_20": 21124.3975,
+      "sma_50": 21875.446999999996,
+      "sma_200": null,
+      "ema_20": 21405.1712143804,
+      "ema_50": 21835.005914528047,
+      "price_to_sma_200": 0.0,
+      "sma_20_to_sma_50": -0.03433298985844713,
+      "golden_cross": false,
+      "death_cross": false,
+      "signal": "bearish"
+    },
+    "ichimoku": {
+      "tenkan_sen": 21596.300000000003,
+      "kijun_sen": 21133.824999999997,
+      "senkou_span_a": 22657.85,
+      "senkou_span_b": 22885.175,
+      "chikou_span": null,
+      "signal": "bearish"
+    },
+    "cmf": {
+      "value": -0.0,
+      "signal": "neutral"
+    },
+    "supertrend": {
+      "line": 20859.455,
+      "direction": "up"
+    },
+    "macd": {
+      "macd_line": -68.82830948394621,
+      "signal_line": -152.33581878662628,
+      "histogram": 83.50750930268006,
+      "signal": "bullish"
+    },
+    "enhanced_momentum": {
+      "stochastic_k": 46.81537554679982,
+      "stochastic_d": 53.88370096898618,
+      "stochastic_status": "neutral",
+      "stochrsi_k": 65.14950848538477,
+      "stochrsi_d": 74.48394324414474,
+      "stochrsi_status": "neutral",
+      "williams_r": -53.18462445320018,
+      "williams_r_status": "neutral",
+      "rsi_divergence": {
+        "bearish_divergence": [],
+        "bullish_divergence": [],
+        "hidden_bearish": [],
+        "hidden_bullish": []
+      }
+    },
+    "rsi": {
+      "rsi_14": 59.65150939244204,
+      "recent_values": [
+        74.6045576407506,
+        69.21576991042588,
+        61.0317853252797,
+        55.30044510385755,
+        59.65150939244204
+      ],
+      "trend": "up",
+      "status": "neutral",
+      "signal": "neutral"
+    },
+    "volume": {
+      "volume_ratio": 1.0,
+      "obv": 0.0,
+      "obv_trend": "neutral",
+      "signal": "normal"
+    },
+    "bollinger_bands": {
+      "upper_band": 22093.287591249566,
+      "middle_band": 21124.3975,
+      "lower_band": 20155.507408750433,
+      "percent_b": 0.5572059209817265,
+      "bandwidth": 0.09173185566590163,
+      "signal": "squeeze"
+    }
+  },
+  "target_bias": "neutral"
+}

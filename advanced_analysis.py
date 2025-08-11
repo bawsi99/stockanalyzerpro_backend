@@ -38,8 +38,11 @@ class AdvancedAnalysisProvider:
             Dictionary containing all advanced analysis components
         """
         try:
-            # Calculate returns for analysis
-            returns = stock_data['close'].pct_change().dropna()
+            # Calculate returns for analysis (handle small/empty data safely)
+            if stock_data is None or stock_data.empty or 'close' not in stock_data:
+                returns = pd.Series(dtype=float)
+            else:
+                returns = stock_data['close'].pct_change().dropna()
             
             # Generate all advanced analysis components
             advanced_risk = self._calculate_advanced_risk_metrics(returns, stock_data, indicators)
@@ -69,7 +72,7 @@ class AdvancedAnalysisProvider:
         """Calculate advanced risk metrics for risk assessment."""
         try:
             # Basic volatility calculations
-            volatility = returns.std()
+            volatility = returns.std() if len(returns) > 0 else 0.0
             annualized_volatility = volatility * np.sqrt(252)
             
             # Mean return calculations
@@ -77,21 +80,25 @@ class AdvancedAnalysisProvider:
             annualized_return = mean_return * 252
             
             # Value at Risk (VaR) calculations
-            var_95 = np.percentile(returns, 5)  # 95% VaR
-            var_99 = np.percentile(returns, 1)  # 99% VaR
+            var_95 = np.percentile(returns, 5) if len(returns) > 0 else 0.0
+            var_99 = np.percentile(returns, 1) if len(returns) > 0 else 0.0
             
             # Expected Shortfall (Conditional VaR)
-            es_95 = returns[returns <= var_95].mean()
-            es_99 = returns[returns <= var_99].mean()
+            es_95 = returns[returns <= var_95].mean() if len(returns) > 0 else 0.0
+            es_99 = returns[returns <= var_99].mean() if len(returns) > 0 else 0.0
             
             # Maximum Drawdown calculation
-            cumulative_returns = (1 + returns).cumprod()
-            running_max = cumulative_returns.expanding().max()
-            drawdown = (cumulative_returns - running_max) / running_max
-            max_drawdown = drawdown.min()
+            if len(returns) > 0:
+                cumulative_returns = (1 + returns).cumprod()
+                running_max = cumulative_returns.expanding().max()
+                drawdown = (cumulative_returns - running_max) / running_max
+                max_drawdown = drawdown.min()
+            else:
+                drawdown = pd.Series(dtype=float)
+                max_drawdown = 0.0
             
             # Current drawdown
-            current_drawdown = drawdown.iloc[-1] if len(drawdown) > 0 else 0
+            current_drawdown = drawdown.iloc[-1] if len(drawdown) > 0 else 0.0
             
             # Drawdown duration
             drawdown_duration = self._calculate_drawdown_duration(drawdown)
@@ -207,10 +214,21 @@ class AdvancedAnalysisProvider:
         """Perform stress testing scenarios."""
         try:
             # Historical stress scenarios
-            historical_stress = self._analyze_historical_stress(returns)
+            historical_stress = self._analyze_historical_stress(returns) if len(returns) > 0 else {
+                "worst_20_day_period": -0.05,
+                "second_worst_period": -0.04,
+                "third_worst_period": -0.03,
+                "stress_frequency": 0.0,
+            }
             
             # Monte Carlo stress testing
-            monte_carlo_stress = self._monte_carlo_stress_test(returns)
+            monte_carlo_stress = self._monte_carlo_stress_test(returns) if len(returns) > 0 else {
+                "worst_case": -0.1,
+                "fifth_percentile": -0.08,
+                "tenth_percentile": -0.06,
+                "expected_loss": -0.03,
+                "probability_of_loss": 0.5,
+            }
             
             # Sector-specific stress scenarios
             sector_stress = self._sector_specific_stress_scenarios(returns)
@@ -336,14 +354,18 @@ class AdvancedAnalysisProvider:
             current_volume = stock_data['volume'].iloc[-1]
             current_price = stock_data['close'].iloc[-1]
             
-            # Calculate volume-weighted average price (VWAP)
-            vwap = (stock_data['close'] * stock_data['volume']).sum() / stock_data['volume'].sum()
+            # Calculate volume-weighted average price (VWAP) with divide-by-zero safety
+            vol_sum = float(stock_data['volume'].sum())
+            vwap = float((stock_data['close'] * stock_data['volume']).sum() / vol_sum) if vol_sum > 0 else float(stock_data['close'].iloc[-1])
             
-            # Calculate volume volatility
-            volume_volatility = stock_data['volume'].std() / stock_data['volume'].mean()
+            # Calculate volume volatility with zero-mean safety
+            vol_mean = float(stock_data['volume'].mean())
+            volume_volatility = float((stock_data['volume'].std() / vol_mean) if vol_mean > 0 else 0.0)
             
-            # Calculate bid-ask spread proxy (using high-low spread)
-            avg_spread = ((stock_data['high'] - stock_data['low']) / stock_data['close']).mean()
+            # Calculate bid-ask spread proxy (using high-low spread) with zero-price safety
+            denom = stock_data['close'].replace(0, pd.NA)
+            spread_series = ((stock_data['high'] - stock_data['low']) / denom).replace([np.inf, -np.inf], pd.NA).dropna()
+            avg_spread = float(spread_series.mean()) if len(spread_series) > 0 else 0.02
             
             # Determine liquidity risk
             if (current_volume < avg_volume * 0.5 or 

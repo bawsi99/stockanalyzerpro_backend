@@ -156,6 +156,15 @@ class ContextEngineer:
         # Detect conflicts
         curated["conflict_analysis_needed"] = self._detect_conflicts(curated["key_indicators"])
         
+        # Enforce JSON-safe structure
+        try:
+            curated = self._make_json_safe(curated)
+        except Exception:
+            pass
+        try:
+            curated = self._make_json_safe(curated)
+        except Exception:
+            pass
         return curated
     
     def _curate_for_volume_analysis(self, indicators: Dict[str, Any]) -> Dict[str, Any]:
@@ -191,6 +200,10 @@ class ContextEngineer:
                 "key_volume_levels": self._extract_volume_levels(volume_data)
             }
         
+        try:
+            curated = self._make_json_safe(curated)
+        except Exception:
+            pass
         return curated
     
     def _curate_for_reversal_patterns(self, indicators: Dict[str, Any]) -> Dict[str, Any]:

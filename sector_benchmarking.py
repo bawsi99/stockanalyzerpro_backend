@@ -86,13 +86,14 @@ class SectorBenchmarkingProvider:
         
         logging.info("SectorBenchmarkingProvider initialized with hybrid caching strategy")
     
-    def get_comprehensive_benchmarking(self, stock_symbol: str, stock_data: pd.DataFrame) -> Dict[str, Any]:
+    def get_comprehensive_benchmarking(self, stock_symbol: str, stock_data: pd.DataFrame, user_sector: str = None) -> Dict[str, Any]:
         """
         Get comprehensive benchmarking analysis including both market and sector metrics.
         
         Args:
             stock_symbol: Stock symbol to analyze
             stock_data: Historical stock data
+            user_sector: Optional user-provided sector override
             
         Returns:
             Dict containing comprehensive benchmarking analysis
@@ -100,8 +101,14 @@ class SectorBenchmarkingProvider:
         try:
             logging.info(f"Calculating comprehensive benchmarking for {stock_symbol}")
             
-            # Get sector information
-            sector = self.sector_classifier.get_stock_sector(stock_symbol)
+            # Prioritize user-provided sector over detected sector
+            if user_sector:
+                sector = user_sector
+                logging.info(f"Using user-provided sector '{user_sector}' for {stock_symbol}")
+            else:
+                # Get sector information from auto-detection
+                sector = self.sector_classifier.get_stock_sector(stock_symbol)
+                logging.info(f"Using auto-detected sector '{sector}' for {stock_symbol}")
             sector_name = self.sector_classifier.get_sector_display_name(sector) if sector else None
             sector_index = self.sector_classifier.get_primary_sector_index(sector) if sector else None
             
@@ -154,16 +161,37 @@ class SectorBenchmarkingProvider:
             logging.error(f"Error in comprehensive benchmarking for {stock_symbol}: {e}")
             return self._get_fallback_benchmarking(stock_symbol, sector)
     
-    async def get_comprehensive_benchmarking_async(self, stock_symbol: str, stock_data: pd.DataFrame) -> Dict[str, Any]:
+    async def get_comprehensive_benchmarking_async(self, stock_symbol: str, stock_data: pd.DataFrame, user_sector: str = None) -> Dict[str, Any]:
         """Async version of get_comprehensive_benchmarking."""
         try:
+            # Debug: Log stock data info
+            logging.info(f"DEBUG: Starting comprehensive benchmarking for {stock_symbol}")
+            logging.info(f"DEBUG: Stock data shape: {stock_data.shape if stock_data is not None else 'None'}")
+            logging.info(f"DEBUG: Stock data columns: {stock_data.columns.tolist() if stock_data is not None else 'None'}")
+            
+            # Check if stock_data is valid
+            if stock_data is None or stock_data.empty or 'close' not in stock_data.columns:
+                logging.error(f"Invalid stock data for {stock_symbol}")
+                return self._get_fallback_benchmarking(stock_symbol, user_sector or "UNKNOWN")
+            
             # Get stock returns
             stock_returns = stock_data['close'].pct_change().dropna()
-            if len(stock_returns) < 30:
-                return self._get_fallback_benchmarking(stock_symbol, "UNKNOWN")
             
-            # Get sector classification
-            sector = self.sector_classifier.get_stock_sector(stock_symbol)
+            logging.info(f"DEBUG: Stock returns length after dropna: {len(stock_returns)}")
+            logging.info(f"DEBUG: Stock returns first 5 values: {stock_returns.head()}")
+            
+            if len(stock_returns) < 30:
+                logging.warning(f"Insufficient stock returns data for {stock_symbol}: {len(stock_returns)} < 30")
+                return self._get_fallback_benchmarking(stock_symbol, user_sector or "UNKNOWN")
+            
+            # Prioritize user-provided sector over detected sector
+            if user_sector:
+                sector = user_sector
+                logging.info(f"Using user-provided sector '{user_sector}' for {stock_symbol}")
+            else:
+                # Get sector classification from auto-detection
+                sector = self.sector_classifier.get_stock_sector(stock_symbol)
+                logging.info(f"Using auto-detected sector '{sector}' for {stock_symbol}")
             
             # Fetch market and sector data concurrently
             tasks = [
@@ -873,13 +901,22 @@ class SectorBenchmarkingProvider:
             risk_free_rate = 0.07  # 7% annual
             stock_sharpe = (stock_aligned.mean() * 252 - risk_free_rate) / (stock_aligned.std() * np.sqrt(252)) if stock_aligned.std() > 0 else 0
             market_sharpe = (market_aligned.mean() * 252 - risk_free_rate) / (market_aligned.std() * np.sqrt(252)) if market_aligned.std() > 0 else 0
-            
+
+            # Additional metrics expected by frontend
+            market_volatility = market_aligned.std() * np.sqrt(252)
+            market_annualized_return = market_aligned.mean() * 252
+
             return {
                 "beta": float(beta),
                 "correlation": float(correlation),
                 "volatility_ratio": float(volatility_ratio),
                 "stock_return": float(stock_cumulative_return),
                 "market_return": float(market_cumulative_return),
+                # Frontend-expected keys
+                "cumulative_return": float(market_cumulative_return),
+                "annualized_return": float(market_annualized_return),
+                "volatility": float(market_volatility),
+                "risk_free_rate": float(risk_free_rate),
                 "excess_return": float(excess_return),
                 "stock_sharpe": float(stock_sharpe),
                 "market_sharpe": float(market_sharpe),
@@ -927,13 +964,22 @@ class SectorBenchmarkingProvider:
             risk_free_rate = 0.07  # 7% annual
             stock_sharpe = (stock_aligned.mean() * 252 - risk_free_rate) / (stock_aligned.std() * np.sqrt(252)) if stock_aligned.std() > 0 else 0
             market_sharpe = (market_aligned.mean() * 252 - risk_free_rate) / (market_aligned.std() * np.sqrt(252)) if market_aligned.std() > 0 else 0
-            
+
+            # Additional metrics expected by frontend
+            market_volatility = market_aligned.std() * np.sqrt(252)
+            market_annualized_return = market_aligned.mean() * 252
+
             return {
                 "beta": float(beta),
                 "correlation": float(correlation),
                 "volatility_ratio": float(volatility_ratio),
                 "stock_return": float(stock_cumulative_return),
                 "market_return": float(market_cumulative_return),
+                # Frontend-expected keys
+                "cumulative_return": float(market_cumulative_return),
+                "annualized_return": float(market_annualized_return),
+                "volatility": float(market_volatility),
+                "risk_free_rate": float(risk_free_rate),
                 "excess_return": float(excess_return),
                 "stock_sharpe": float(stock_sharpe),
                 "market_sharpe": float(market_sharpe),
@@ -984,7 +1030,11 @@ class SectorBenchmarkingProvider:
             risk_free_rate = 0.07  # 7% annual
             stock_sharpe = (stock_aligned.mean() * 252 - risk_free_rate) / (stock_aligned.std() * np.sqrt(252)) if stock_aligned.std() > 0 else 0
             sector_sharpe = (sector_aligned.mean() * 252 - risk_free_rate) / (sector_aligned.std() * np.sqrt(252)) if sector_aligned.std() > 0 else 0
-            
+
+            # Additional metrics expected by frontend
+            sector_volatility = sector_aligned.std() * np.sqrt(252)
+            sector_annualized_return = sector_aligned.mean() * 252
+
             # Get sector index symbol
             sector_index = self.sector_classifier.get_primary_sector_index(sector)
             
@@ -994,9 +1044,14 @@ class SectorBenchmarkingProvider:
                 "sector_volatility_ratio": float(sector_volatility_ratio),
                 "stock_return": float(stock_cumulative_return),
                 "sector_return": float(sector_cumulative_return),
+                # Frontend-expected keys
+                "sector_cumulative_return": float(sector_cumulative_return),
+                "sector_annualized_return": float(sector_annualized_return),
+                "sector_volatility": float(sector_volatility),
                 "sector_excess_return": float(sector_excess_return),
                 "stock_sharpe": float(stock_sharpe),
                 "sector_sharpe": float(sector_sharpe),
+                "sector_sharpe_ratio": float(sector_sharpe),
                 "sector_outperformance": float(sector_excess_return),
                 "data_points": len(aligned_data),
                 "sector_index": sector_index,
@@ -1046,7 +1101,11 @@ class SectorBenchmarkingProvider:
             risk_free_rate = 0.07  # 7% annual
             stock_sharpe = (stock_aligned.mean() * 252 - risk_free_rate) / (stock_aligned.std() * np.sqrt(252)) if stock_aligned.std() > 0 else 0
             sector_sharpe = (sector_aligned.mean() * 252 - risk_free_rate) / (sector_aligned.std() * np.sqrt(252)) if sector_aligned.std() > 0 else 0
-            
+
+            # Additional metrics expected by frontend
+            sector_volatility = sector_aligned.std() * np.sqrt(252)
+            sector_annualized_return = sector_aligned.mean() * 252
+
             # Get sector index symbol
             sector_index = self.sector_classifier.get_primary_sector_index(sector)
             
@@ -1056,9 +1115,14 @@ class SectorBenchmarkingProvider:
                 "sector_volatility_ratio": float(sector_volatility_ratio),
                 "stock_return": float(stock_cumulative_return),
                 "sector_return": float(sector_cumulative_return),
+                # Frontend-expected keys
+                "sector_cumulative_return": float(sector_cumulative_return),
+                "sector_annualized_return": float(sector_annualized_return),
+                "sector_volatility": float(sector_volatility),
                 "sector_excess_return": float(sector_excess_return),
                 "stock_sharpe": float(stock_sharpe),
                 "sector_sharpe": float(sector_sharpe),
+                "sector_sharpe_ratio": float(sector_sharpe),
                 "sector_outperformance": float(sector_excess_return),
                 "data_points": len(aligned_data),
                 "sector_index": sector_index,
@@ -1141,17 +1205,36 @@ class SectorBenchmarkingProvider:
                                      market_metrics: Dict, sector_metrics: Dict) -> Dict[str, Any]:
         """Calculate sector-specific risk metrics with enhanced analysis."""
         try:
+            # Debug: Log input parameters
+            logging.info(f"DEBUG: Calculating sector risk metrics for {sector}")
+            logging.info(f"DEBUG: Stock returns length: {len(stock_returns) if stock_returns is not None else 'None'}")
+            logging.info(f"DEBUG: Sector metrics available: {sector_metrics is not None}")
+            logging.info(f"DEBUG: Market metrics available: {market_metrics is not None}")
+            
             # If no sector metrics, calculate basic risk metrics from stock data only
             if not sector_metrics:
                 logging.warning(f"No sector metrics available for {sector}, calculating basic risk metrics")
                 return self._calculate_basic_risk_metrics(stock_returns, sector, market_metrics)
             
+            # Check if stock_returns is valid
+            if stock_returns is None or len(stock_returns) == 0:
+                logging.warning(f"Empty or None stock returns for {sector}, falling back to basic metrics")
+                return self._calculate_basic_risk_metrics(stock_returns, sector, market_metrics)
+            
             # Calculate base risk metrics
             volatility = stock_returns.std() * np.sqrt(252)
+            
+            # Check for NaN or zero volatility
+            if pd.isna(volatility) or volatility == 0:
+                logging.warning(f"Invalid volatility ({volatility}) for {sector}, falling back to basic metrics")
+                return self._calculate_basic_risk_metrics(stock_returns, sector, market_metrics)
+            
             sector_volatility = sector_metrics.get('sector_volatility_ratio', 1.0) * volatility
             
             # Enhanced risk score calculation
             risk_score = self._calculate_sector_risk_score(stock_returns, sector_metrics, market_metrics)
+            
+            logging.info(f"DEBUG: Calculated volatility: {volatility}, risk_score: {risk_score}")
             
             # Calculate Value at Risk (VaR)
             var_95 = np.percentile(stock_returns, 5) * np.sqrt(252)
@@ -1307,8 +1390,24 @@ class SectorBenchmarkingProvider:
     def _calculate_basic_risk_metrics(self, stock_returns: pd.Series, sector: str, market_metrics: Dict) -> Dict[str, Any]:
         """Calculate basic risk metrics when sector data is not available."""
         try:
+            # Debug: Log stock returns info
+            logging.info(f"DEBUG: Calculating basic risk metrics for sector {sector}")
+            logging.info(f"DEBUG: Stock returns length: {len(stock_returns) if stock_returns is not None else 'None'}")
+            logging.info(f"DEBUG: Stock returns first 5 values: {stock_returns.head() if stock_returns is not None and len(stock_returns) > 0 else 'Empty/None'}")
+            logging.info(f"DEBUG: Stock returns std: {stock_returns.std() if stock_returns is not None and len(stock_returns) > 0 else 'Cannot calculate'}")
+            
+            # Check if stock_returns is valid
+            if stock_returns is None or len(stock_returns) == 0:
+                logging.warning(f"Empty or None stock returns for {sector}, using default risk metrics")
+                return self._get_zero_fallback_risk_metrics()
+            
             # Calculate basic volatility
             volatility = stock_returns.std() * np.sqrt(252)
+            
+            # Check for NaN or zero volatility
+            if pd.isna(volatility) or volatility == 0:
+                logging.warning(f"Invalid volatility ({volatility}) for {sector}, using default risk metrics")
+                return self._get_zero_fallback_risk_metrics()
             
             # Calculate basic risk score (0-100 scale)
             risk_score = min(100, max(0, volatility * 100))
@@ -1325,6 +1424,8 @@ class SectorBenchmarkingProvider:
             rolling_max = cumulative_returns.expanding().max()
             drawdown = (cumulative_returns - rolling_max) / rolling_max
             max_drawdown = drawdown.min()
+            
+            logging.info(f"DEBUG: Successfully calculated basic risk metrics - risk_score: {risk_score}, volatility: {volatility}")
             
             return {
                 "risk_score": float(risk_score),
@@ -1357,6 +1458,23 @@ class SectorBenchmarkingProvider:
                 "risk_factors": ["Calculation error"],
                 "risk_mitigation": ["Consult financial advisor"]
             }
+    
+    def _get_zero_fallback_risk_metrics(self) -> Dict[str, Any]:
+        """Get default risk metrics when data is insufficient."""
+        return {
+            "risk_score": 35.0,  # Default moderate risk instead of 0
+            "risk_level": "Medium",
+            "correlation_risk": "Medium",
+            "momentum_risk": "Medium",
+            "volatility_risk": "Medium",
+            "sector_stress_metrics": {
+                "stress_score": 35.0,
+                "stress_level": "Medium",
+                "stress_factors": ["Insufficient data for calculation"]
+            },
+            "risk_factors": ["Insufficient data for calculation"],
+            "risk_mitigation": ["Obtain more historical data", "Consult financial advisor"]
+        }
     
     def _identify_sector_risk_factors(self, sector: str, sector_metrics: Dict, 
                                     market_metrics: Dict, risk_score: float) -> List[str]:
@@ -1597,8 +1715,9 @@ class SectorBenchmarkingProvider:
             if len(stock_returns) < 30 or len(benchmark_returns) < 30:
                 return 1.0
             
-            cov = np.cov(stock_returns, benchmark_returns)[0, 1]
-            var = np.var(benchmark_returns)
+            # Use sample covariance and sample variance (ddof=1) consistently
+            cov = np.cov(stock_returns, benchmark_returns, ddof=1)[0, 1]
+            var = np.var(benchmark_returns, ddof=1)
             
             if var == 0:
                 return 1.0
@@ -1963,13 +2082,14 @@ class SectorBenchmarkingProvider:
             "error": "Comprehensive benchmarking analysis failed"
         }
 
-    def get_stock_specific_benchmarking(self, stock_symbol: str, stock_data: pd.DataFrame) -> Dict[str, Any]:
+    def get_stock_specific_benchmarking(self, stock_symbol: str, stock_data: pd.DataFrame, user_sector: str = None) -> Dict[str, Any]:
         """
         Get benchmarking analysis for a specific stock (optimized - only fetches relevant data).
         
         Args:
             stock_symbol: Stock symbol to analyze
             stock_data: Historical stock data
+            user_sector: Optional user-provided sector override
             
         Returns:
             Dict containing stock-specific benchmarking analysis
@@ -1977,8 +2097,14 @@ class SectorBenchmarkingProvider:
         try:
             logging.info(f"Calculating stock-specific benchmarking for {stock_symbol}")
             
-            # Get sector information
-            sector = self.sector_classifier.get_stock_sector(stock_symbol)
+            # Prioritize user-provided sector over detected sector
+            if user_sector:
+                sector = user_sector
+                logging.info(f"Using user-provided sector '{user_sector}' for {stock_symbol}")
+            else:
+                # Get sector information from auto-detection
+                sector = self.sector_classifier.get_stock_sector(stock_symbol)
+                logging.info(f"Using auto-detected sector '{sector}' for {stock_symbol}")
             sector_name = self.sector_classifier.get_sector_display_name(sector) if sector else None
             sector_index = self.sector_classifier.get_primary_sector_index(sector) if sector else None
             
@@ -2223,13 +2349,14 @@ class SectorBenchmarkingProvider:
             logging.error(f"Error in comprehensive sector analysis: {e}")
             return None
 
-    def get_hybrid_stock_analysis(self, stock_symbol: str, stock_data: pd.DataFrame) -> Dict[str, Any]:
+    def get_hybrid_stock_analysis(self, stock_symbol: str, stock_data: pd.DataFrame, user_sector: str = None) -> Dict[str, Any]:
         """
         Get hybrid stock analysis combining optimized stock-specific data with comprehensive sector relationships.
         
         Args:
             stock_symbol: Stock symbol to analyze
             stock_data: Historical stock data
+            user_sector: Optional user-provided sector override
             
         Returns:
             Dict containing hybrid analysis with both stock-specific and comprehensive sector data
@@ -2238,13 +2365,19 @@ class SectorBenchmarkingProvider:
             logging.info(f"Calculating hybrid analysis for {stock_symbol}")
             
             # Get stock-specific benchmarking (optimized - minimal API calls)
-            stock_specific = self.get_stock_specific_benchmarking(stock_symbol, stock_data)
+            stock_specific = self.get_stock_specific_benchmarking(stock_symbol, stock_data, user_sector=user_sector)
             
             # Get comprehensive sector analysis (cached - no additional API calls if recent)
             comprehensive = self.get_comprehensive_sector_analysis()
             
-            # Get stock's sector
-            stock_sector = self.sector_classifier.get_stock_sector(stock_symbol)
+            # Prioritize user-provided sector over detected sector
+            if user_sector:
+                stock_sector = user_sector
+                logging.info(f"Using user-provided sector '{user_sector}' for {stock_symbol}")
+            else:
+                # Get stock's sector from auto-detection
+                stock_sector = self.sector_classifier.get_stock_sector(stock_symbol)
+                logging.info(f"Using auto-detected sector '{stock_sector}' for {stock_symbol}")
             
             # Extract relevant comprehensive data for this stock
             relevant_comprehensive = self._extract_relevant_comprehensive_data(

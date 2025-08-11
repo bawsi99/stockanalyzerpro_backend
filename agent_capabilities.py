@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from gemini.gemini_client import GeminiClient
 from gemini.token_tracker import AnalysisTokenTracker
 from zerodha_client import ZerodhaDataClient
+from enhanced_data_service import enhanced_data_service, DataRequest
 from technical_indicators import TechnicalIndicators, DataCollector
 from patterns.recognition import PatternRecognition
 from patterns.visualization import PatternVisualizer, ChartVisualizer
@@ -77,15 +78,20 @@ class StockAnalysisOrchestrator:
     
     async def retrieve_stock_data(self, symbol: str, exchange: str = "NSE", interval: str = "day", period: int = 365) -> pd.DataFrame:
         """
-        Retrieve real-time or historical stock data, preferring real-time streaming data if available.
+        Retrieve stock data using EnhancedDataService when possible (live/optimized + cache),
+        with graceful fallback to WebSocket snapshots and historical API.
         """
         from zerodha_ws_client import zerodha_ws_client
-        from zerodha_client import ZerodhaDataClient
         import pandas as pd
         from datetime import datetime, timedelta, time
 
-        # Map interval to supported streaming timeframes
-        streaming_timeframes = ["1m", "5m", "15m", "1h", "1d"]
+        # Map internal interval -> EnhancedDataService interval
+        interval_map_for_eds = {
+            "minute": "1m", "3minute": "1m", "5minute": "5m", "10minute": "15m", "15minute": "15m",
+            "30minute": "15m", "60minute": "1h", "hour": "1h", "day": "1d", "week": "1d", "month": "1d"
+        }
+
+        # Market hours for optional WS snapshot fallback
         now = datetime.now()
         ist_time = now + timedelta(hours=5, minutes=30)
         is_weekday = ist_time.weekday() < 5
@@ -93,34 +99,59 @@ class StockAnalysisOrchestrator:
         market_close = time(15, 30)
         is_market_hour = is_weekday and (market_open <= ist_time.time() <= market_close)
 
-        MIN_CANDLES = 20  # Minimum number of candles required for real-time data to be considered valid
+        # 1) Try EnhancedDataService first
+        try:
+            req = DataRequest(
+                symbol=symbol,
+                exchange=exchange,
+                interval=interval_map_for_eds.get(interval, "1d"),
+                period=period,
+                force_live=False,
+            )
+            eds_resp = await enhanced_data_service.get_optimal_data(req)
+            df = eds_resp.data
+            if df is not None and not df.empty:
+                # Normalize index
+                if 'date' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+                    df['date'] = pd.to_datetime(df['date'])
+                    df = df.set_index('date')
+                if 'datetime' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+                    df['datetime'] = pd.to_datetime(df['datetime'])
+                    df = df.set_index('datetime')
+                df.attrs['data_freshness'] = eds_resp.data_freshness
+                df.attrs['last_update_time'] = datetime.now().isoformat()
+                df.attrs['market_status'] = eds_resp.market_status
+                return df
+        except Exception as eds_ex:
+            logger.warning(f"EnhancedDataService failed for {symbol} ({interval}): {eds_ex}. Falling back.")
 
-        # Use streaming data if market is open and interval is supported
-        if is_market_hour and interval in streaming_timeframes:
-            data_client = ZerodhaDataClient()
-            token = data_client.get_instrument_token(symbol, exchange)
-            if token is not None:
-                # Build a rolling window of recent candles for indicator calculation
-                candle_agg = zerodha_ws_client.candle_aggregator
-                candles = candle_agg.candles[token][interval]
-                if candles:
-                    sorted_buckets = sorted(candles.keys())
-                    N = min(100, len(sorted_buckets))
-                    recent_candles = [candles[b] for b in sorted_buckets[-N:]]
-                    if len(recent_candles) >= MIN_CANDLES:
-                        df = pd.DataFrame(recent_candles)
-                        # Ensure datetime index for compatibility
-                        df['datetime'] = pd.to_datetime(df['start'], unit='s')
-                        df = df.set_index('datetime')
-                        df.attrs['data_freshness'] = 'real_time'
-                        df.attrs['last_update_time'] = now.isoformat()
-                        df.attrs['market_status'] = "open"
-                        return df
-                    else:
-                        logger.warning(f"Real-time data for {symbol} has only {len(recent_candles)} candles (<{MIN_CANDLES}). Falling back to historical data.")
-                else:
-                    logger.warning(f"No real-time candles found for {symbol}. Falling back to historical data.")
-        # Fallback: use historical data
+        # 2) Optional: WebSocket rolling window snapshot for intraday during market hours
+        try:
+            streaming_timeframes = ["1m", "5m", "15m", "1h", "1d"]
+            mapped = interval_map_for_eds.get(interval, "1d")
+            MIN_CANDLES = 20
+            if is_market_hour and mapped in streaming_timeframes:
+                token = self.data_client.get_instrument_token(symbol, exchange)
+                if token is not None:
+                    candle_agg = zerodha_ws_client.candle_aggregator
+                    candles = candle_agg.candles[token][mapped]
+                    if candles:
+                        sorted_buckets = sorted(candles.keys())
+                        N = min(100, len(sorted_buckets))
+                        recent_candles = [candles[b] for b in sorted_buckets[-N:]]
+                        if len(recent_candles) >= MIN_CANDLES:
+                            df = pd.DataFrame(recent_candles)
+                            df['datetime'] = pd.to_datetime(df['start'], unit='s')
+                            df = df.set_index('datetime')
+                            df.attrs['data_freshness'] = 'real_time'
+                            df.attrs['last_update_time'] = now.isoformat()
+                            df.attrs['market_status'] = "open"
+                            return df
+        except Exception:
+            # non-fatal
+            pass
+
+        # 3) Fallback: historical API
         data = await self.data_client.get_historical_data_async(
             symbol=symbol,
             exchange=exchange,
@@ -130,7 +161,7 @@ class StockAnalysisOrchestrator:
         if data is None or data.empty:
             logger.error(f"Failed to retrieve data for {symbol}")
             raise ValueError(f"No data available for {symbol}. Please check if the symbol is correct and try again.")
-        
+
         if 'date' in data.columns:
             data['date'] = pd.to_datetime(data['date'])
             data = data.set_index('date')
@@ -534,6 +565,11 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Head and Shoulders patterns detected: {len(hs_patterns)}")
                 for pattern in hs_patterns:
                     try:
+                        # Filter out patterns with quality score 0
+                        quality_score = pattern.get('quality_score', 0)
+                        if quality_score <= 0:
+                            continue
+                            
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
                         advanced_patterns["head_and_shoulders"].append({
@@ -541,9 +577,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
                             "start_price": float(pattern.get('start_price', 0)),
                             "end_price": float(pattern.get('end_price', 0)),
-                            "confidence": float(pattern.get('quality_score', 0)),
+                            "quality_score": float(quality_score),
+                            "confidence": float(quality_score),
                             "type": "head_and_shoulders",
-                            "description": f"Head and Shoulders pattern with {pattern.get('quality_score', 0):.1f}% confidence"
+                            "description": f"Head and Shoulders pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
                         print(f"Warning: Error processing Head and Shoulders pattern: {e}")
@@ -554,6 +591,11 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Inverse Head and Shoulders patterns detected: {len(ihs_patterns)}")
                 for pattern in ihs_patterns:
                     try:
+                        # Filter out patterns with quality score 0
+                        quality_score = pattern.get('quality_score', 0)
+                        if quality_score <= 0:
+                            continue
+                            
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
                         advanced_patterns["inverse_head_and_shoulders"].append({
@@ -561,9 +603,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
                             "start_price": float(pattern.get('start_price', 0)),
                             "end_price": float(pattern.get('end_price', 0)),
-                            "confidence": float(pattern.get('quality_score', 0)),
+                            "quality_score": float(quality_score),
+                            "confidence": float(quality_score),
                             "type": "inverse_head_and_shoulders",
-                            "description": f"Inverse Head and Shoulders pattern with {pattern.get('quality_score', 0):.1f}% confidence"
+                            "description": f"Inverse Head and Shoulders pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
                         print(f"Warning: Error processing Inverse Head and Shoulders pattern: {e}")
@@ -574,6 +617,11 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Cup and Handle patterns detected: {len(ch_patterns)}")
                 for pattern in ch_patterns:
                     try:
+                        # Filter out patterns with quality score 0
+                        quality_score = pattern.get('quality_score', 0)
+                        if quality_score <= 0:
+                            continue
+                            
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
                         advanced_patterns["cup_and_handle"].append({
@@ -581,9 +629,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
                             "start_price": float(pattern.get('start_price', 0)),
                             "end_price": float(pattern.get('end_price', 0)),
-                            "confidence": float(pattern.get('quality_score', 0)),
+                            "quality_score": float(quality_score),
+                            "confidence": float(quality_score),
                             "type": "cup_and_handle",
-                            "description": f"Cup and Handle pattern with {pattern.get('quality_score', 0):.1f}% confidence"
+                            "description": f"Cup and Handle pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
                         print(f"Warning: Error processing Cup and Handle pattern: {e}")
@@ -594,6 +643,11 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Triple Tops patterns detected: {len(triple_tops)}")
                 for pattern in triple_tops:
                     try:
+                        # Filter out patterns with quality score 0
+                        quality_score = pattern.get('quality_score', 0)
+                        if quality_score <= 0:
+                            continue
+                            
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
                         advanced_patterns["triple_tops"].append({
@@ -601,9 +655,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
                             "start_price": float(pattern.get('start_price', 0)),
                             "end_price": float(pattern.get('end_price', 0)),
-                            "confidence": float(pattern.get('quality_score', 0)),
+                            "quality_score": float(quality_score),
+                            "confidence": float(quality_score),
                             "type": "triple_tops",
-                            "description": f"Triple Top pattern with {pattern.get('quality_score', 0):.1f}% confidence"
+                            "description": f"Triple Top pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
                         print(f"Warning: Error processing Triple Top pattern: {e}")
@@ -613,6 +668,11 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Triple Bottoms patterns detected: {len(triple_bottoms)}")
                 for pattern in triple_bottoms:
                     try:
+                        # Filter out patterns with quality score 0
+                        quality_score = pattern.get('quality_score', 0)
+                        if quality_score <= 0:
+                            continue
+                            
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
                         advanced_patterns["triple_bottoms"].append({
@@ -620,9 +680,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
                             "start_price": float(pattern.get('start_price', 0)),
                             "end_price": float(pattern.get('end_price', 0)),
-                            "confidence": float(pattern.get('quality_score', 0)),
+                            "quality_score": float(quality_score),
+                            "confidence": float(quality_score),
                             "type": "triple_bottoms",
-                            "description": f"Triple Bottom pattern with {pattern.get('quality_score', 0):.1f}% confidence"
+                            "description": f"Triple Bottom pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
                         print(f"Warning: Error processing Triple Bottom pattern: {e}")
@@ -633,6 +694,11 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Wedge patterns detected: {len(wedge_patterns)}")
                 for pattern in wedge_patterns:
                     try:
+                        # Filter out patterns with quality score 0
+                        quality_score = pattern.get('quality_score', 0)
+                        if quality_score <= 0:
+                            continue
+                            
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
                         advanced_patterns["wedge_patterns"].append({
@@ -640,9 +706,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
                             "start_price": float(pattern.get('start_price', 0)),
                             "end_price": float(pattern.get('end_price', 0)),
-                            "confidence": float(pattern.get('quality_score', 0)),
+                            "quality_score": float(quality_score),
+                            "confidence": float(quality_score),
                             "type": "wedge",
-                            "description": f"Wedge pattern with {pattern.get('quality_score', 0):.1f}% confidence"
+                            "description": f"Wedge pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
                         print(f"Warning: Error processing Wedge pattern: {e}")
@@ -653,6 +720,11 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Channel patterns detected: {len(channel_patterns)}")
                 for pattern in channel_patterns:
                     try:
+                        # Filter out patterns with quality score 0
+                        quality_score = pattern.get('quality_score', 0)
+                        if quality_score <= 0:
+                            continue
+                            
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
                         advanced_patterns["channel_patterns"].append({
@@ -660,9 +732,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
                             "start_price": float(pattern.get('start_price', 0)),
                             "end_price": float(pattern.get('end_price', 0)),
-                            "confidence": float(pattern.get('quality_score', 0)),
+                            "quality_score": float(quality_score),
+                            "confidence": float(quality_score),
                             "type": "channel",
-                            "description": f"Channel pattern with {pattern.get('quality_score', 0):.1f}% confidence"
+                            "description": f"Channel pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
                         print(f"Warning: Error processing Channel pattern: {e}")
@@ -800,7 +873,16 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             
             # Step 2: Calculate technical indicators with optimized data reduction
             logger.info(f"[ENHANCED ANALYSIS] Calculating optimized indicators for {symbol}")
-            indicators = TechnicalIndicators.calculate_all_indicators_optimized(data, symbol)
+            # Prefetch common benchmark series to avoid duplicate Zerodha calls
+            try:
+                ti = TechnicalIndicators()
+                prefetch = {
+                    "NIFTY_50": await ti.get_nifty_50_data_async(365),
+                    "INDIA_VIX": await ti.get_india_vix_data_async(30)
+                }
+            except Exception:
+                prefetch = None
+            indicators = TechnicalIndicators.calculate_all_indicators_optimized(data, symbol, prefetch=prefetch)
             
             # Step 3: Create visualizations
             logger.info(f"[ENHANCED ANALYSIS] Creating visualizations for {symbol}")
@@ -810,17 +892,41 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             sector_context = None
             if sector:
                 try:
-                    sector_benchmarking = await self.sector_benchmarking_provider.get_sector_benchmarking(sector, period)
-                    sector_rotation = await self.sector_benchmarking_provider.get_sector_rotation_analysis(sector, period)
-                    sector_correlation = await self.sector_benchmarking_provider.get_sector_correlation_analysis(sector, period)
-                    sector_context = self._build_enhanced_sector_context(sector, sector_benchmarking, sector_rotation, sector_correlation)
+                    # Use unified optimized comprehensive sector analysis
+                    comprehensive = await self.sector_benchmarking_provider.get_optimized_comprehensive_sector_analysis(
+                        symbol, data, sector
+                    )
+                    sector_context = comprehensive or {}
                 except Exception as e:
                     logger.warning(f"[ENHANCED ANALYSIS] Failed to get sector context for {sector}: {e}")
             
             # Step 5: Enhanced AI analysis with code execution
             logger.info(f"[ENHANCED ANALYSIS] Performing enhanced AI analysis for {symbol}")
+            # Generate advanced analysis digest early to pass into LLM context
+            try:
+                from advanced_analysis import advanced_analysis_provider
+                advanced_digest = await advanced_analysis_provider.generate_advanced_analysis(
+                    data, symbol, indicators
+                )
+            except Exception:
+                advanced_digest = {}
+
+            # Compute MTF context prior to LLM so we can pass deterministic MTF signals
+            mtf_context = {}
+            try:
+                mtf_results = await enhanced_mtf_analyzer.comprehensive_mtf_analysis(
+                    symbol=symbol,
+                    exchange=exchange
+                )
+                if mtf_results.get('success', False):
+                    mtf_context = mtf_results
+            except Exception:
+                mtf_context = {}
+
             ai_analysis, indicator_summary, chart_insights = await self.enhanced_analyze_with_ai(
-                symbol, indicators, chart_paths, period, interval, knowledge_context, sector_context
+                symbol, indicators, chart_paths, period, interval, knowledge_context, sector_context,
+                mtf_context=mtf_context,
+                advanced_analysis=advanced_digest
             )
             
             # Step 6: Build enhanced result with mathematical validation
@@ -852,7 +958,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
 
     async def enhanced_analyze_with_ai(self, symbol: str, indicators: dict, chart_paths: dict, 
                                      period: int, interval: str, knowledge_context: str = "", 
-                                     sector_context: dict = None) -> tuple:
+                                     sector_context: dict = None, mtf_context: dict | None = None,
+                                     advanced_analysis: dict | None = None) -> tuple:
         """
         Enhanced AI analysis with code execution for mathematical validation.
         """
@@ -862,6 +969,111 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             if sector_context:
                 enhanced_knowledge_context += f"\n\nSector Context:\n{json.dumps(sector_context, indent=2)}"
             
+            # Prepare compact deterministic signals JSON for context (multi-timeframe when available)
+            try:
+                from signals.scoring import compute_signals_summary
+                per_timeframe_indicators = {}
+                if isinstance(mtf_context, dict) and mtf_context.get('timeframe_analyses'):
+                    try:
+                        # Synthesize minimal indicator sets from MTF context for each timeframe
+                        tf_analyses = mtf_context['timeframe_analyses']
+                        for tf, summary in tf_analyses.items():
+                            if not isinstance(summary, dict):
+                                continue
+                            indicators_min = {}
+                            ki = summary.get('key_indicators') or {}
+                            # RSI
+                            rsi_val = ki.get('rsi')
+                            if rsi_val is not None:
+                                indicators_min['rsi'] = {'rsi_14': float(rsi_val)}
+                            # MACD signal
+                            macd_sig = ki.get('macd_signal')
+                            if isinstance(macd_sig, str):
+                                if macd_sig.lower() == 'bullish':
+                                    indicators_min['macd'] = {'macd_line': 1.0, 'signal_line': 0.0}
+                                elif macd_sig.lower() == 'bearish':
+                                    indicators_min['macd'] = {'macd_line': -1.0, 'signal_line': 0.0}
+                                else:
+                                    indicators_min['macd'] = {'macd_line': 0.0, 'signal_line': 0.0}
+                            # Trend → supertrend bias
+                            trend = summary.get('trend')
+                            if isinstance(trend, str):
+                                if trend == 'bullish':
+                                    indicators_min['supertrend'] = {'direction': 'up'}
+                                elif trend == 'bearish':
+                                    indicators_min['supertrend'] = {'direction': 'down'}
+                                else:
+                                    indicators_min['supertrend'] = {'direction': 'neutral'}
+                            # Volume
+                            vol_status = ki.get('volume_status')
+                            if isinstance(vol_status, str):
+                                ratio = 1.0
+                                if vol_status == 'high':
+                                    ratio = 1.6
+                                elif vol_status == 'low':
+                                    ratio = 0.4
+                                indicators_min['volume'] = {'volume_ratio': float(ratio)}
+                            # ADX from confidence
+                            try:
+                                tf_conf = float(summary.get('confidence')) if summary.get('confidence') is not None else 0.5
+                            except Exception:
+                                tf_conf = 0.5
+                            adx_val = max(5.0, min(40.0, 20.0 + (tf_conf - 0.5) * 20.0))
+                            indicators_min['adx'] = {'adx': float(adx_val)}
+                            if indicators_min:
+                                per_timeframe_indicators[tf] = indicators_min
+                    except Exception:
+                        per_timeframe_indicators = {}
+                # Fallback to single timeframe
+                if not per_timeframe_indicators:
+                    per_timeframe_indicators[interval or 'day'] = indicators or {}
+
+                _summary = compute_signals_summary(per_timeframe_indicators)
+                compact_signals = {
+                    "consensus_score": _summary.consensus_score,
+                    "consensus_bias": _summary.consensus_bias,
+                    "confidence": _summary.confidence,
+                    "per_timeframe": [
+                        {
+                            "timeframe": s.timeframe,
+                            "score": s.score,
+                            "confidence": s.confidence,
+                            "bias": s.bias,
+                            "reasons": [
+                                {
+                                    "indicator": r.indicator,
+                                    "description": r.description,
+                                    "weight": r.weight,
+                                    "bias": r.bias,
+                                }
+                                for r in s.reasons
+                            ],
+                        }
+                        for s in _summary.per_timeframe
+                    ],
+                    "regime": _summary.regime,
+                }
+            except Exception:
+                compact_signals = {}
+
+            # Build supplemental context blocks
+            supplemental_blocks: list[str] = []
+            if compact_signals:
+                supplemental_blocks.append("DeterministicSignals:\n" + json.dumps(compact_signals))
+            if isinstance(mtf_context, dict) and mtf_context:
+                supplemental_blocks.append("MultiTimeframeContext:\n" + json.dumps(mtf_context))
+            if isinstance(advanced_analysis, dict) and advanced_analysis:
+                # Keep concise: include only top-level risk/stress summaries
+                adv_digest = {
+                    "advanced_risk": advanced_analysis.get("advanced_risk", {}),
+                    "stress_testing": advanced_analysis.get("stress_testing", {}).get("stress_level", ""),
+                    "scenario_analysis": {
+                        k: v for k, v in advanced_analysis.get("scenario_analysis", {}).items()
+                        if k in ("best_case", "worst_case", "overall_confidence")
+                    }
+                }
+                supplemental_blocks.append("AdvancedAnalysisDigest:\n" + json.dumps(adv_digest))
+
             # Use enhanced analysis with code execution
             ai_analysis, indicator_summary, chart_insights = await self.gemini_client.analyze_stock_with_enhanced_calculations(
                 symbol=symbol,
@@ -869,7 +1081,7 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 chart_paths=chart_paths,
                 period=period,
                 interval=interval,
-                knowledge_context=enhanced_knowledge_context
+                knowledge_context=enhanced_knowledge_context + ("\n\n" + "\n\n".join(supplemental_blocks) if supplemental_blocks else "")
             )
             
             return ai_analysis, indicator_summary, chart_insights
@@ -887,6 +1099,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
         """
         try:
             import time
+            # Lazy import to avoid circulars
+            from signals.scoring import compute_signals_summary
             
             # Get latest price and basic info
             latest_price = data['close'].iloc[-1] if not data.empty else None
@@ -899,6 +1113,20 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             # Generate enhanced recommendation
             recommendation = self._generate_enhanced_recommendation(ai_analysis, indicators)
             
+            # Deterministic signals: compute per-timeframe view if available; otherwise, use base indicators
+            per_timeframe_indicators = {}
+            # Prefer MTF indicators if present in ai_analysis or indicators
+            mtf_block = ai_analysis.get('multi_timeframe') if isinstance(ai_analysis, dict) else None
+            if isinstance(mtf_block, dict) and mtf_block.get('timeframes'):
+                # Expect dict of timeframe -> indicators
+                for tf, tf_obj in mtf_block['timeframes'].items():
+                    if isinstance(tf_obj, dict) and 'indicators' in tf_obj:
+                        per_timeframe_indicators[tf] = tf_obj['indicators'] or {}
+            if not per_timeframe_indicators:
+                per_timeframe_indicators[interval or 'day'] = indicators or {}
+
+            signals_summary = compute_signals_summary(per_timeframe_indicators)
+
             # Build result structure
             result = {
                 "symbol": symbol,
@@ -925,6 +1153,32 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 "technical_indicators": self.serialize_indicators(indicators),
                 "risk_level": risk_level,
                 "recommendation": recommendation,
+
+                # Deterministic signals (engine-owned)
+                "signals": {
+                    "consensus_score": signals_summary.consensus_score,
+                    "consensus_bias": signals_summary.consensus_bias,
+                    "confidence": signals_summary.confidence,
+                    "per_timeframe": [
+                        {
+                            "timeframe": s.timeframe,
+                            "score": s.score,
+                            "confidence": s.confidence,
+                            "bias": s.bias,
+                            "reasons": [
+                                {
+                                    "indicator": r.indicator,
+                                    "description": r.description,
+                                    "weight": r.weight,
+                                    "bias": r.bias,
+                                }
+                                for r in s.reasons
+                            ],
+                        }
+                        for s in signals_summary.per_timeframe
+                    ],
+                    "regime": signals_summary.regime,
+                },
                 
                 # Sector Analysis
                 "sector_context": sector_context,
@@ -1092,7 +1346,7 @@ if __name__ == "__main__":
         """
         try:
             # Get sector benchmarking using async methods
-            sector_benchmarking = await self.sector_benchmarking_provider.get_comprehensive_benchmarking_async(symbol, stock_data)
+            sector_benchmarking = await self.sector_benchmarking_provider.get_comprehensive_benchmarking_async(symbol, stock_data, user_sector=sector)
             
             # Get sector rotation and correlation (these are still sync for now)
             sector_rotation = await self.sector_benchmarking_provider.analyze_sector_rotation_async("3M")
@@ -1166,7 +1420,7 @@ if __name__ == "__main__":
             if sector:
                 try:
                     # Get sector benchmarking using the correct provider
-                    sector_benchmarking = await self.sector_benchmarking_provider.get_comprehensive_benchmarking_async(symbol, stock_data)
+                    sector_benchmarking = await self.sector_benchmarking_provider.get_comprehensive_benchmarking_async(symbol, stock_data, user_sector=sector)
                     # OPTIMIZED: Use 1M instead of 3M for sector rotation (reduced from 140 to 50 days)
                     sector_rotation = await self.sector_benchmarking_provider.analyze_sector_rotation_async("1M")
                     # OPTIMIZED: Use 3M instead of 6M for correlation (reduced from 230 to 80 days)

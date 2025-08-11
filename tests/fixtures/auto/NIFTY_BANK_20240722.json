@@ -1,0 +1,95 @@
+{
+  "day": {
+    "enhanced_momentum": {
+      "stochastic_k": 33.01414581066403,
+      "stochastic_d": 39.76060935799793,
+      "stochastic_status": "neutral",
+      "stochrsi_k": 10.239093256891925,
+      "stochrsi_d": 7.292367007661366,
+      "stochrsi_status": "oversold",
+      "williams_r": -66.98585418933595,
+      "williams_r_status": "neutral",
+      "rsi_divergence": {
+        "bearish_divergence": [],
+        "bullish_divergence": [],
+        "hidden_bearish": [],
+        "hidden_bullish": []
+      }
+    },
+    "ichimoku": {
+      "tenkan_sen": 52272.0,
+      "kijun_sen": 51525.524999999994,
+      "senkou_span_a": 48605.524999999994,
+      "senkou_span_b": 48605.524999999994,
+      "chikou_span": null,
+      "signal": "bullish"
+    },
+    "bollinger_bands": {
+      "upper_band": 53147.58412237567,
+      "middle_band": 52484.15,
+      "lower_band": 51820.71587762433,
+      "percent_b": 0.3464429299548252,
+      "bandwidth": 0.025281313401309576,
+      "signal": "squeeze"
+    },
+    "cmf": {
+      "value": 0.0,
+      "signal": "neutral"
+    },
+    "keltner": {
+      "upper": 53103.89980701613,
+      "middle": 52103.48980701613,
+      "lower": 51103.079807016125,
+      "signal": "inside"
+    },
+    "adx": {
+      "adx": 31.771433801627555,
+      "plus_di": 15.21521158747984,
+      "minus_di": 17.201826550212076,
+      "trend_direction": "bearish",
+      "trend_strength": "strong"
+    },
+    "moving_averages": {
+      "sma_20": 52484.15,
+      "sma_50": 50468.633,
+      "sma_200": 47277.919,
+      "ema_20": 52103.48980701613,
+      "ema_50": 50892.25119274727,
+      "price_to_sma_200": 0.10581009286808918,
+      "sma_20_to_sma_50": 0.03993603313963345,
+      "golden_cross": false,
+      "death_cross": false,
+      "signal": "bullish"
+    },
+    "macd": {
+      "macd_line": 493.3004444257167,
+      "signal_line": 655.2601275376122,
+      "histogram": -161.95968311189552,
+      "signal": "bearish"
+    },
+    "rsi": {
+      "rsi_14": 45.74902878269284,
+      "recent_values": [
+        48.04276959186337,
+        43.47358849301482,
+        47.48800674785167,
+        48.95851733086944,
+        45.74902878269284
+      ],
+      "trend": "down",
+      "status": "neutral",
+      "signal": "neutral"
+    },
+    "volume": {
+      "volume_ratio": 1.0,
+      "obv": 0.0,
+      "obv_trend": "neutral",
+      "signal": "normal"
+    },
+    "supertrend": {
+      "line": 50898.705,
+      "direction": "up"
+    }
+  },
+  "target_bias": "bearish"
+}

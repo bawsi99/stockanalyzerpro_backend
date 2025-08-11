@@ -1,0 +1,95 @@
+{
+  "day": {
+    "enhanced_momentum": {
+      "stochastic_k": 70.60983071588774,
+      "stochastic_d": 69.56189485605027,
+      "stochastic_status": "neutral",
+      "stochrsi_k": 85.49677988955955,
+      "stochrsi_d": 74.18716693994993,
+      "stochrsi_status": "overbought",
+      "williams_r": -29.390169284112254,
+      "williams_r_status": "neutral",
+      "rsi_divergence": {
+        "bearish_divergence": [],
+        "bullish_divergence": [],
+        "hidden_bearish": [],
+        "hidden_bullish": []
+      }
+    },
+    "ichimoku": {
+      "tenkan_sen": 17972.7,
+      "kijun_sen": 18207.275,
+      "senkou_span_a": 18496.1625,
+      "senkou_span_b": 17817.65,
+      "chikou_span": null,
+      "signal": "neutral"
+    },
+    "bollinger_bands": {
+      "upper_band": 18289.70746443725,
+      "middle_band": 18032.2125,
+      "lower_band": 17774.71753556275,
+      "percent_b": 0.6468718042026594,
+      "bandwidth": 0.02855944210254288,
+      "signal": "squeeze"
+    },
+    "cmf": {
+      "value": -0.0,
+      "signal": "neutral"
+    },
+    "keltner": {
+      "upper": 18475.86577726923,
+      "middle": 18075.735777269234,
+      "lower": 17675.605777269237,
+      "signal": "inside"
+    },
+    "adx": {
+      "adx": 40.04544786731782,
+      "plus_di": 13.751375137513755,
+      "minus_di": 19.718073502265486,
+      "trend_direction": "bearish",
+      "trend_strength": "strong"
+    },
+    "moving_averages": {
+      "sma_20": 18032.2125,
+      "sma_50": 18289.91,
+      "sma_200": null,
+      "ema_20": 18075.735777269234,
+      "ema_50": 18113.05482826063,
+      "price_to_sma_200": 0.0,
+      "sma_20_to_sma_50": -0.014089599128699781,
+      "golden_cross": false,
+      "death_cross": false,
+      "signal": "bearish"
+    },
+    "macd": {
+      "macd_line": -62.33109269248962,
+      "signal_line": -83.15916505674154,
+      "histogram": 20.828072364251923,
+      "signal": "bullish"
+    },
+    "rsi": {
+      "rsi_14": 50.08654335652467,
+      "recent_values": [
+        47.87576911807793,
+        40.931831201069265,
+        47.62672336922969,
+        49.14582570182152,
+        50.08654335652467
+      ],
+      "trend": "up",
+      "status": "neutral",
+      "signal": "neutral"
+    },
+    "volume": {
+      "volume_ratio": 1.0,
+      "obv": 0.0,
+      "obv_trend": "neutral",
+      "signal": "normal"
+    },
+    "supertrend": {
+      "line": 18455.945,
+      "direction": "down"
+    }
+  },
+  "target_bias": "neutral"
+}

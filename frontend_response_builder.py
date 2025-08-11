@@ -56,37 +56,42 @@ class FrontendResponseBuilder:
                     "accuracy_improvement": "high",
                     "technical_indicators": FrontendResponseBuilder._build_technical_indicators(data, indicators),
                     "ai_analysis": FrontendResponseBuilder._build_ai_analysis(ai_analysis, data),
+                    # Deterministic signals: pass through if present; otherwise compute from indicators/MTF context
+                    "signals": FrontendResponseBuilder._extract_signals(
+                        ai_analysis=ai_analysis,
+                        indicators=indicators,
+                        interval=interval,
+                        mtf_context=mtf_context,
+                    ),
                     "sector_context": sector_context or {},
                     "multi_timeframe_analysis": mtf_context or {},
                     "enhanced_metadata": {
                         "mathematical_validation": True,
                         "code_execution_enabled": True,
                         "statistical_analysis": True,
-                        "confidence_improvement": "15%",
                         "calculation_timestamp": int(datetime.now().timestamp() * 1000),
-                        "analysis_quality": "high",
                         "advanced_risk_metrics": advanced_analysis.get("advanced_risk", {}),
                         "stress_testing_metrics": advanced_analysis.get("stress_testing", {}),
                         "scenario_analysis_metrics": advanced_analysis.get("scenario_analysis", {})
                     },
                     "charts": chart_paths,
                     "overlays": FrontendResponseBuilder._build_overlays(data, advanced_analysis.get("advanced_patterns", {})),
-                    "risk_level": "medium",
-                    "recommendation": "hold",
+                    # Derive risk level and recommendation from AI analysis to match legacy behavior
+                    "risk_level": (lambda conf: (
+                        'Low' if conf >= 80 else 'Medium' if conf >= 60 else 'High' if conf >= 40 else 'Very High'
+                    ))(float(ai_analysis.get('confidence_pct', 0) or 0)),
+                    "recommendation": (lambda conf, trend: (
+                        'Strong Buy' if conf >= 80 and trend == 'Bullish' else
+                        'Strong Sell' if conf >= 80 and trend == 'Bearish' else
+                        'Buy' if conf >= 60 and trend == 'Bullish' else
+                        'Sell' if conf >= 60 and trend == 'Bearish' else
+                        'Hold' if conf >= 60 else 'Wait and Watch' if conf >= 40 else 'Avoid Trading'
+                    ))(float(ai_analysis.get('confidence_pct', 0) or 0), ai_analysis.get('trend', 'Unknown')),
+                    # Provide both keys for backward/forward compatibility
                     "indicator_summary": indicator_summary,
+                    "indicator_summary_md": indicator_summary,
                     "chart_insights": chart_insights,
-
-                    "mathematical_validation_results": {
-                        "validation_score": 0.95,
-                        "confidence_interval": [0.92, 0.98],
-                        "statistical_significance": 0.01
-                    },
-                    "code_execution_metadata": {
-                        "execution_time": 2.5,
-                        "memory_usage": "150MB",
-                        "algorithm_version": "2.1.0"
-                    },
-                    "consensus": FrontendResponseBuilder._build_consensus(ai_analysis, indicators, data),
+                    "consensus": FrontendResponseBuilder._build_consensus(ai_analysis, indicators, data, mtf_context),
                     "indicators": FrontendResponseBuilder._build_technical_indicators(data, indicators),
                     "summary": {
                         "overall_signal": ai_analysis.get('trend', 'Unknown'),
@@ -114,10 +119,184 @@ class FrontendResponseBuilder:
                 "exchange": exchange,
                 "timestamp": datetime.now().isoformat()
             }
+
+    @staticmethod
+    def _extract_signals(ai_analysis: dict, indicators: dict, interval: str = "day", mtf_context: dict | None = None) -> dict:
+        """Extract or compute deterministic signals for the frontend.
+
+        Priority:
+        1) If ai_analysis contains a ready-made signals block, use it.
+        2) If indicators contain a signals block, use it.
+        3) Otherwise, compute signals from the available indicators using scoring.
+        """
+        # 1) Pass-through from ai_analysis if available
+        try:
+            if isinstance(ai_analysis, dict) and ai_analysis.get("signals"):
+                return ai_analysis["signals"]
+        except Exception:
+            pass
+
+        # 2) Pass-through from indicators if embedded
+        try:
+            if isinstance(indicators, dict) and indicators.get("signals"):
+                return indicators["signals"]
+        except Exception:
+            pass
+
+        # 3) Compute from indicators and/or MTF context
+        try:
+            # Lazy import to avoid heavy import-time costs or circular deps
+            from signals.scoring import compute_signals_summary
+
+            # If multi-timeframe indicators are present in ai_analysis, prefer them
+            per_timeframe_indicators = {}
+            mtf_block = ai_analysis.get('multi_timeframe') if isinstance(ai_analysis, dict) else None
+            if isinstance(mtf_block, dict) and mtf_block.get('timeframes'):
+                for tf, tf_obj in mtf_block['timeframes'].items():
+                    if isinstance(tf_obj, dict) and 'indicators' in tf_obj:
+                        per_timeframe_indicators[tf] = tf_obj.get('indicators') or {}
+
+            # Otherwise, if a separate MTF context is supplied, synthesize minimal indicators
+            if not per_timeframe_indicators and isinstance(mtf_context, dict) and mtf_context.get('timeframe_analyses'):
+                try:
+                    tf_analyses = mtf_context['timeframe_analyses']
+                    # Expect keys like '1day', '1hour', '30min', etc.
+                    for tf, summary in tf_analyses.items():
+                        if not isinstance(summary, dict):
+                            continue
+                        indicators_min = {}
+                        # Map key_indicators.rsi -> rsi_14
+                        rsi_val = (summary.get('key_indicators') or {}).get('rsi')
+                        if rsi_val is not None:
+                            indicators_min['rsi_14'] = float(rsi_val)
+                            indicators_min['rsi'] = {'rsi_14': float(rsi_val)}
+                        # Map macd_signal -> synthetic macd_line/signal_line
+                        macd_sig = (summary.get('key_indicators') or {}).get('macd_signal')
+                        if isinstance(macd_sig, str):
+                            if macd_sig.lower() == 'bullish':
+                                indicators_min['macd_line'] = 1.0
+                                indicators_min['signal_line'] = 0.0
+                            elif macd_sig.lower() == 'bearish':
+                                indicators_min['macd_line'] = -1.0
+                                indicators_min['signal_line'] = 0.0
+                            else:
+                                # neutral
+                                indicators_min['macd_line'] = 0.0
+                                indicators_min['signal_line'] = 0.0
+                            indicators_min['macd'] = {
+                                'macd_line': indicators_min['macd_line'],
+                                'signal_line': indicators_min['signal_line'],
+                            }
+                        # Map volume_status -> synthetic volume_ratio
+                        vol_status = (summary.get('key_indicators') or {}).get('volume_status')
+                        if isinstance(vol_status, str):
+                            ratio = 1.0
+                            if vol_status == 'high':
+                                ratio = 1.6
+                            elif vol_status == 'low':
+                                ratio = 0.4
+                            indicators_min['volume_ratio'] = ratio
+                            indicators_min['volume'] = {'volume_ratio': ratio}
+                        # Map trend -> supertrend.direction to inject timeframe-specific bias
+                        trend = summary.get('trend')
+                        if isinstance(trend, str) and trend in ('bullish', 'bearish', 'neutral'):
+                            if trend == 'bullish':
+                                indicators_min['supertrend'] = {'direction': 'up'}
+                            elif trend == 'bearish':
+                                indicators_min['supertrend'] = {'direction': 'down'}
+                            else:
+                                indicators_min['supertrend'] = {'direction': 'neutral'}
+                        # Use MTF confidence to shape ADX strength
+                        try:
+                            tf_conf = float(summary.get('confidence')) if summary.get('confidence') is not None else 0.5
+                        except Exception:
+                            tf_conf = 0.5
+                        # Centered around 20 with +/- 10 swing
+                        adx_val = max(5.0, min(40.0, 20.0 + (tf_conf - 0.5) * 20.0))
+                        indicators_min['adx'] = {'adx': float(adx_val)}
+                        # Synthesize percent_b from support/resistance proximity if available
+                        try:
+                            ki = summary.get('key_indicators') or {}
+                            support_levels = ki.get('support_levels') or []
+                            resistance_levels = ki.get('resistance_levels') or []
+                            current_price = (summary.get('risk_metrics') or {}).get('current_price')
+                            if current_price and support_levels and resistance_levels:
+                                # choose nearest support below and resistance above
+                                below = [s for s in support_levels if s <= current_price]
+                                above = [r for r in resistance_levels if r >= current_price]
+                                nearest_support = max(below) if below else min(support_levels)
+                                nearest_resistance = min(above) if above else max(resistance_levels)
+                                band = max(1e-6, float(nearest_resistance - nearest_support))
+                                pos = max(0.0, min(1.0, float((current_price - nearest_support) / band)))
+                                indicators_min['bollinger_bands'] = {'percent_b': pos}
+                        except Exception:
+                            pass
+                        # Keep as minimal, scoring gracefully skips missing fields
+                        if indicators_min:
+                            per_timeframe_indicators[tf] = indicators_min
+                except Exception:
+                    # Best-effort synthesis from MTF context
+                    pass
+
+            # Fallback: single timeframe from provided indicators
+            if not per_timeframe_indicators:
+                normalized_interval = interval or 'day'
+                per_timeframe_indicators[normalized_interval] = indicators or {}
+
+            summary = compute_signals_summary(per_timeframe_indicators)
+
+            # Build output, allowing overrides from mtf_context where available (e.g., confidence)
+            result = {
+                "consensus_score": summary.consensus_score,
+                "consensus_bias": summary.consensus_bias,
+                "confidence": summary.confidence,
+                "per_timeframe": [],
+                "regime": summary.regime,
+            }
+            # Optionally override per-timeframe confidence with mtf_context values
+            mtf_tf_conf = {}
+            if isinstance(mtf_context, dict) and isinstance(mtf_context.get('timeframe_analyses'), dict):
+                try:
+                    for tf, s in mtf_context['timeframe_analyses'].items():
+                        if isinstance(s, dict) and 'confidence' in s:
+                            mtf_tf_conf[tf] = float(s['confidence'])
+                except Exception:
+                    pass
+            for s in summary.per_timeframe:
+                overridden_conf = mtf_tf_conf.get(s.timeframe, s.confidence)
+                result["per_timeframe"].append({
+                    "timeframe": s.timeframe,
+                    "score": s.score,
+                    "confidence": overridden_conf,
+                    "bias": s.bias,
+                    "reasons": [
+                        {
+                            "indicator": r.indicator,
+                            "description": r.description,
+                            "weight": r.weight,
+                            "bias": r.bias,
+                        }
+                        for r in s.reasons
+                    ],
+                })
+            return result
+        except Exception:
+            # As a last resort, return a neutral minimal block
+            return {
+                "consensus_score": 0.0,
+                "consensus_bias": "neutral",
+                "confidence": 0.3,
+                "per_timeframe": [],
+                "regime": {"trend": "unknown", "volatility": "normal"}
+            }
     
     @staticmethod
     def _build_technical_indicators(data: pd.DataFrame, indicators: dict) -> dict:
-        """Build technical indicators structure."""
+        """Build technical indicators structure from canonical schema produced by
+        TechnicalIndicators.calculate_all_indicators_optimized.
+
+        Falls back to minimal synthesis only when canonical fields are missing.
+        """
         try:
             latest_close = data['close'].iloc[-1] if not data.empty else 0.0
             latest_volume = data['volume'].iloc[-1] if not data.empty else 0.0
@@ -129,6 +308,7 @@ class FrontendResponseBuilder:
             )
 
             if is_structured:
+                # Canonical mapping passthrough
                 ma = indicators.get('moving_averages', {}) or {}
                 rsi = indicators.get('rsi', {}) or {}
                 macd = indicators.get('macd', {}) or {}
@@ -174,6 +354,7 @@ class FrontendResponseBuilder:
                     'bullish' if (plus_di or 0) > (minus_di or 0) else 'bearish'
                 )
 
+                # Return indicators mostly as-is to avoid duplication and drift
                 result = {
                     "moving_averages": {
                         "sma_20": float(ma.get('sma_20') or 0.0),
@@ -221,13 +402,8 @@ class FrontendResponseBuilder:
                         "plus_di": float(trend_data.get('plus_di') or (plus_di or 0.0)),
                         "minus_di": float(trend_data.get('minus_di') or (minus_di or 0.0))
                     },
-                    "raw_data": {
-                        "open": [float(x) for x in data['open'].tail(100).tolist()] if not data.empty else [],
-                        "high": [float(x) for x in data['high'].tail(100).tolist()] if not data.empty else [],
-                        "low": [float(x) for x in data['low'].tail(100).tolist()] if not data.empty else [],
-                        "close": [float(x) for x in data['close'].tail(100).tolist()] if not data.empty else [],
-                        "volume": [float(x) for x in data['volume'].tail(100).tolist()] if not data.empty else []
-                    },
+                    # Keep raw_data minimal; charts handle full series
+                    "raw_data": {},
                     "metadata": {
                         "start": data.index[0].strftime('%Y-%m-%d') if not data.empty else "",
                         "end": data.index[-1].strftime('%Y-%m-%d') if not data.empty else "",
@@ -261,8 +437,7 @@ class FrontendResponseBuilder:
 
                 return result
 
-            # Fallback: synthesize minimal indicators if structured data was not provided
-            # (kept for backward compatibility)
+            # Fallback: synthesize minimal indicators if canonical fields missing
             sma_20 = latest_close
             sma_50 = latest_close
             sma_200 = latest_close
@@ -545,18 +720,92 @@ class FrontendResponseBuilder:
     def _build_overlays(data: pd.DataFrame, advanced_patterns: dict = None) -> dict:
         """Build overlays structure using actual pattern recognition."""
         try:
+            # Early fallback for insufficient data to avoid index errors downstream
+            if data is None or data.empty or len(data) < 2:
+                latest_price = data['close'].iloc[-1] if (data is not None and not data.empty) else 0
+                return {
+                    "triangles": [],
+                    "flags": [],
+                    "support_resistance": {
+                        "support": [{"level": float(latest_price * 0.98)}, {"level": float(latest_price * 0.95)}],
+                        "resistance": [{"level": float(latest_price * 1.02)}, {"level": float(latest_price * 1.05)}]
+                    },
+                    "double_tops": [],
+                    "double_bottoms": [],
+                    "divergences": [],
+                    "volume_anomalies": [],
+                    "advanced_patterns": advanced_patterns or {
+                        "head_and_shoulders": [],
+                        "inverse_head_and_shoulders": [],
+                        "cup_and_handle": [],
+                        "triple_tops": [],
+                        "triple_bottoms": [],
+                        "wedge_patterns": [],
+                        "channel_patterns": []
+                    }
+                }
+
             # Import the orchestrator to use its pattern recognition
             from agent_capabilities import StockAnalysisOrchestrator
             
             # Create orchestrator instance
             orchestrator = StockAnalysisOrchestrator()
             
-            # Calculate indicators for pattern recognition
-            indicators = orchestrator.calculate_indicators(data)
-            
-            # Use the actual _create_overlays method from orchestrator
-            overlays = orchestrator._create_overlays(data, indicators)
-            
+            # Generate overlays directly without recalculating all indicators to
+            # avoid unnecessary heavy computations and potential upstream errors
+            # that could prematurely trigger the fallback path (returning empty
+            # pattern lists). The _create_overlays method internally performs
+            # all required computations for pattern detection.
+            overlays = orchestrator._create_overlays(data, {})
+
+            # Prefer orchestrator-detected advanced patterns; merge in any external ones (from advanced_analysis)
+            backend_adv = overlays.get("advanced_patterns", {}) or {}
+
+            def _ensure_adv_shape(obj: dict | None) -> dict:
+                base = obj or {}
+                return {
+                    "head_and_shoulders": base.get("head_and_shoulders", []),
+                    "inverse_head_and_shoulders": base.get("inverse_head_and_shoulders", []),
+                    "cup_and_handle": base.get("cup_and_handle", []),
+                    "triple_tops": base.get("triple_tops", []),
+                    "triple_bottoms": base.get("triple_bottoms", []),
+                    "wedge_patterns": base.get("wedge_patterns", []),
+                    "channel_patterns": base.get("channel_patterns", []),
+                }
+
+            def _has_any_patterns(obj: dict | None) -> bool:
+                if not isinstance(obj, dict):
+                    return False
+                for v in obj.values():
+                    if isinstance(v, list) and len(v) > 0:
+                        return True
+                return False
+
+            def _merge_advanced(backend_obj: dict, external_obj: dict | None) -> dict:
+                backend_norm = _ensure_adv_shape(backend_obj)
+                external_norm = _ensure_adv_shape(external_obj or {})
+                merged = {}
+                for key in backend_norm.keys():
+                    # Concatenate; de-duplication is non-trivial for dict items, so allow duplicates if any
+                    merged[key] = list(backend_norm.get(key, [])) + list(external_norm.get(key, []))
+                return merged
+
+            merged_advanced = _merge_advanced(backend_adv, advanced_patterns) if _has_any_patterns(advanced_patterns) else _ensure_adv_shape(backend_adv)
+
+            # Filter out zero-quality patterns at the final assembly layer
+            def _filter_zero_quality(obj: dict) -> dict:
+                def _q(p: dict) -> float:
+                    return float(p.get('quality_score') or p.get('confidence') or p.get('completion') or 0)
+                out = {}
+                for k, arr in obj.items():
+                    if isinstance(arr, list):
+                        out[k] = [p for p in arr if _q(p) > 0]
+                    else:
+                        out[k] = arr
+                return out
+
+            merged_advanced = _filter_zero_quality(merged_advanced)
+
             # Ensure the structure matches frontend expectations
             return {
                 "triangles": overlays.get("triangles", []),
@@ -569,15 +818,7 @@ class FrontendResponseBuilder:
                 "double_bottoms": overlays.get("double_bottoms", []),
                 "divergences": overlays.get("divergences", []),
                 "volume_anomalies": overlays.get("volume_anomalies", []),
-                "advanced_patterns": advanced_patterns or {
-                    "head_and_shoulders": overlays.get("advanced_patterns", {}).get("head_and_shoulders", []),
-                    "inverse_head_and_shoulders": overlays.get("advanced_patterns", {}).get("inverse_head_and_shoulders", []),
-                    "cup_and_handle": overlays.get("advanced_patterns", {}).get("cup_and_handle", []),
-                    "triple_tops": overlays.get("advanced_patterns", {}).get("triple_tops", []),
-                    "triple_bottoms": overlays.get("advanced_patterns", {}).get("triple_bottoms", []),
-                    "wedge_patterns": overlays.get("advanced_patterns", {}).get("wedge_patterns", []),
-                    "channel_patterns": overlays.get("advanced_patterns", {}).get("channel_patterns", [])
-                }
+                "advanced_patterns": merged_advanced,
             }
         except Exception as e:
             logger.error(f"Error building overlays: {e}")
@@ -652,218 +893,82 @@ class FrontendResponseBuilder:
             return [] 
 
     @staticmethod
-    def _build_consensus(ai_analysis: dict, indicators: dict, data: pd.DataFrame) -> dict:
-        """Build consensus data from AI analysis and technical indicators."""
+    def _build_consensus(ai_analysis: dict, indicators: dict, data: pd.DataFrame, mtf_context: dict | None = None) -> dict:
+        """Build consensus using signals.scoring as the single source of truth.
+
+        Prefer multi-timeframe indicators when available and compute consensus via
+        compute_signals_summary. Avoid duplicating per-indicator logic.
+        """
         try:
-            # Extract AI analysis confidence and trend
-            ai_confidence = ai_analysis.get('meta', {}).get('overall_confidence', 50)
-            ai_trend = ai_analysis.get('meta', {}).get('trend', 'neutral')
-            
-            # Calculate signal percentages based on technical indicators
-            bullish_signals = 0
-            bearish_signals = 0
-            neutral_signals = 0
-            total_signals = 0
-            
-            # RSI analysis - Updated to use new structure
-            rsi_data = indicators.get('rsi', {})
-            rsi_14 = rsi_data.get('rsi_14', 50) if rsi_data else 50
-            if rsi_14 > 50:
-                bullish_signals += 1
-            elif rsi_14 < 50:
-                bearish_signals += 1
-            else:
-                neutral_signals += 1
-            total_signals += 1
-            
-            # MACD analysis - Updated to use new structure
-            macd_data = indicators.get('macd', {})
-            macd_line = macd_data.get('macd_line', 0) if macd_data else 0
-            signal_line = macd_data.get('signal_line', 0) if macd_data else 0
-            if macd_line > signal_line:
-                bullish_signals += 1
-            elif macd_line < signal_line:
-                bearish_signals += 1
-            else:
-                neutral_signals += 1
-            total_signals += 1
-            
-            # Moving averages analysis - Updated to use new structure
-            ma_data = indicators.get('moving_averages', {})
-            sma_20 = ma_data.get('sma_20', 0) if ma_data else 0
-            sma_50 = ma_data.get('sma_50', 0) if ma_data else 0
-            latest_price = data['close'].iloc[-1] if not data.empty else 0
-            
-            if latest_price > sma_20 > sma_50:
-                bullish_signals += 1
-            elif latest_price < sma_20 < sma_50:
-                bearish_signals += 1
-            else:
-                neutral_signals += 1
-            total_signals += 1
-            
-            # Bollinger Bands analysis
-            bb_data = indicators.get('bollinger_bands', {})
-            if bb_data:
-                percent_b = bb_data.get('percent_b', 0.5)
-                if percent_b > 0.8:
-                    bullish_signals += 1
-                elif percent_b < 0.2:
-                    bearish_signals += 1
-                else:
-                    neutral_signals += 1
-                total_signals += 1
-            
-            # Volume analysis
-            volume_data = indicators.get('volume', {})
-            if volume_data:
-                volume_ratio = volume_data.get('volume_ratio', 1.0)
-                if volume_ratio > 1.5:
-                    bullish_signals += 1
-                elif volume_ratio < 0.5:
-                    bearish_signals += 1
-                else:
-                    neutral_signals += 1
-                total_signals += 1
-            
-            # ADX analysis
-            adx_data = indicators.get('adx', {})
-            if adx_data:
-                adx_value = adx_data.get('adx', 25)
-                if adx_value is not None and adx_value > 25:
-                    bullish_signals += 1
-                else:
-                    neutral_signals += 1
-                total_signals += 1
-            
-            # Calculate percentages
-            bullish_percentage = (bullish_signals / total_signals * 100) if total_signals > 0 else 33.33
-            bearish_percentage = (bearish_signals / total_signals * 100) if total_signals > 0 else 33.33
-            neutral_percentage = (neutral_signals / total_signals * 100) if total_signals > 0 else 33.33
-            
-            # Determine overall signal
-            if bullish_percentage > bearish_percentage and bullish_percentage > neutral_percentage:
-                overall_signal = "Bullish"
-            elif bearish_percentage > bullish_percentage and bearish_percentage > neutral_percentage:
-                overall_signal = "Bearish"
-            else:
-                overall_signal = "Neutral"
-            
-            # Determine signal strength based on confidence and percentage difference
+            from signals.scoring import compute_signals_summary
+            per_timeframe_indicators: dict[str, dict] = {}
+            # Prefer MTF indicators if present in ai_analysis
+            mtf_block = ai_analysis.get('multi_timeframe') if isinstance(ai_analysis, dict) else None
+            if isinstance(mtf_block, dict) and mtf_block.get('timeframes'):
+                for tf, tf_obj in mtf_block['timeframes'].items():
+                    if isinstance(tf_obj, dict) and 'indicators' in tf_obj:
+                        per_timeframe_indicators[tf] = tf_obj.get('indicators') or {}
+            # Otherwise synthesize from mtf_context
+            if not per_timeframe_indicators and isinstance(mtf_context, dict) and mtf_context.get('timeframe_analyses'):
+                try:
+                    tf_analyses = mtf_context['timeframe_analyses']
+                    for tf, summary in tf_analyses.items():
+                        if not isinstance(summary, dict):
+                            continue
+                        indicators_min = {}
+                        ki = summary.get('key_indicators') or {}
+                        rsi_val = ki.get('rsi')
+                        if rsi_val is not None:
+                            indicators_min['rsi'] = {'rsi_14': float(rsi_val)}
+                        macd_sig = ki.get('macd_signal')
+                        if isinstance(macd_sig, str):
+                            indicators_min['macd'] = {'macd_line': 1.0 if macd_sig.lower()== 'bullish' else -1.0 if macd_sig.lower()=='bearish' else 0.0,
+                                                      'signal_line': 0.0}
+                        trend = summary.get('trend')
+                        if isinstance(trend, str):
+                            indicators_min['supertrend'] = {'direction': 'up' if trend=='bullish' else 'down' if trend=='bearish' else 'neutral'}
+                        vol_status = ki.get('volume_status')
+                        if isinstance(vol_status, str):
+                            ratio = 1.6 if vol_status=='high' else 0.4 if vol_status=='low' else 1.0
+                            indicators_min['volume'] = {'volume_ratio': float(ratio)}
+                        try:
+                            tf_conf = float(summary.get('confidence')) if summary.get('confidence') is not None else 0.5
+                        except Exception:
+                            tf_conf = 0.5
+                        indicators_min['adx'] = {'adx': float(max(5.0, min(40.0, 20.0 + (tf_conf - 0.5) * 20.0)))}
+                        if indicators_min:
+                            per_timeframe_indicators[tf] = indicators_min
+                except Exception:
+                    per_timeframe_indicators = {}
+            if not per_timeframe_indicators:
+                per_timeframe_indicators['day'] = indicators or {}
+
+            summary = compute_signals_summary(per_timeframe_indicators)
+
+            c = float(summary.consensus_score)
+            bullish_percentage = max(0.0, c) * 100.0
+            bearish_percentage = max(0.0, -c) * 100.0
+            neutral_percentage = max(0.0, 100.0 - bullish_percentage - bearish_percentage)
+            overall_signal = 'Bullish' if c > 0.1 else ('Bearish' if c < -0.1 else 'Neutral')
             max_percentage = max(bullish_percentage, bearish_percentage, neutral_percentage)
-            if max_percentage >= 80:
-                signal_strength = "Strong"
-            elif max_percentage >= 60:
-                signal_strength = "Medium"
-            else:
-                signal_strength = "Weak"
-            
-            # Calculate confidence as average of AI confidence and technical alignment
-            technical_confidence = max_percentage
-            confidence = (ai_confidence + technical_confidence) / 2
-            
-            # Build signal details with enhanced indicators
+            signal_strength = 'Strong' if max_percentage >= 80 else 'Medium' if max_percentage >= 60 else 'Weak'
+            ai_confidence = ai_analysis.get('meta', {}).get('overall_confidence', 50) if isinstance(ai_analysis, dict) else 50
+            confidence = float(min(100.0, max(0.0, (ai_confidence + summary.confidence * 100.0) / 2.0)))
+
+            per_tf_sorted = sorted(summary.per_timeframe, key=lambda s: getattr(s, 'confidence', 0), reverse=True)
             signal_details = []
-            
-            # RSI Signal
-            rsi_signal = "bullish" if rsi_14 > 50 else "bearish" if rsi_14 < 50 else "neutral"
-            rsi_strength = "strong" if abs(rsi_14 - 50) > 20 else "medium" if abs(rsi_14 - 50) > 10 else "weak"
-            signal_details.append({
-                "indicator": "RSI",
-                "signal": rsi_signal,
-                "strength": rsi_strength,
-                "weight": 1.0,
-                "score": rsi_14,
-                "value": rsi_14,
-                "description": f"RSI at {rsi_14:.1f} - {'Neutral zone' if rsi_14 >= 40 and rsi_14 <= 60 else 'Overbought' if rsi_14 > 70 else 'Oversold' if rsi_14 < 30 else 'Near overbought' if rsi_14 > 60 else 'Near oversold'}"
-            })
-            
-            # MACD Signal
-            macd_signal = "bullish" if macd_line > signal_line else "bearish" if macd_line < signal_line else "neutral"
-            macd_strength = "strong" if abs(macd_line - signal_line) > 1 else "medium" if abs(macd_line - signal_line) > 0.5 else "weak"
-            signal_details.append({
-                "indicator": "MACD",
-                "signal": macd_signal,
-                "strength": macd_strength,
-                "weight": 1.0,
-                "score": macd_line - signal_line,
-                "value": macd_line - signal_line,
-                "description": f"MACD neutral - Line: {macd_line:.2f}, Signal: {signal_line:.2f}"
-            })
-            
-            # Moving Averages Signal
-            ma_signal = "bullish" if latest_price > sma_20 > sma_50 else "bearish" if latest_price < sma_20 < sma_50 else "neutral"
-            ma_strength = "strong" if abs(latest_price - sma_20) / sma_20 > 0.05 else "medium" if abs(latest_price - sma_20) / sma_20 > 0.02 else "weak"
-            bullish_ma_count = sum([1 for ma in [sma_20, sma_50] if latest_price > ma])
-            signal_details.append({
-                "indicator": "Moving Averages",
-                "signal": ma_signal,
-                "strength": ma_strength,
-                "weight": 1.0,
-                "score": (latest_price - sma_20) / sma_20 * 100 if sma_20 > 0 else 0,
-                "value": (latest_price - sma_20) / sma_20 * 100 if sma_20 > 0 else 0,
-                "description": f"Price vs MAs: {bullish_ma_count}/3 bullish"
-            })
-            
-            # Bollinger Bands Signal
-            bb_data = indicators.get('bollinger_bands', {})
-            if bb_data:
-                percent_b = bb_data.get('percent_b', 0.5)
-                bb_signal = "bullish" if percent_b > 0.8 else "bearish" if percent_b < 0.2 else "neutral"
-                bb_strength = "strong" if abs(percent_b - 0.5) > 0.3 else "medium" if abs(percent_b - 0.5) > 0.2 else "weak"
-                signal_details.append({
-                    "indicator": "Bollinger Bands",
-                    "signal": bb_signal,
-                    "strength": bb_strength,
-                    "weight": 1.0,
-                    "score": percent_b * 100,
-                    "value": percent_b,
-                    "description": "Price within bands - Neutral"
-                })
-            
-            # Volume Signal
-            volume_data = indicators.get('volume', {})
-            if volume_data:
-                volume_ratio = volume_data.get('volume_ratio', 1.0)
-                volume_signal = "bullish" if volume_ratio > 1.5 else "bearish" if volume_ratio < 0.5 else "neutral"
-                volume_strength = "strong" if volume_ratio > 2.0 or volume_ratio < 0.3 else "medium" if volume_ratio > 1.2 or volume_ratio < 0.7 else "weak"
-                signal_details.append({
-                    "indicator": "Volume",
-                    "signal": volume_signal,
-                    "strength": volume_strength,
-                    "weight": 1.0,
-                    "score": volume_ratio * 100,
-                    "value": volume_ratio,
-                    "description": f"High volume - {volume_ratio:.1f}x average"
-                })
-            
-            # ADX Signal
-            adx_data = indicators.get('adx', {})
-            if adx_data:
-                adx_value = adx_data.get('adx', 25)
-                if adx_value is not None:
-                    adx_signal = "bullish" if adx_value > 25 else "neutral"
-                    adx_strength = "strong" if adx_value > 40 else "medium" if adx_value > 25 else "weak"
+            if per_tf_sorted:
+                top = per_tf_sorted[0]
+                for r in getattr(top, 'reasons', [])[:5]:
                     signal_details.append({
-                        "indicator": "ADX",
-                        "signal": adx_signal,
-                        "strength": adx_strength,
-                        "weight": 1.0,
-                        "score": adx_value,
-                        "value": adx_value,
-                        "description": f"Weak trend - ADX: {adx_value:.1f}"
+                        "indicator": getattr(r, 'indicator', 'unknown'),
+                        "signal": getattr(r, 'bias', 'neutral'),
+                        "strength": "medium",
+                        "weight": float(getattr(r, 'weight', 0.1) or 0.1),
+                        "score": float(getattr(top, 'score', 0.0) or 0.0),
+                        "description": getattr(r, 'description', '')
                     })
-                else:
-                    signal_details.append({
-                        "indicator": "ADX",
-                        "signal": "neutral",
-                        "strength": "weak",
-                        "weight": 1.0,
-                        "score": 25,
-                        "value": 25,
-                        "description": "Insufficient data for ADX calculation"
-                    })
-            
+
             return {
                 "overall_signal": overall_signal,
                 "signal_strength": signal_strength,
@@ -873,14 +978,14 @@ class FrontendResponseBuilder:
                 "bullish_score": round(bullish_percentage, 2),
                 "bearish_score": round(bearish_percentage, 2),
                 "neutral_score": round(neutral_percentage, 2),
-                "total_weight": total_signals,
+                "total_weight": len(summary.per_timeframe),
                 "confidence": round(confidence, 2),
                 "signal_details": signal_details,
                 "data_quality_flags": [],
                 "warnings": [],
-                "bullish_count": bullish_signals,
-                "bearish_count": bearish_signals,
-                "neutral_count": neutral_signals
+                "bullish_count": int(bullish_percentage > max(bearish_percentage, neutral_percentage)),
+                "bearish_count": int(bearish_percentage > max(bullish_percentage, neutral_percentage)),
+                "neutral_count": int(neutral_percentage >= max(bullish_percentage, bearish_percentage)),
             }
             
         except Exception as e:

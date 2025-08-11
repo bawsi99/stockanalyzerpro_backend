@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta, time as dt_time
 import logging
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, Tuple
 from kiteconnect import KiteConnect
 from kiteconnect.exceptions import TokenException, NetworkException
 import webbrowser
@@ -171,6 +171,42 @@ class ZerodhaDataClient:
         self.data_cache = {}
         self.all_instruments = None
         self._executor = ThreadPoolExecutor(max_workers=10)  # For running sync methods in async context
+
+        # In-memory LRU cache for historical data
+        from collections import OrderedDict
+        from threading import RLock
+        self._historical_lru: "OrderedDict[str, pd.DataFrame]" = OrderedDict()
+        self._historical_lru_capacity: int = int(os.environ.get("ZERODHA_LRU_CAPACITY", "128"))
+        self._historical_lru_lock = RLock()
+
+    def _normalize_history_key(
+        self,
+        symbol: str,
+        exchange: str,
+        interval: str,
+        from_date: datetime,
+        to_date: datetime,
+    ) -> str:
+        # Normalize dates to YYYYMMDD to maximize hits irrespective of time components
+        fd = from_date.strftime("%Y%m%d")
+        td = to_date.strftime("%Y%m%d")
+        return f"{exchange}:{symbol}:{interval}:{fd}:{td}"
+
+    def _lru_get(self, key: str) -> Optional[pd.DataFrame]:
+        with self._historical_lru_lock:
+            df = self._historical_lru.get(key)
+            if df is not None:
+                # Move to recent
+                self._historical_lru.move_to_end(key)
+            return df
+
+    def _lru_put(self, key: str, df: pd.DataFrame) -> None:
+        with self._historical_lru_lock:
+            self._historical_lru[key] = df
+            self._historical_lru.move_to_end(key)
+            # Evict oldest if over capacity
+            while len(self._historical_lru) > self._historical_lru_capacity:
+                self._historical_lru.popitem(last=False)
         
     def _save_access_token(self, access_token: str):
         """Save the access token to the .env file, replacing the old value if present."""
@@ -257,7 +293,8 @@ class ZerodhaDataClient:
                 print("Access token is still valid.")
                 logger.info("Authentication successful with existing access token")
                 return True
-            except Exception as e:
+            except TokenException as e:
+                # Only treat explicit token errors as invalidation events
                 print("Stored access token is invalid or expired. Will attempt re-authentication.")
                 logger.warning("Stored access token invalid: " + str(e))
                 # Remove invalid access_token from .env
@@ -274,6 +311,20 @@ class ZerodhaDataClient:
                     logger.error("Failed to remove invalid token from .env: " + str(env_err))
                     print("Error while updating .env")
                 self.access_token = None
+            except NetworkException as e:
+                # Network blips should not invalidate a perfectly good token
+                logger.warning(
+                    "Network error while validating existing access token; assuming token remains valid: "
+                    + str(e)
+                )
+                return True
+            except Exception as e:
+                # Any other non-token error should not nuke the token; continue optimistically
+                logger.warning(
+                    "Non-token error during access token validation; keeping token and proceeding: "
+                    + str(e)
+                )
+                return True
 
         # Always read the latest request token from .env
         self.request_token = get_env_value("ZERODHA_REQUEST_TOKEN")
@@ -286,9 +337,23 @@ class ZerodhaDataClient:
                 print("Authentication successful!")
                 logger.info("Authentication successful, new access token obtained")
                 return True
-            except Exception as e:
-                logger.error(f"Error using stored request token: {str(e)}")
+            except TokenException as e:
+                logger.error(f"Stored request token invalid or expired: {str(e)}")
                 print("Stored request token is invalid. Will need to re-authenticate.")
+            except NetworkException as e:
+                # Do not treat network errors as invalid request tokens
+                logger.warning(
+                    "Network error while exchanging stored request token; not invalidating it and will retry later: "
+                    + str(e)
+                )
+                return False
+            except Exception as e:
+                # Unknown errors - do not proceed with forced re-auth here
+                logger.warning(
+                    "Unexpected error while exchanging stored request token; not invalidating it: "
+                    + str(e)
+                )
+                return False
 
         # If no valid tokens, guide user to obtain new request token
         login_url = self.kite.login_url()
@@ -566,6 +631,23 @@ class ZerodhaDataClient:
             return None
 
         try:
+            # Build normalized key for caches (keyed by requested interval, not fetch_interval)
+            cache_key = self._normalize_history_key(symbol, exchange, interval, from_date, to_date)
+
+            # 1) In-memory LRU cache
+            cached_df = self._lru_get(cache_key)
+            if cached_df is not None:
+                logger.info(f"Cache hit (LRU) for {exchange}:{symbol} {interval} {from_date.date()}->{to_date.date()}")
+                return cached_df
+
+            # 2) Disk cache when market is closed
+            disk_cached_df = self.cache_manager.get_cached_data(symbol, exchange, interval, from_date, to_date)
+            if disk_cached_df is not None:
+                logger.info(f"Cache hit (disk) for {exchange}:{symbol} {interval} {from_date.date()}->{to_date.date()}")
+                # Place into LRU for faster subsequent access
+                self._lru_put(cache_key, disk_cached_df)
+                return disk_cached_df
+
             logger.info(f"Fetching historical data for {symbol} from {from_date} to {to_date} (interval: {interval})")
 
             # Implement rate limiting
@@ -588,6 +670,10 @@ class ZerodhaDataClient:
             # If not aggregating, return as is
             if not (aggregate_week or aggregate_month):
                 logger.info(f"Retrieved {len(df)} records for {symbol}")
+                # Save to caches
+                self._lru_put(cache_key, df)
+                # Persist to disk cache only when market is closed
+                self.cache_manager.cache_data(df, symbol, exchange, interval, from_date, to_date)
                 return df
 
             # --- Aggregation for week/month ---
@@ -611,6 +697,9 @@ class ZerodhaDataClient:
             resampled = df.resample(rule).agg(agg_dict).dropna()
             resampled.reset_index(inplace=True)
             logger.info(f"Aggregated {len(resampled)} {interval} records for {symbol}")
+            # Save to caches
+            self._lru_put(cache_key, resampled)
+            self.cache_manager.cache_data(resampled, symbol, exchange, interval, from_date, to_date)
             return resampled
 
         except TokenException as e:

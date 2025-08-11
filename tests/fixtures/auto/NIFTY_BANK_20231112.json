@@ -1,0 +1,107 @@
+{
+  "day": {
+    "enhanced_momentum": {
+      "stochastic_k": 96.95734645750032,
+      "stochastic_d": 93.70077045215487,
+      "stochastic_status": "overbought",
+      "stochrsi_k": 99.99999999632355,
+      "stochrsi_d": 99.43233625131721,
+      "stochrsi_status": "overbought",
+      "williams_r": -3.0426535424996715,
+      "williams_r_status": "oversold",
+      "rsi_divergence": {
+        "bearish_divergence": [],
+        "bullish_divergence": [
+          {
+            "strength": "strong",
+            "price_lows": [
+              286,
+              298
+            ],
+            "rsi_lows": [
+              286,
+              298
+            ]
+          }
+        ],
+        "hidden_bearish": [],
+        "hidden_bullish": []
+      }
+    },
+    "ichimoku": {
+      "tenkan_sen": 43322.825,
+      "kijun_sen": 43407.975000000006,
+      "senkou_span_a": 44748.85,
+      "senkou_span_b": 44984.925,
+      "chikou_span": null,
+      "signal": "bearish"
+    },
+    "bollinger_bands": {
+      "upper_band": 44557.471330311906,
+      "middle_band": 43424.24,
+      "lower_band": 42291.00866968809,
+      "percent_b": 0.7525565542926062,
+      "bandwidth": 0.052193490562501874,
+      "signal": "squeeze"
+    },
+    "cmf": {
+      "value": 0.0,
+      "signal": "neutral"
+    },
+    "keltner": {
+      "upper": 44383.87508251005,
+      "middle": 43612.88508251005,
+      "lower": 42841.895082510055,
+      "signal": "inside"
+    },
+    "adx": {
+      "adx": 29.726493617112997,
+      "plus_di": 28.470919324577874,
+      "minus_di": 17.98126903084922,
+      "trend_direction": "bullish",
+      "trend_strength": "strong"
+    },
+    "moving_averages": {
+      "sma_20": 43424.24,
+      "sma_50": 44234.808,
+      "sma_200": 43246.883499999996,
+      "ema_20": 43612.88508251005,
+      "ema_50": 43965.221593583854,
+      "price_to_sma_200": 0.017336890876772815,
+      "sma_20_to_sma_50": -0.018324212009691587,
+      "golden_cross": false,
+      "death_cross": false,
+      "signal": "bearish"
+    },
+    "macd": {
+      "macd_line": -120.37225686307647,
+      "signal_line": -269.18452154868714,
+      "histogram": 148.81226468561067,
+      "signal": "bullish"
+    },
+    "rsi": {
+      "rsi_14": 62.35153179739665,
+      "recent_values": [
+        42.123841913920515,
+        46.990410654247235,
+        49.045169283809614,
+        51.271036605330316,
+        62.35153179739665
+      ],
+      "trend": "up",
+      "status": "near_overbought",
+      "signal": "neutral"
+    },
+    "volume": {
+      "volume_ratio": 1.0,
+      "obv": 0.0,
+      "obv_trend": "neutral",
+      "signal": "normal"
+    },
+    "supertrend": {
+      "line": 42829.815,
+      "direction": "up"
+    }
+  },
+  "target_bias": "neutral"
+}

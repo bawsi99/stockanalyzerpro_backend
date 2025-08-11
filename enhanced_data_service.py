@@ -112,10 +112,17 @@ class EnhancedDataService:
                 )
         
         # Determine data source based on strategy
-        if strategy["recommended_approach"] == "live" and not request.force_live:
+        # For analysis purposes, we need historical data unless specifically requesting live data
+        if request.force_live:
             data, source = await self._get_live_data(request)
         else:
+            # Always prefer historical data for analysis - live quotes are insufficient for risk calculations
             data, source = await self._get_historical_data(request)
+            
+            # Only fallback to live data if historical data completely fails
+            if data is None or data.empty:
+                logger.warning(f"Historical data failed for {request.symbol}, falling back to live data")
+                data, source = await self._get_live_data(request)
         
         if data is None or data.empty:
             logger.error(f"Failed to get data for {request.symbol}")

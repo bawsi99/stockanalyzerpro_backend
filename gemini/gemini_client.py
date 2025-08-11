@@ -8,6 +8,7 @@ from .error_utils import ErrorUtils
 from .debug_logger import debug_logger
 from .token_tracker import get_or_create_tracker, AnalysisTokenTracker
 from .context_engineer import ContextEngineer, AnalysisType, ContextConfig
+from .schema import coerce_ai_analysis, AIAnalysisSchema
 
 import asyncio
 import time
@@ -147,6 +148,16 @@ class GeminiClient:
                 parsed = json.loads(fallback_json)
                 print("Using fallback JSON due to parsing error")
             
+            # Schema validation/coercion
+            try:
+                validated: AIAnalysisSchema = coerce_ai_analysis(parsed)
+                parsed = json.loads(validated.model_dump_json())
+            except Exception as ve:
+                print(f"[SCHEMA] AIAnalysis schema validation failed: {ve}")
+                # Keep parsed but ensure minimal fallback keys exist
+                parsed.setdefault("trend", parsed.get("trend", "neutral"))
+                parsed.setdefault("confidence_pct", parsed.get("confidence_pct", 50))
+
             # Enhance the parsed result with code execution results
             if code_results or execution_results:
                 parsed = self._enhance_with_calculations(parsed, code_results, execution_results)
@@ -220,7 +231,7 @@ class GeminiClient:
         import re
         import json
         try:
-            match = re.search(r"```json\s*(\{[\s\S]+?\})\s*```", llm_response)
+            match = re.search(r"```json\s*(\{[\s\S]+?\})\s*```", llm_response or "")
             if match:
                 json_blob = match.group(1)
                 markdown_part = llm_response[:match.start()].strip()
@@ -248,6 +259,15 @@ class GeminiClient:
                         fallback_json = GeminiClient._create_fallback_json()
                         return markdown_part, fallback_json
             else:
+                # Try to find any JSON object in the output as a last attempt
+                any_match = re.search(r"(\{[\s\S]+\})", llm_response or "")
+                if any_match:
+                    blob = any_match.group(1)
+                    try:
+                        json.loads(blob)
+                        return (llm_response, blob)
+                    except Exception:
+                        pass
                 debug_logger.log_error(ValueError("No JSON code block found"), "extract_markdown_and_json", llm_response)
                 raise ValueError("Could not find JSON code block in LLM response.")
         except Exception as ex:
@@ -288,6 +308,98 @@ class GeminiClient:
         })
 
 
+
+    # ===== Auxiliary synthesis helpers to align with rules.txt (chunk, label, single-purpose) =====
+    def _extract_labeled_json_block(self, context: str, label: str) -> dict | None:
+        try:
+            if not context or label not in context:
+                return None
+            after = context.split(label, 1)[1].strip()
+            # Try to read a JSON object starting there
+            import re
+            m = re.search(r"\{[\s\S]+\}", after)
+            if not m:
+                return None
+            return json.loads(m.group(0))
+        except Exception:
+            return None
+
+    async def synthesize_mtf_summary(self, mtf_json: dict) -> str:
+        """Single-purpose: Summarize MTF JSON into 5-8 bullet insights."""
+        try:
+            prompt = self.prompt_manager.format_prompt(
+                "optimized_indicators_summary",
+                context=f"""
+[Source: MultiTimeframeContext]
+Summarize the following MTF JSON into 5-8 bullets focusing on consensus, conflicts, high-importance timeframes, and confidence.
+Return plain text bullets.
+
+JSON:
+{json.dumps(mtf_json)[:8000]}
+"""
+            ) + self.prompt_manager.SOLVING_LINE
+            text = await self.core.call_llm(prompt)
+            return text or ""
+        except Exception:
+            return ""
+
+    async def synthesize_risk_summary(self, adv_json: dict) -> str:
+        """Single-purpose: Summarize risk/stress/scenario digest in 5 bullets."""
+        try:
+            prompt = self.prompt_manager.format_prompt(
+                "optimized_indicators_summary",
+                context=f"""
+[Source: AdvancedAnalysisDigest]
+Summarize the risk/stress/scenario highlights (5 bullets max). Keep it concise.
+
+JSON:
+{json.dumps(adv_json)[:4000]}
+"""
+            ) + self.prompt_manager.SOLVING_LINE
+            text = await self.core.call_llm(prompt)
+            return text or ""
+        except Exception:
+            return ""
+
+    async def synthesize_sector_summary(self, knowledge_context: str) -> str:
+        """Single-purpose: Summarize sector context lines into 4 bullets."""
+        try:
+            lines = "\n".join([l for l in (knowledge_context or "").splitlines() if l.strip().startswith(("- Market Outperformance:", "- Sector Outperformance:", "- Sector Beta:"))])
+            prompt = self.prompt_manager.format_prompt(
+                "optimized_indicators_summary",
+                context=f"""
+[Source: SectorContext]
+Summarize the following sector metrics into 4 bullets: outperformance, beta, key implication.
+
+{lines}
+"""
+            ) + self.prompt_manager.SOLVING_LINE
+            text = await self.core.call_llm(prompt)
+            return text or ""
+        except Exception:
+            return ""
+
+    async def verify_and_format_final_json(self, result: dict) -> dict:
+        """Single-purpose: Verify/normalize final JSON to schema; return corrected JSON."""
+        try:
+            prompt = self.prompt_manager.format_prompt(
+                "optimized_indicators_summary",
+                context=f"""
+Task: Validate and normalize the following JSON to ensure fields exist: trend, confidence_pct, signals (optional), rationale (optional).
+If keys missing, add conservative defaults. Return only JSON.
+
+JSON:
+{json.dumps(result)}
+"""
+            ) + self.prompt_manager.SOLVING_LINE
+            text = await self.core.call_llm(prompt)
+            try:
+                return json.loads(text)
+            except Exception:
+                _, blob = self.extract_markdown_and_json(text or "")
+                return json.loads(blob)
+        except Exception:
+            return result
 
     def _enhance_final_decision_with_calculations(self, result, code_results, execution_results):
         """
@@ -532,9 +644,24 @@ class GeminiClient:
         else:
             print("[ASYNC-OPTIMIZED-ENHANCED] mtf_comparison not found in chart_paths")
         
+        # 3. AUXILIARY SYNTHESIS TASKS (rules: chunk and label sources; keep tasks single-purpose)
+        aux_tasks = []
+        parsed_mtf = self._extract_labeled_json_block(knowledge_context, label="MultiTimeframeContext:")
+        parsed_adv = self._extract_labeled_json_block(knowledge_context, label="AdvancedAnalysisDigest:")
+        has_sector = ("SECTOR CONTEXT" in (knowledge_context or ""))
+
+        if parsed_mtf:
+            aux_tasks.append(("mtf_synthesis", self.synthesize_mtf_summary(parsed_mtf)))
+        if parsed_adv:
+            aux_tasks.append(("risk_synthesis", self.synthesize_risk_summary(parsed_adv)))
+        if has_sector:
+            aux_tasks.append(("sector_synthesis", self.synthesize_sector_summary(knowledge_context)))
+
         # EXECUTE ALL INDEPENDENT TASKS IN PARALLEL
-        print(f"[ASYNC-OPTIMIZED-ENHANCED] Total tasks created: {len(chart_analysis_tasks) + 1}")
+        total_independent = 1 + len(chart_analysis_tasks) + len(aux_tasks)
+        print(f"[ASYNC-OPTIMIZED-ENHANCED] Total tasks created: {total_independent}")
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Chart analysis tasks: {[name for name, _ in chart_analysis_tasks]}")
+        print(f"[ASYNC-OPTIMIZED-ENHANCED] Aux tasks: {[name for name, _ in aux_tasks]}")
         
         # FALLBACK: If no chart tasks were created, create mock tasks for testing
         if len(chart_analysis_tasks) == 0:
@@ -573,8 +700,8 @@ class GeminiClient:
         # Log the exact time when parallel execution starts
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Parallel execution started at: {time.strftime('%H:%M:%S.%f')[:-3]}")
         
-        # Combine indicator task with chart tasks
-        all_tasks = [indicator_task] + [task for _, task in chart_analysis_tasks]
+        # Combine indicator task with chart tasks and auxiliary synthesis tasks
+        all_tasks = [indicator_task] + [task for _, task in chart_analysis_tasks] + [task for _, task in aux_tasks]
         
         # Log that we're about to gather all tasks
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Sending all {len(all_tasks)} tasks to asyncio.gather() at: {time.strftime('%H:%M:%S.%f')[:-3]}")
@@ -610,7 +737,22 @@ class GeminiClient:
             elif task_name == "mtf_comparison_enhanced" or task_name == "mtf_comparison_enhanced_mock":
                 chart_insights_list.append("**Multi-Timeframe Comparison (MTF Validation):**\n" + result)
         
-        chart_insights_md = "\n\n".join(chart_insights_list) if chart_insights_list else ""
+        # Process auxiliary synthesis results
+        aux_insights = []
+        aux_offset = 1 + len(chart_analysis_tasks)
+        for j, (aux_name, _) in enumerate(aux_tasks, aux_offset):
+            result = all_results[j]
+            if isinstance(result, Exception):
+                print(f"[ASYNC-OPTIMIZED-ENHANCED] Warning: {aux_name} failed: {result}")
+                continue
+            title_map = {
+                "mtf_synthesis": "Multi-Timeframe Synthesis",
+                "risk_synthesis": "Risk and Scenario Synthesis",
+                "sector_synthesis": "Sector Context Synthesis",
+            }
+            aux_insights.append(f"**{title_map.get(aux_name, aux_name)}:**\n" + str(result))
+
+        chart_insights_md = "\n\n".join(chart_insights_list + aux_insights) if (chart_insights_list or aux_insights) else ""
 
         # 3. Final decision prompt with enhanced mathematical validation (depends on all previous results)
         print("[ASYNC-OPTIMIZED-ENHANCED] Starting enhanced final decision analysis...")
@@ -632,26 +774,37 @@ class GeminiClient:
             print(f"[DEBUG] Enhanced code execution results: {len(code_results) if code_results else 0} code snippets")
             print(f"[DEBUG] Enhanced execution outputs: {len(execution_results) if execution_results else 0} outputs")
             
-            # The final decision should output ONLY JSON, not markdown with JSON inside
-            # So we try to parse it directly as JSON first
-            try:
-                result = json.loads(text_response.strip())
-                print("[DEBUG] Successfully parsed enhanced response as direct JSON")
-            except json.JSONDecodeError as e:
-                print(f"[DEBUG] Enhanced direct JSON parsing failed: {e}")
-                # If direct parsing fails, try to extract JSON from markdown code block
+            # The final decision should output ONLY JSON. Guard for empty or malformed responses.
+            if not text_response or not str(text_response).strip():
+                print("[DEBUG] Empty final decision response; using fallback JSON.")
+                result = json.loads(self._create_fallback_json())
+                result.setdefault('analysis_metadata', {})
+                result['analysis_metadata']['fallback_reason'] = 'empty_final_decision_response'
+            else:
+                # Try direct JSON first
                 try:
-                    _, json_blob = self.extract_markdown_and_json(text_response)
-                    result = json.loads(json_blob)
-                    print("[DEBUG] Successfully extracted JSON from enhanced markdown code block")
-                except Exception as extract_error:
-                    print(f"[DEBUG] Failed to extract JSON from enhanced markdown: {extract_error}")
-                    print(f"[DEBUG] Enhanced full response: {text_response}")
-                    raise ValueError(f"Could not parse enhanced final decision response as JSON: {e}. Response: {text_response[:500]}")
+                    result = json.loads(text_response.strip())
+                    print("[DEBUG] Successfully parsed enhanced response as direct JSON")
+                except json.JSONDecodeError as e:
+                    print(f"[DEBUG] Enhanced direct JSON parsing failed: {e}")
+                    # Try to extract JSON from markdown code block
+                    try:
+                        _, json_blob = self.extract_markdown_and_json(text_response)
+                        result = json.loads(json_blob)
+                        print("[DEBUG] Successfully extracted JSON from enhanced markdown code block")
+                    except Exception as extract_error:
+                        print(f"[DEBUG] Failed to extract JSON from enhanced markdown: {extract_error}")
+                        print(f"[DEBUG] Enhanced full response: {text_response}")
+                        # Final fallback
+                        result = json.loads(self._create_fallback_json())
+                        result.setdefault('analysis_metadata', {})
+                        result['analysis_metadata']['fallback_reason'] = 'unparsable_final_decision_response'
             
             # Enhance result with code execution data
             if code_results or execution_results:
                 result = self._enhance_final_decision_with_calculations(result, code_results, execution_results)
+
+            # Schema verification/normalization pass removed to avoid extra LLM call post final decision
                 
             # Add MTF context to result if available
             if "ENHANCED MULTI-TIMEFRAME ANALYSIS CONTEXT" in knowledge_context:

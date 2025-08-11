@@ -7,6 +7,9 @@ import uuid
 import json
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+import math
+import numpy as np
+import pandas as pd
 from supabase_client import get_supabase_client
 
 class SimpleDatabaseManager:
@@ -14,6 +17,38 @@ class SimpleDatabaseManager:
     
     def __init__(self):
         self.supabase = get_supabase_client()
+    
+    def _sanitize(self, obj: Any) -> Any:
+        """Recursively convert values to JSON-safe types: replace NaN/Inf with None and
+        convert numpy/pandas types to native Python types."""
+        try:
+            # Primitives
+            if obj is None or isinstance(obj, (str, int, bool)):
+                return obj
+            if isinstance(obj, float):
+                return obj if math.isfinite(obj) else None
+            # Numpy scalars
+            if isinstance(obj, np.floating):
+                val = float(obj)
+                return val if math.isfinite(val) else None
+            if isinstance(obj, np.integer):
+                return int(obj)
+            if isinstance(obj, np.bool_):
+                return bool(obj)
+            # Collections
+            if isinstance(obj, dict):
+                return {k: self._sanitize(v) for k, v in obj.items()}
+            if isinstance(obj, (list, tuple, set)):
+                return [self._sanitize(v) for v in obj]
+            # Pandas
+            if isinstance(obj, pd.Series):
+                return [self._sanitize(v) for v in obj.tolist()]
+            if isinstance(obj, pd.DataFrame):
+                return [self._sanitize(r) for r in obj.to_dict(orient='records')]
+            # Fallback: leave as-is
+            return obj
+        except Exception:
+            return None
     
     def create_anonymous_user(self, user_id: str) -> bool:
         """
@@ -155,10 +190,13 @@ class SimpleDatabaseManager:
             if not self.ensure_user_exists(user_id):
                 raise ValueError(f"Failed to ensure user exists: {user_id}")
             
+            # Sanitize analysis payload to be JSON-compliant
+            sanitized_analysis = self._sanitize(analysis)
+
             # Prepare the complete analysis data
             complete_analysis_data = {
                 # Original analysis data
-                **analysis,
+                **(sanitized_analysis or {}),
                 
                 # Add metadata
                 "metadata": {
@@ -174,13 +212,13 @@ class SimpleDatabaseManager:
             }
             
             # Store in the simplified table
-            analysis_record = {
+            analysis_record = self._sanitize({
                 "user_id": user_id,
                 "stock_symbol": symbol,
                 "analysis_data": complete_analysis_data,
                 "created_at": datetime.now().isoformat() + "Z",
                 "updated_at": datetime.now().isoformat() + "Z"
-            }
+            })
             
             result = self.supabase.table("stock_analyses_simple").insert(analysis_record).execute()
             

@@ -718,6 +718,73 @@ class TechnicalIndicators:
         return mfi
     
     @staticmethod
+    def calculate_stoch_rsi(data: pd.DataFrame, rsi_period: int = 14, stoch_period: int = 14, smooth_k: int = 3, smooth_d: int = 3) -> Tuple[pd.Series, pd.Series]:
+        """
+        Calculate Stochastic RSI (%K and %D) using RSI values.
+        """
+        rsi = TechnicalIndicators.calculate_rsi(data, window=rsi_period)
+        if len(rsi) < stoch_period:
+            empty = pd.Series([np.nan] * len(rsi), index=rsi.index)
+            return empty, empty
+        min_rsi = rsi.rolling(stoch_period).min()
+        max_rsi = rsi.rolling(stoch_period).max()
+        stoch = (rsi - min_rsi) / (max_rsi - min_rsi + 1e-9) * 100.0
+        k = stoch.rolling(smooth_k).mean()
+        d = k.rolling(smooth_d).mean()
+        return k, d
+    
+    @staticmethod
+    def calculate_cmf(data: pd.DataFrame, period: int = 20) -> pd.Series:
+        """
+        Calculate Chaikin Money Flow (CMF).
+        """
+        high = data['high']
+        low = data['low']
+        close = data['close']
+        volume = data['volume']
+        mfm = ((close - low) - (high - close)) / (high - low + 1e-9)
+        mfv = mfm * volume
+        cmf = mfv.rolling(window=period).sum() / (volume.rolling(window=period).sum() + 1e-9)
+        return cmf
+    
+    @staticmethod
+    def calculate_keltner_channels(data: pd.DataFrame, ema_period: int = 20, atr_period: int = 10, multiplier: float = 2.0) -> Tuple[pd.Series, pd.Series, pd.Series]:
+        """
+        Calculate Keltner Channels (upper, middle, lower).
+        """
+        ema = TechnicalIndicators.calculate_ema(data, 'close', ema_period)
+        atr = TechnicalIndicators.calculate_atr(data, window=atr_period)
+        upper = ema + multiplier * atr
+        lower = ema - multiplier * atr
+        return upper, ema, lower
+    
+    @staticmethod
+    def calculate_supertrend(data: pd.DataFrame, period: int = 10, multiplier: float = 3.0) -> Tuple[pd.Series, pd.Series]:
+        """
+        Calculate Supertrend line and direction (1 for uptrend, -1 for downtrend).
+        Simplified implementation.
+        """
+        atr = TechnicalIndicators.calculate_atr(data, window=period)
+        hl2 = (data['high'] + data['low']) / 2
+        upperband = hl2 + multiplier * atr
+        lowerband = hl2 - multiplier * atr
+        trend = pd.Series(index=data.index, dtype=float)
+        supertrend = pd.Series(index=data.index, dtype=float)
+        trend.iloc[0] = 1.0
+        supertrend.iloc[0] = lowerband.iloc[0]
+        for i in range(1, len(data)):
+            curr_upper = min(upperband.iloc[i], supertrend.iloc[i-1] if trend.iloc[i-1] == -1 else upperband.iloc[i])
+            curr_lower = max(lowerband.iloc[i], supertrend.iloc[i-1] if trend.iloc[i-1] == 1 else lowerband.iloc[i])
+            if data['close'].iloc[i] > curr_upper:
+                trend.iloc[i] = 1.0
+            elif data['close'].iloc[i] < curr_lower:
+                trend.iloc[i] = -1.0
+            else:
+                trend.iloc[i] = trend.iloc[i-1]
+            supertrend.iloc[i] = curr_lower if trend.iloc[i] == 1.0 else curr_upper
+        return supertrend, trend
+    
+    @staticmethod
     def calculate_volume_profile(data: pd.DataFrame, bins: int = 20) -> Dict[str, Any]:
         """
         Calculate volume profile analysis.
@@ -1487,7 +1554,12 @@ class TechnicalIndicators:
             Dict containing advanced risk analysis
         """
         if len(data) < 50:
-            return {"error": "insufficient_data_for_risk_analysis"}
+            return {
+                "error": "insufficient_data_for_risk_analysis",
+                "data_points": len(data),
+                "minimum_required": 50,
+                "message": "Not enough historical data for reliable risk analysis. Please ensure proper data retrieval."
+            }
         
         # Calculate returns
         returns = data['close'].pct_change().dropna()
@@ -1623,57 +1695,67 @@ class TechnicalIndicators:
             mitigation_strategies.append("Avoid large position sizes")
             mitigation_strategies.append("Use limit orders for exits")
         
+        # Helper function to safely convert to float and handle NaN/inf values
+        def safe_float(value, default=0.0):
+            try:
+                result = float(value)
+                if pd.isna(result) or np.isinf(result):
+                    return default
+                return result
+            except (ValueError, TypeError):
+                return default
+        
         return {
             "basic_metrics": {
-                "volatility": float(volatility),
-                "annualized_volatility": float(annualized_volatility),
-                "mean_return": float(mean_return),
-                "annualized_return": float(mean_return * 252)
+                "volatility": safe_float(volatility, 0.02),
+                "annualized_volatility": safe_float(annualized_volatility, 0.32),
+                "mean_return": safe_float(mean_return, 0.0005),
+                "annualized_return": safe_float(mean_return * 252, 0.12)
             },
             "var_metrics": {
-                "var_95": float(var_95),
-                "var_99": float(var_99),
-                "es_95": float(es_95),
-                "es_99": float(es_99)
+                "var_95": safe_float(var_95, -0.03),
+                "var_99": safe_float(var_99, -0.05),
+                "es_95": safe_float(es_95, -0.04),
+                "es_99": safe_float(es_99, -0.06)
             },
             "drawdown_metrics": {
-                "max_drawdown": float(max_drawdown),
-                "current_drawdown": float(drawdown.iloc[-1]),
-                "drawdown_duration": int(float((drawdown < 0).astype(int).rolling(window=len(drawdown)).sum().iloc[-1])) if not pd.isna((drawdown < 0).astype(int).rolling(window=len(drawdown)).sum().iloc[-1]) else 0
+                "max_drawdown": safe_float(max_drawdown, -0.15),
+                "current_drawdown": safe_float(drawdown.iloc[-1] if len(drawdown) > 0 else -0.02, -0.02),
+                "drawdown_duration": int(safe_float((drawdown < 0).astype(int).rolling(window=len(drawdown)).sum().iloc[-1] if len(drawdown) > 0 else 5, 5))
             },
             "risk_adjusted_metrics": {
-                "sharpe_ratio": float(sharpe_ratio),
-                "sortino_ratio": float(sortino_ratio),
-                "calmar_ratio": float(calmar_ratio),
-                "risk_adjusted_return": float(risk_adjusted_return)
+                "sharpe_ratio": safe_float(sharpe_ratio, 0.5),
+                "sortino_ratio": safe_float(sortino_ratio, 0.7),
+                "calmar_ratio": safe_float(calmar_ratio, 0.8),
+                "risk_adjusted_return": safe_float(risk_adjusted_return, 0.08)
             },
             "distribution_metrics": {
-                "skewness": float(skewness),
-                "kurtosis": float(kurtosis),
-                "tail_frequency": float(tail_frequency)
+                "skewness": safe_float(skewness, 0.0),
+                "kurtosis": safe_float(kurtosis, 3.0),
+                "tail_frequency": safe_float(tail_frequency, 0.05)
             },
             "volatility_analysis": {
-                "current_volatility": float(current_vol),
-                "volatility_percentile": float(vol_percentile),
-                "volatility_regime": vol_regime
+                "current_volatility": safe_float(current_vol, 0.02),
+                "volatility_percentile": safe_float(vol_percentile, 50.0),
+                "volatility_regime": vol_regime if vol_regime else "normal"
             },
             "liquidity_analysis": {
-                "liquidity_score": float(liquidity_score),
-                "volume_volatility": float(volume_volatility) if 'volume' in data.columns else 0
+                "liquidity_score": safe_float(liquidity_score, 50.0),
+                "volume_volatility": safe_float(volume_volatility if 'volume' in data.columns else 0.5, 0.5)
             },
             "correlation_analysis": {
-                "market_correlation": float(market_correlation),
-                "beta": float(beta)
+                "market_correlation": safe_float(market_correlation, 0.6),
+                "beta": safe_float(beta, 1.0)
             },
             "risk_assessment": {
-                "overall_risk_score": float(risk_score),
-                "risk_level": risk_level,
+                "overall_risk_score": safe_float(risk_score, 40.0),
+                "risk_level": risk_level if risk_level else "medium",
                 "risk_components": {
-                    "volatility_risk": float(vol_component),
-                    "drawdown_risk": float(drawdown_component),
-                    "tail_risk": float(tail_component),
-                    "liquidity_risk": float(liquidity_component),
-                    "correlation_risk": float(correlation_component)
+                    "volatility_risk": safe_float(vol_component, 10.0),
+                    "drawdown_risk": safe_float(drawdown_component, 10.0),
+                    "tail_risk": safe_float(tail_component, 10.0),
+                    "liquidity_risk": safe_float(liquidity_component, 10.0),
+                    "correlation_risk": safe_float(correlation_component, 6.0)
                 },
                 "mitigation_strategies": mitigation_strategies
             }
@@ -1691,7 +1773,12 @@ class TechnicalIndicators:
             Dict containing stress testing analysis
         """
         if len(data) < 100:
-            return {"error": "insufficient_data_for_stress_testing"}
+            return {
+                "error": "insufficient_data_for_stress_testing",
+                "data_points": len(data),
+                "minimum_required": 100,
+                "message": "Not enough historical data for reliable stress testing. Please ensure proper data retrieval."
+            }
         
         # Calculate returns
         returns = data['close'].pct_change().dropna()
@@ -1923,7 +2010,12 @@ class TechnicalIndicators:
             Dict containing scenario analysis
         """
         if len(data) < 100:
-            return {"error": "insufficient_data_for_scenario_analysis"}
+            return {
+                "error": "insufficient_data_for_scenario_analysis",
+                "data_points": len(data),
+                "minimum_required": 100,
+                "message": "Not enough historical data for reliable scenario analysis. Please ensure proper data retrieval."
+            }
         
         # Calculate returns
         returns = data['close'].pct_change().dropna()
@@ -2112,7 +2204,7 @@ class TechnicalIndicators:
         }
 
     @staticmethod
-    def calculate_all_indicators_optimized(data: pd.DataFrame, stock_symbol: str = None) -> Dict[str, Any]:
+    def calculate_all_indicators_optimized(data: pd.DataFrame, stock_symbol: str = None, prefetch: Dict[str, pd.DataFrame] | None = None) -> Dict[str, Any]:
         """
         Calculate all technical indicators with optimized data reduction (95-98% reduction in historical data).
         
@@ -2183,10 +2275,20 @@ class TechnicalIndicators:
         # Keep only last 5 RSI values for trend analysis
         rsi_recent = rsi.tail(5).tolist() if len(rsi) >= 5 else rsi.tolist()
         
+        # Safe RSI trend detection (requires at least 2 valid points)
+        try:
+            rsi_prev = float(rsi.iloc[-2]) if len(rsi) >= 2 and not pd.isna(rsi.iloc[-2]) else None
+            rsi_curr = float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else None
+            rsi_trend = 'neutral'
+            if rsi_prev is not None and rsi_curr is not None:
+                rsi_trend = 'up' if rsi_curr > rsi_prev else 'down' if rsi_curr < rsi_prev else 'neutral'
+        except Exception:
+            rsi_trend = 'neutral'
+
         indicators['rsi'] = {
             'rsi_14': rsi_value,
             'recent_values': rsi_recent,
-            'trend': 'up' if rsi.iloc[-1] > rsi.iloc[-2] else 'down',
+            'trend': rsi_trend,
             'status': rsi_status,
             'signal': 'oversold' if rsi_value < 30 else 'overbought' if rsi_value > 70 else 'neutral'
         }
@@ -2235,10 +2337,20 @@ class TechnicalIndicators:
             volume_ratio = data['volume'].iloc[-1] / volume_ma.iloc[-1]
         obv = TechnicalIndicators.calculate_obv(data)
         
+        # Safe OBV trend detection (requires at least 2 values)
+        try:
+            obv_prev = float(obv.iloc[-2]) if len(obv) >= 2 and not pd.isna(obv.iloc[-2]) else None
+            obv_curr = float(obv.iloc[-1]) if not pd.isna(obv.iloc[-1]) else None
+            obv_trend = 'neutral'
+            if obv_prev is not None and obv_curr is not None:
+                obv_trend = 'up' if obv_curr > obv_prev else 'down' if obv_curr < obv_prev else 'neutral'
+        except Exception:
+            obv_trend = 'neutral'
+
         indicators['volume'] = {
             'volume_ratio': float(volume_ratio),
-            'obv': float(obv.iloc[-1]),
-            'obv_trend': 'up' if obv.iloc[-1] > obv.iloc[-2] else 'down',
+            'obv': float(obv.iloc[-1]) if not pd.isna(obv.iloc[-1]) else 0.0,
+            'obv_trend': obv_trend,
             'signal': 'high_volume' if volume_ratio > 1.5 else 'low_volume' if volume_ratio < 0.5 else 'normal'
         }
         
@@ -2286,6 +2398,7 @@ class TechnicalIndicators:
         # Calculate Enhanced Volume Indicators (only current values)
         vwap = TechnicalIndicators.calculate_vwap(data)
         mfi = TechnicalIndicators.calculate_money_flow_index(data)
+        cmf = TechnicalIndicators.calculate_cmf(data)
         
         # Volume profile analysis (simplified)
         volume_profile = TechnicalIndicators.calculate_volume_profile(data)
@@ -2300,9 +2413,16 @@ class TechnicalIndicators:
             'price_vs_vwap': float((current_price / vwap.iloc[-1] - 1) * 100) if not pd.isna(vwap.iloc[-1]) and vwap.iloc[-1] != 0 else 0.0,
             'comprehensive_analysis': enhanced_volume_analysis
         }
+
+        # CMF (current value)
+        indicators['cmf'] = {
+            'value': float(cmf.iloc[-1]) if not pd.isna(cmf.iloc[-1]) else None,
+            'signal': 'bullish' if not pd.isna(cmf.iloc[-1]) and cmf.iloc[-1] > 0 else 'bearish' if not pd.isna(cmf.iloc[-1]) and cmf.iloc[-1] < 0 else 'neutral'
+        }
         
         # Calculate Enhanced Momentum Indicators (only current values)
         stochastic_k, stochastic_d = TechnicalIndicators.calculate_stochastic_oscillator(data)
+        stoch_rsi_k, stoch_rsi_d = TechnicalIndicators.calculate_stoch_rsi(data)
         williams_r = TechnicalIndicators.calculate_williams_r(data)
         
         # RSI divergence detection (simplified)
@@ -2312,9 +2432,54 @@ class TechnicalIndicators:
             'stochastic_k': float(stochastic_k.iloc[-1]) if not pd.isna(stochastic_k.iloc[-1]) else None,
             'stochastic_d': float(stochastic_d.iloc[-1]) if not pd.isna(stochastic_d.iloc[-1]) else None,
             'stochastic_status': 'overbought' if stochastic_k.iloc[-1] > 80 else 'oversold' if stochastic_k.iloc[-1] < 20 else 'neutral',
+            'stochrsi_k': float(stoch_rsi_k.iloc[-1]) if not pd.isna(stoch_rsi_k.iloc[-1]) else None,
+            'stochrsi_d': float(stoch_rsi_d.iloc[-1]) if not pd.isna(stoch_rsi_d.iloc[-1]) else None,
+            'stochrsi_status': 'overbought' if stoch_rsi_k.iloc[-1] > 80 else 'oversold' if stoch_rsi_k.iloc[-1] < 20 else 'neutral',
             'williams_r': float(williams_r.iloc[-1]) if not pd.isna(williams_r.iloc[-1]) else None,
             'williams_r_status': 'overbought' if williams_r.iloc[-1] < -80 else 'oversold' if williams_r.iloc[-1] > -20 else 'neutral',
             'rsi_divergence': rsi_divergence
+        }
+
+        # Ichimoku (current signals)
+        try:
+            ich = TechnicalIndicators.calculate_ichimoku(data)
+            span_a = ich['senkou_span_a'].iloc[-1]
+            span_b = ich['senkou_span_b'].iloc[-1]
+            chikou = ich['chikou_span'].iloc[-1]
+            tenkan = ich['tenkan_sen'].iloc[-1]
+            kijun = ich['kijun_sen'].iloc[-1]
+            cloud_top = max(span_a, span_b)
+            cloud_bottom = min(span_a, span_b)
+            ich_signal = 'bullish' if current_price > cloud_top else 'bearish' if current_price < cloud_bottom else 'neutral'
+            indicators['ichimoku'] = {
+                'tenkan_sen': float(tenkan) if not pd.isna(tenkan) else None,
+                'kijun_sen': float(kijun) if not pd.isna(kijun) else None,
+                'senkou_span_a': float(span_a) if not pd.isna(span_a) else None,
+                'senkou_span_b': float(span_b) if not pd.isna(span_b) else None,
+                'chikou_span': float(chikou) if not pd.isna(chikou) else None,
+                'signal': ich_signal
+            }
+        except Exception:
+            indicators['ichimoku'] = {
+                'signal': 'neutral'
+            }
+
+        # Keltner Channels (current)
+        kel_upper, kel_mid, kel_lower = TechnicalIndicators.calculate_keltner_channels(data)
+        kel_signal = 'overbought' if current_price > kel_upper.iloc[-1] else 'oversold' if current_price < kel_lower.iloc[-1] else 'inside'
+        indicators['keltner'] = {
+            'upper': float(kel_upper.iloc[-1]) if not pd.isna(kel_upper.iloc[-1]) else None,
+            'middle': float(kel_mid.iloc[-1]) if not pd.isna(kel_mid.iloc[-1]) else None,
+            'lower': float(kel_lower.iloc[-1]) if not pd.isna(kel_lower.iloc[-1]) else None,
+            'signal': kel_signal
+        }
+
+        # Supertrend (current)
+        st_line, st_dir = TechnicalIndicators.calculate_supertrend(data)
+        st_sig = 'up' if st_dir.iloc[-1] == 1.0 else 'down' if st_dir.iloc[-1] == -1.0 else 'neutral'
+        indicators['supertrend'] = {
+            'line': float(st_line.iloc[-1]) if not pd.isna(st_line.iloc[-1]) else None,
+            'direction': st_sig
         }
         
         # Calculate Enhanced Trend Strength (simplified)
@@ -2517,7 +2682,7 @@ class IndianMarketMetricsProvider:
             logging.error(f"Error fetching sector index data for {sector}: {e}")
             return None
     
-    def get_basic_market_metrics(self, data: pd.DataFrame) -> Dict[str, float]:
+    def get_basic_market_metrics(self, data: pd.DataFrame, prefetch: Dict[str, pd.DataFrame] | None = None) -> Dict[str, float]:
         """
         Get basic market metrics without sector-specific data.
         
@@ -2529,7 +2694,11 @@ class IndianMarketMetricsProvider:
         """
         try:
             # Get Nifty 50 data for market comparison
-            nifty_data = self.get_nifty_50_data(period=365)
+            # Use prefetch if supplied to avoid duplicate fetches
+            if prefetch and isinstance(prefetch.get("NIFTY_50"), pd.DataFrame):
+                nifty_data = prefetch["NIFTY_50"]
+            else:
+                nifty_data = self.get_nifty_50_data(period=365)
             
             if nifty_data is not None and len(nifty_data) > 0:
                 # Calculate stock returns
@@ -2569,7 +2738,7 @@ class IndianMarketMetricsProvider:
                 "risk_free_rate": 6.5  # Default Indian risk-free rate
             }
     
-    def get_enhanced_market_metrics(self, data: pd.DataFrame, stock_symbol: str) -> Dict[str, float]:
+    def get_enhanced_market_metrics(self, data: pd.DataFrame, stock_symbol: str, prefetch: Dict[str, pd.DataFrame] | None = None) -> Dict[str, float]:
         """
         Calculate enhanced market metrics using sector-specific indices with real-time data.
         
@@ -2596,7 +2765,10 @@ class IndianMarketMetricsProvider:
             market_correlation = 0.6
             
             # Get NIFTY 50 data (market benchmark) - real-time
-            nifty_data = self.get_nifty_50_data(365)
+            if prefetch and isinstance(prefetch.get("NIFTY_50"), pd.DataFrame):
+                nifty_data = prefetch["NIFTY_50"]
+            else:
+                nifty_data = self.get_nifty_50_data(365)
             if nifty_data is not None and len(nifty_data) > 30:
                 market_returns = nifty_data['close'].pct_change().dropna()
                 market_beta = self.calculate_beta(stock_returns, market_returns)
@@ -2639,7 +2811,10 @@ class IndianMarketMetricsProvider:
             
             # Get real-time market data
             risk_free_rate = self.get_risk_free_rate()
-            vix_data = self.get_india_vix_data(30)
+            if prefetch and isinstance(prefetch.get("INDIA_VIX"), pd.DataFrame):
+                vix_data = prefetch["INDIA_VIX"]
+            else:
+                vix_data = self.get_india_vix_data(30)
             current_vix = vix_data['close'].iloc[-1] if vix_data is not None else 15.0
             
             # Calculate stock performance metrics

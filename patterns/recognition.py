@@ -489,8 +489,10 @@ class PatternRecognition:
                 "head_prominence": float(head_prominence),
                 "shoulder_symmetry": float(shoulder_symmetry)
             }
-            
-            patterns.append(pattern)
+
+            # Append only if quality_score > 0
+            if pattern.get("quality_score", 0) > 0:
+                patterns.append(pattern)
         
         return patterns
 
@@ -595,8 +597,10 @@ class PatternRecognition:
                 "head_prominence": float(head_prominence),
                 "shoulder_symmetry": float(shoulder_symmetry)
             }
-            
-            patterns.append(pattern)
+
+            # Append only if quality_score > 0
+            if pattern.get("quality_score", 0) > 0:
+                patterns.append(pattern)
         
         return patterns
 
@@ -731,8 +735,10 @@ class PatternRecognition:
                     "cup_symmetry": float(cup_symmetry),
                     "handle_quality": float(handle_quality)
                 }
-                
-                patterns.append(pattern)
+
+                # Append only if quality_score > 0
+                if pattern.get("quality_score", 0) > 0:
+                    patterns.append(pattern)
                 break  # Found a valid pattern for this start point
         
         return patterns 
@@ -852,8 +858,10 @@ class PatternRecognition:
                 "avg_valley_ratio": float(avg_valley_ratio),
                 "spacing_consistency": float(spacing_ratio)
             }
-            
-            patterns.append(pattern)
+
+            # Append only if quality_score > 0
+            if pattern.get("quality_score", 0) > 0:
+                patterns.append(pattern)
         
         return patterns
 
@@ -972,8 +980,10 @@ class PatternRecognition:
                 "avg_peak_ratio": float(avg_peak_ratio),
                 "spacing_consistency": float(spacing_ratio)
             }
-            
-            patterns.append(pattern)
+
+            # Append only if quality_score > 0
+            if pattern.get("quality_score", 0) > 0:
+                patterns.append(pattern)
         
         return patterns
 
@@ -994,9 +1004,24 @@ class PatternRecognition:
             return []
         
         patterns = []
+        processed_ranges = set()  # Track processed ranges to avoid duplicates
         
-        for start_idx in range(len(prices) - min_duration):
-            for end_idx in range(start_idx + min_duration, len(prices)):
+        # Use sliding window approach with significant steps to reduce computation
+        step_size = max(min_duration // 4, 5)  # Step by 25% of min_duration
+        max_duration = min(len(prices), min_duration * 4)  # Limit max pattern length
+        
+        for start_idx in range(0, len(prices) - min_duration, step_size):
+            for duration in range(min_duration, max_duration, step_size):
+                end_idx = start_idx + duration
+                if end_idx >= len(prices):
+                    break
+                    
+                # Skip if we've already processed a similar range
+                range_key = (start_idx // step_size, end_idx // step_size)
+                if range_key in processed_ranges:
+                    continue
+                processed_ranges.add(range_key)
+                
                 segment = prices.iloc[start_idx:end_idx + 1]
                 
                 # Find swing points in segment
@@ -1004,7 +1029,7 @@ class PatternRecognition:
                 highs = argrelextrema(segment.values, np.greater, order=order)[0]
                 lows = argrelextrema(segment.values, np.less, order=order)[0]
                 
-                if len(highs) < 2 or len(lows) < 2:
+                if len(highs) < 3 or len(lows) < 3:  # Require at least 3 points each
                     continue
                 
                 # Convert to absolute indices
@@ -1014,50 +1039,71 @@ class PatternRecognition:
                 y_lows = prices.iloc[x_lows]
                 
                 # Fit regression lines
-                if len(x_highs) >= 2 and len(x_lows) >= 2:
-                    slope_highs, _ = np.polyfit(x_highs, y_highs, 1)
-                    slope_lows, _ = np.polyfit(x_lows, y_lows, 1)
+                if len(x_highs) >= 3 and len(x_lows) >= 3:
+                    slope_highs, intercept_highs = np.polyfit(x_highs, y_highs, 1)
+                    slope_lows, intercept_lows = np.polyfit(x_lows, y_lows, 1)
                     
-                    # Detect wedge type
+                    # Calculate R-squared for line fits (quality measure)
+                    from scipy.stats import pearsonr
+                    r_highs, _ = pearsonr(x_highs, y_highs)
+                    r_lows, _ = pearsonr(x_lows, y_lows)
+                    r_squared_highs = r_highs ** 2
+                    r_squared_lows = r_lows ** 2
+                    
+                    # Require good line fits (relaxed threshold)
+                    if r_squared_highs < 0.5 or r_squared_lows < 0.5:
+                        continue
+                    
+                    # Detect wedge type with stricter criteria
                     wedge_type = None
                     quality_score = 0
                     
-                    # Rising Wedge: Both lines have positive slopes, highs slope > lows slope
-                    if slope_highs > 0 and slope_lows > 0 and slope_highs > slope_lows:
+                    # Calculate convergence point
+                    if abs(slope_highs - slope_lows) > 1e-10:  # Avoid division by zero
+                        convergence_x = (intercept_lows - intercept_highs) / (slope_highs - slope_lows)
+                        convergence_within_pattern = start_idx <= convergence_x <= end_idx * 2
+                    else:
+                        convergence_within_pattern = False
+                    
+                    # Rising Wedge: Both lines slope up, upper line steeper, lines converge
+                    if (slope_highs > 0 and slope_lows > 0 and slope_highs > slope_lows and 
+                        convergence_within_pattern):
                         wedge_type = "rising_wedge"
-                        # Check convergence
                         convergence = slope_highs - slope_lows
-                        quality_score = min(100, convergence * 1000)
+                        quality_score = min(100, (r_squared_highs + r_squared_lows) * 50 + convergence * 500)
                     
-                    # Falling Wedge: Both lines have negative slopes, highs slope > lows slope
-                    elif slope_highs < 0 and slope_lows < 0 and slope_highs > slope_lows:
+                    # Falling Wedge: Both lines slope down, lower line steeper, lines converge  
+                    elif (slope_highs < 0 and slope_lows < 0 and slope_highs > slope_lows and
+                          convergence_within_pattern):
                         wedge_type = "falling_wedge"
-                        # Check convergence
                         convergence = slope_highs - slope_lows
-                        quality_score = min(100, convergence * 1000)
+                        quality_score = min(100, (r_squared_highs + r_squared_lows) * 50 + convergence * 500)
                     
-                    if wedge_type and quality_score > 20:
+                    if wedge_type and quality_score > 40:  # Balanced quality threshold
                         # Calculate pattern metrics
                         duration = end_idx - start_idx
                         price_range = (segment.max() - segment.min()) / segment.min()
+                        
+                        # Additional validation: Check volume trend (if available)
+                        volume_confirmation = True  # Default to True if no volume data
                         
                         # Pattern completion
                         current_price = prices.iloc[-1]
                         if wedge_type == "rising_wedge":
                             # Bearish pattern - price should break below lower line
-                            lower_line_end = slope_lows * end_idx + np.polyfit(x_lows, y_lows, 1)[1]
+                            lower_line_end = slope_lows * end_idx + intercept_lows
                             completion_status = "completed" if current_price < lower_line_end else "forming"
                         else:  # falling_wedge
                             # Bullish pattern - price should break above upper line
-                            upper_line_end = slope_highs * end_idx + np.polyfit(x_highs, y_highs, 1)[1]
+                            upper_line_end = slope_highs * end_idx + intercept_highs
                             completion_status = "completed" if current_price > upper_line_end else "forming"
                         
-                        # Calculate target based on pattern height
+                        # Calculate target based on pattern height at start
                         pattern_height = segment.max() - segment.min()
                         if wedge_type == "rising_wedge":
-                            target = current_price - pattern_height
+                            target = current_price - pattern_height * 0.618  # Fibonacci retracement
                         else:
-                            target = current_price + pattern_height
+                            target = current_price + pattern_height * 0.618
                         
                         pattern = {
                             "type": wedge_type,
@@ -1068,9 +1114,14 @@ class PatternRecognition:
                             "slope_lows": float(slope_lows),
                             "convergence": float(slope_highs - slope_lows),
                             "price_range": float(price_range),
-                            "quality_score": quality_score,
+                            "quality_score": float(quality_score),
                             "completion_status": completion_status,
                             "target": float(target),
+                            "r_squared_highs": float(r_squared_highs),
+                            "r_squared_lows": float(r_squared_lows),
+                            "convergence_x": float(convergence_x) if 'convergence_x' in locals() else None,
+                            "start_price": float(segment.iloc[0]),
+                            "end_price": float(segment.iloc[-1]),
                             "swing_points": {
                                 "highs": [{"index": int(x), "price": float(prices.iloc[x])} for x in x_highs],
                                 "lows": [{"index": int(x), "price": float(prices.iloc[x])} for x in x_lows]
@@ -1079,7 +1130,44 @@ class PatternRecognition:
                         
                         patterns.append(pattern)
         
-        return patterns
+        # Post-processing: Remove overlapping patterns and keep only the best ones
+        patterns = PatternRecognition._filter_overlapping_wedge_patterns(patterns)
+        
+        # Sort by quality score and limit results
+        patterns.sort(key=lambda x: x['quality_score'], reverse=True)
+        return patterns[:10]  # Limit to top 10 patterns
+    
+    @staticmethod
+    def _filter_overlapping_wedge_patterns(patterns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove overlapping wedge patterns, keeping the highest quality ones."""
+        if not patterns:
+            return patterns
+            
+        # Sort by quality score descending
+        sorted_patterns = sorted(patterns, key=lambda x: x['quality_score'], reverse=True)
+        filtered_patterns = []
+        
+        for pattern in sorted_patterns:
+            # Check if this pattern significantly overlaps with any already selected pattern
+            is_overlapping = False
+            for selected in filtered_patterns:
+                overlap_start = max(pattern['start_index'], selected['start_index'])
+                overlap_end = min(pattern['end_index'], selected['end_index'])
+                overlap_duration = max(0, overlap_end - overlap_start)
+                
+                # Consider patterns overlapping if they share >50% of their duration
+                pattern_duration = pattern['end_index'] - pattern['start_index']
+                selected_duration = selected['end_index'] - selected['start_index']
+                min_duration = min(pattern_duration, selected_duration)
+                
+                if overlap_duration > min_duration * 0.5:
+                    is_overlapping = True
+                    break
+            
+            if not is_overlapping:
+                filtered_patterns.append(pattern)
+                
+        return filtered_patterns
 
     @staticmethod
     def detect_channel_patterns(prices: pd.Series, min_points: int = 4, min_duration: int = 15) -> List[Dict[str, Any]]:
@@ -1098,9 +1186,23 @@ class PatternRecognition:
             return []
         
         patterns = []
+        processed_ranges = set()
+
+        # Sliding window like wedges to reduce O(n^2)
+        step_size = max(min_duration // 4, 5)
+        max_duration = min(len(prices), min_duration * 4)
         
-        for start_idx in range(len(prices) - min_duration):
-            for end_idx in range(start_idx + min_duration, len(prices)):
+        for start_idx in range(0, len(prices) - min_duration, step_size):
+            for duration in range(min_duration, max_duration, step_size):
+                end_idx = start_idx + duration
+                if end_idx >= len(prices):
+                    break
+
+                range_key = (start_idx // step_size, end_idx // step_size)
+                if range_key in processed_ranges:
+                    continue
+                processed_ranges.add(range_key)
+
                 segment = prices.iloc[start_idx:end_idx + 1]
                 
                 # Find swing points in segment
@@ -1118,9 +1220,18 @@ class PatternRecognition:
                 y_lows = prices.iloc[x_lows]
                 
                 # Fit regression lines
-                if len(x_highs) >= 2 and len(x_lows) >= 2:
+                if len(x_highs) >= 3 and len(x_lows) >= 3:
                     slope_highs, intercept_highs = np.polyfit(x_highs, y_highs, 1)
                     slope_lows, intercept_lows = np.polyfit(x_lows, y_lows, 1)
+
+                    # R^2 fit quality for both boundaries
+                    from scipy.stats import pearsonr
+                    r_highs, _ = pearsonr(x_highs, y_highs)
+                    r_lows, _ = pearsonr(x_lows, y_lows)
+                    r2_highs = r_highs ** 2
+                    r2_lows = r_lows ** 2
+                    if r2_highs < 0.5 or r2_lows < 0.5:
+                        continue
                     
                     # Calculate channel characteristics
                     slope_diff = abs(slope_highs - slope_lows)
@@ -1145,22 +1256,19 @@ class PatternRecognition:
                             channel_type = "descending_channel"
                             quality_score += 20
                         
-                        # Check channel width consistency
-                        channel_widths = []
-                        for i in range(len(x_highs)):
-                            for j in range(len(x_lows)):
-                                if abs(x_highs[i] - x_lows[j]) < 5:  # Close in time
-                                    width = y_highs.iloc[i] - y_lows.iloc[j]
-                                    channel_widths.append(width)
-                        
-                        if channel_widths:
-                            width_std = np.std(channel_widths)
-                            width_mean = np.mean(channel_widths)
-                            width_cv = width_std / width_mean if width_mean > 0 else 1
-                            
-                            # Lower coefficient of variation = better quality
-                            width_quality = max(0, 40 - width_cv * 100)
-                            quality_score += width_quality
+                        # Check channel width consistency via regression lines at sampled x
+                        sample_count = 5
+                        if duration >= sample_count:
+                            xs = np.linspace(start_idx, end_idx, num=sample_count)
+                        else:
+                            xs = np.array([start_idx, (start_idx+end_idx)//2, end_idx])
+                        widths = (slope_highs * xs + intercept_highs) - (slope_lows * xs + intercept_lows)
+                        width_std = float(np.std(widths))
+                        width_mean = float(np.mean(widths))
+                        width_cv = width_std / width_mean if width_mean > 0 else 1.0
+                        # Lower coefficient of variation = better quality
+                        width_quality = max(0.0, 40.0 - width_cv * 100.0)
+                        quality_score += width_quality
                         
                         # Check for touches
                         touches = len(highs) + len(lows)
@@ -1205,15 +1313,43 @@ class PatternRecognition:
                                 "completion_status": completion_status,
                                 "target": float(target),
                                 "touches": touches,
+                                "r_squared_highs": float(r2_highs),
+                                "r_squared_lows": float(r2_lows),
                                 "swing_points": {
                                     "highs": [{"index": int(x), "price": float(prices.iloc[x])} for x in x_highs],
                                     "lows": [{"index": int(x), "price": float(prices.iloc[x])} for x in x_lows]
                                 }
                             }
-                            
-                            patterns.append(pattern)
-        
-        return patterns 
+
+                            # Append only if quality_score > 0
+                            if pattern.get("quality_score", 0) > 0:
+                                patterns.append(pattern)
+
+        # Remove overlaps and keep best
+        patterns = PatternRecognition._filter_overlapping_channel_patterns(patterns)
+        patterns.sort(key=lambda p: p.get("quality_score", 0), reverse=True)
+        return patterns[:10]
+
+    @staticmethod
+    def _filter_overlapping_channel_patterns(patterns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not patterns:
+            return patterns
+        selected: List[Dict[str, Any]] = []
+        for pat in sorted(patterns, key=lambda p: p.get("quality_score", 0), reverse=True):
+            overlap = False
+            for s in selected:
+                a1, a2 = pat["start_index"], pat["end_index"]
+                b1, b2 = s["start_index"], s["end_index"]
+                os = max(a1, b1)
+                oe = min(a2, b2)
+                odur = max(0, oe - os)
+                mdur = min(a2 - a1, b2 - b1)
+                if mdur > 0 and odur > 0.5 * mdur:
+                    overlap = True
+                    break
+            if not overlap:
+                selected.append(pat)
+        return selected
 
     @staticmethod
     def detect_candlestick_patterns(df: pd.DataFrame) -> List[Dict[str, Any]]:

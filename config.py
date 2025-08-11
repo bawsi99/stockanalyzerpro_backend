@@ -74,8 +74,8 @@ class Config:
         },
         "wedge_patterns": {
             "min_points": 6,
-            "min_duration": 20,
-            "min_quality_score": 20
+            "min_duration": 30,  # Increased for more reliable patterns
+            "min_quality_score": 40  # Balanced quality threshold
         },
         "channel_patterns": {
             "min_points": 4,

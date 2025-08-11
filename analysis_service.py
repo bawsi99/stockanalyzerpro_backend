@@ -119,37 +119,100 @@ async def startup_event():
         enhanced_sector_classifier.get_all_sectors()
         print("✅ Sector classifiers initialized")
     except Exception as e:
+        print(f"⚠️  Warning during initialization: {e}")
+
+    # Log currently active signals weighting profiles (for transparency)
+    try:
+        from signals.config import load_timeframe_weights
+        default_weights = load_timeframe_weights()
+        trending_weights = load_timeframe_weights(regime="trending")
+        ranging_weights = load_timeframe_weights(regime="ranging")
+        print(f"⚖️  Signals timeframe weights (default): {default_weights}")
+        if trending_weights:
+            print(f"⚖️  Signals timeframe weights (trending profile): {trending_weights}")
+        if ranging_weights:
+            print(f"⚖️  Signals timeframe weights (ranging profile): {ranging_weights}")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not load signals weighting profiles: {e}")
+
+    # Do not kick calibration immediately to avoid duplicate runs with the scheduler
+    if os.environ.get("ENABLE_SCHEDULED_CALIBRATION") == "1":
+        print("⏲️  Weekly calibration scheduler enabled")
+    else:
+        print("ℹ️  Scheduled calibration disabled (set ENABLE_SCHEDULED_CALIBRATION=1 to enable)")
+
+    # Start background weekly scheduler
+    async def _weekly_scheduler():
+        try:
+            await asyncio.sleep(5)
+            week_seconds = 7 * 24 * 60 * 60
+            while True:
+                try:
+                    if os.environ.get("ENABLE_SCHEDULED_CALIBRATION") == "1":
+                        result = scheduled_calibration_task()
+                        if asyncio.iscoroutine(result):
+                            await result
+                    else:
+                        print("ℹ️  Scheduled calibration disabled (set ENABLE_SCHEDULED_CALIBRATION=1 to enable)")
+                except Exception as inner_e:
+                    print("[CALIBRATION] Background weekly scheduler error:", inner_e)
+                await asyncio.sleep(week_seconds)
+        except asyncio.CancelledError:
+            return
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_weekly_scheduler())
+        print("🔁 Background weekly calibration scheduler started")
+    except Exception as e:
+        print("⚠️  Warning: Failed to start background weekly scheduler:", e)
+
+
+def scheduled_calibration_task() -> None:
+    """Weekly calibration job: generate fixtures, calibrate, and backup weights."""
+    import subprocess
+    try:
+        # Avoid any work if not explicitly enabled
+        if os.environ.get("ENABLE_SCHEDULED_CALIBRATION") != "1":
+            return
+        symbols = os.environ.get(
+            "CALIB_SYMBOLS",
+            "NIFTY_50,NIFTY_BANK,NIFTY_IT,NIFTY_PHARMA,NIFTY_AUTO,"
+            "NIFTY_FMCG,NIFTY_ENERGY,NIFTY_METAL,NIFTY_REALTY,NIFTY_MEDIA,"
+            "NIFTY_CONSUMER_DURABLES,NIFTY_HEALTHCARE,NIFTY_INFRA,NIFTY_OIL_GAS,"
+            "NIFTY_SERV_SECTOR"
+        )
+        # Write outside the watched tree to avoid reload loops
+        fixtures_out = os.environ.get(
+            "CALIB_FIXTURES_DIR",
+            os.path.join(os.path.expanduser('~'), '.traderpro', 'fixtures', 'auto')
+        )
+        os.makedirs(fixtures_out, exist_ok=True)
+        gen_cmd = [
+            'python', os.path.join(os.path.dirname(__file__), 'scripts', 'generate_fixtures.py'),
+            '--symbols', symbols,
+            '--period', '365',
+            '--interval', 'day',
+            '--horizon', '10',
+            '--bull', '0.02',
+            '--bear', '-0.02',
+            '--stride', '10',
+            '--out', fixtures_out
+        ]
+        subprocess.run(gen_cmd, check=False)
+        calib_cmd = [
+            'python', os.path.join(os.path.dirname(__file__), 'scripts', 'calibrate_all.py'),
+            fixtures_out,
+            '--weights', os.path.join(os.path.dirname(__file__), 'signals', 'weights_config.json'),
+            '--backup_dir', os.path.join(os.path.dirname(__file__), 'signals', 'weights_history')
+        ]
+        subprocess.run(calib_cmd, check=False)
+        print("✅ Scheduled calibration run completed")
+    except Exception as e:
+        print('[CALIBRATION] Scheduled calibration failed:', e)
+    except Exception as e:
         print(f"⚠️  Warning: Could not initialize sector classifiers: {e}")
     
-    # Initialize technical indicators and pattern recognition
-    try:
-        print("📊 Initializing technical analysis components...")
-        from technical_indicators import TechnicalIndicators
-        from patterns.recognition import PatternRecognition
-        from patterns.visualization import PatternVisualizer, ChartVisualizer
-        
-        # These will be initialized when first used, but we can pre-load them
-        print("✅ Technical analysis components ready")
-    except Exception as e:
-        print(f"⚠️  Warning: Could not initialize technical analysis components: {e}")
-    
-    # Initialize Gemini client
-    try:
-        print("🤖 Initializing AI analysis components...")
-        from gemini.gemini_client import GeminiClient
-        from gemini.gemini_core import GeminiCore
-        from gemini.prompt_manager import PromptManager
-        
-        # Test Gemini API key
-        gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_GEMINI_API_KEY")
-        if gemini_api_key:
-            print("✅ Gemini AI components ready")
-        else:
-            print("⚠️  Warning: Gemini API key not configured")
-    except Exception as e:
-        print(f"⚠️  Warning: Could not initialize AI components: {e}")
-    
-    print("✅ Analysis Service startup completed")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -513,38 +576,49 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         if request.output:
             chart_paths = orchestrator.create_visualizations(stock_data, indicators, request.stock, request.output)
         
-        # Get sector context
+        # Get sector context (auto-detect sector if not provided)
         sector_context = None
-        if request.sector:
+        try:
+            # Determine sector to use
+            detected_sector = None
             try:
-                # Use sector benchmarking provider directly since get_sector_context_async doesn't exist
-                from sector_benchmarking import sector_benchmarking_provider
-                
-                # Get sector benchmarking
-                sector_benchmarking = await sector_benchmarking_provider.get_comprehensive_benchmarking_async(
-                    request.stock, 
-                    stock_data
-                )
-                
-                # Get sector rotation
-                sector_rotation = await sector_benchmarking_provider.analyze_sector_rotation_async("1M")
-                
-                # Get sector correlation
-                sector_correlation = await sector_benchmarking_provider.generate_sector_correlation_matrix_async("3M")
-                
-                # Build sector context
-                sector_context = {
-                    'sector_benchmarking': sector_benchmarking,
-                    'sector_rotation': sector_rotation,
-                    'sector_correlation': sector_correlation,
-                    'sector': request.sector
-                }
-                
-                print(f"✅ Sector context generated successfully for {request.stock}")
-                
-            except Exception as e:
-                print(f"Warning: Could not get sector context: {e}")
-                sector_context = {}
+                if not request.sector:
+                    from sector_classifier import sector_classifier as _sc
+                    detected_sector = _sc.get_stock_sector(request.stock)
+            except Exception:
+                detected_sector = None
+
+            # Use sector benchmarking provider directly
+            from sector_benchmarking import sector_benchmarking_provider
+
+            # Always attempt to build sector benchmarking/rotation/correlation
+            sector_benchmarking = await sector_benchmarking_provider.get_comprehensive_benchmarking_async(
+                request.stock,
+                stock_data,
+                user_sector=request.sector  # Pass user-provided sector
+            )
+
+            sector_rotation = await sector_benchmarking_provider.analyze_sector_rotation_async("1M")
+            sector_correlation = await sector_benchmarking_provider.generate_sector_correlation_matrix_async("3M")
+
+            # Prefer explicit request.sector, then detected, then fallback from benchmarking payload
+            # Since we now pass request.sector to benchmarking, it will use the correct priority
+            sector_value = request.sector or detected_sector or (
+                (sector_benchmarking or {}).get('sector_info', {}).get('sector') if isinstance(sector_benchmarking, dict) else None
+            ) or ''
+
+            sector_context = {
+                'sector_benchmarking': sector_benchmarking,
+                'sector_rotation': sector_rotation,
+                'sector_correlation': sector_correlation,
+                'sector': sector_value
+            }
+
+            print(f"✅ Sector context generated successfully for {request.stock}")
+
+        except Exception as e:
+            print(f"Warning: Could not get sector context: {e}")
+            sector_context = {}
         
         # Get Enhanced MTF context
         mtf_context = None
@@ -604,9 +678,9 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 email=request.email
             )
 
-            # Store analysis in Supabase using simple database manager
+            # Store analysis in Supabase using simple database manager (JSON-safe)
             analysis_id = simple_db_manager.store_analysis(
-                analysis=frontend_response,
+                analysis=make_json_serializable(frontend_response),
                 user_id=resolved_user_id,
                 symbol=request.stock,
                 exchange=request.exchange,
@@ -819,7 +893,7 @@ async def sector_benchmark(request: AnalysisRequest):
             raise HTTPException(status_code=400, detail=error_msg)
         
         # Get comprehensive sector benchmarking
-        benchmarking = await sector_benchmarking_provider.get_comprehensive_benchmarking_async(request.stock, data)
+        benchmarking = await sector_benchmarking_provider.get_comprehensive_benchmarking_async(request.stock, data, user_sector=request.sector)
         
         # Make JSON serializable
         serialized_benchmarking = make_json_serializable(benchmarking)
@@ -872,7 +946,8 @@ async def sector_benchmark_async(request: AnalysisRequest):
         # Get comprehensive benchmarking with async index data
         benchmarking_results = await provider.get_comprehensive_benchmarking_async(
             request.stock, 
-            stock_data
+            stock_data,
+            user_sector=request.sector  # Pass user-provided sector
         )
         
         # Make data JSON serializable
