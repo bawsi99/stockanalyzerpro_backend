@@ -55,7 +55,7 @@ class FrontendResponseBuilder:
                     "calculation_method": "code_execution",
                     "accuracy_improvement": "high",
                     "technical_indicators": FrontendResponseBuilder._build_technical_indicators(data, indicators),
-                    "ai_analysis": FrontendResponseBuilder._build_ai_analysis(ai_analysis, data),
+                    "ai_analysis": FrontendResponseBuilder._build_ai_analysis(ai_analysis, data, interval),
                     # Deterministic signals: pass through if present; otherwise compute from indicators/MTF context
                     "signals": FrontendResponseBuilder._extract_signals(
                         ai_analysis=ai_analysis,
@@ -535,12 +535,14 @@ class FrontendResponseBuilder:
             return {}
     
     @staticmethod
-    def _build_ai_analysis(ai_analysis: dict, data: pd.DataFrame) -> dict:
+    def _build_ai_analysis(ai_analysis: dict, data: pd.DataFrame, interval: str) -> dict:
         """Build AI analysis structure."""
         try:
             trend = ai_analysis.get('trend', 'Unknown')
             confidence = ai_analysis.get('confidence_pct', 0)
             latest_price = data['close'].iloc[-1] if not data.empty else 0
+            # Infer a more appropriate trend duration from data and interval
+            inferred_duration = FrontendResponseBuilder._infer_trend_duration(data, interval)
             
             return {
                 "meta": {
@@ -554,7 +556,7 @@ class FrontendResponseBuilder:
                     "primary_trend": {
                         "direction": trend,
                         "strength": "moderate" if confidence > 60 else "weak",
-                        "duration": "short-term",
+                        "duration": inferred_duration,
                         "confidence": float(confidence),
                         "rationale": ai_analysis.get('rationale', 'Technical analysis indicates current trend')
                     },
@@ -717,6 +719,43 @@ class FrontendResponseBuilder:
             return {}
     
     @staticmethod
+    def _infer_trend_duration(data: pd.DataFrame, interval: str) -> str:
+        """Infer trend duration heuristically from price vs SMA50/200 and interval.
+
+        Returns one of: "short-term", "medium-term", "long-term".
+        """
+        try:
+            if data is None or data.empty or 'close' not in data.columns:
+                return "short-term"
+
+            closes = data['close']
+            last_close = float(closes.iloc[-1]) if len(closes) > 0 else 0.0
+            if last_close <= 0:
+                return "short-term"
+
+            sma50 = float(closes.rolling(window=50).mean().iloc[-1]) if len(closes) >= 50 else None
+            sma200 = float(closes.rolling(window=200).mean().iloc[-1]) if len(closes) >= 200 else None
+
+            intraday_aliases = {"min", "1min", "5min", "15min", "30min", "60min", "1h", "hour"}
+            intraday = interval in intraday_aliases
+            d200_thresh = 0.05 if not intraday else 0.03
+            d50_thresh = 0.03 if not intraday else 0.02
+
+            if sma200 and sma200 > 0 and sma50:
+                dist200 = abs(last_close - sma200) / sma200
+                if dist200 >= d200_thresh and sma50 > sma200:
+                    return "long-term"
+
+            if sma50 and sma50 > 0:
+                dist50 = abs(last_close - sma50) / sma50
+                if dist50 >= d50_thresh:
+                    return "medium-term"
+
+            return "short-term"
+        except Exception:
+            return "short-term"
+
+    @staticmethod
     def _build_overlays(data: pd.DataFrame, advanced_patterns: dict = None) -> dict:
         """Build overlays structure using actual pattern recognition."""
         try:
@@ -805,6 +844,122 @@ class FrontendResponseBuilder:
                 return out
 
             merged_advanced = _filter_zero_quality(merged_advanced)
+
+            # Normalize, de-duplicate and limit advanced patterns to keep UI clean
+            def _score_of(p: dict) -> float:
+                try:
+                    return float(p.get('quality_score') or p.get('completion') or p.get('confidence') or 0.0)
+                except Exception:
+                    return 0.0
+
+            def _strength_from_score(score: float) -> str:
+                if score >= 80:
+                    return 'strong'
+                if score >= 60:
+                    return 'medium'
+                return 'weak'
+
+            def _reliability_from_score(score: float) -> str:
+                if score >= 80:
+                    return 'high'
+                if score >= 60:
+                    return 'medium'
+                return 'low'
+
+            def _normalize_entry(type_key: str, p: dict) -> dict:
+                # Create a shallow copy to avoid mutating original
+                out = dict(p) if isinstance(p, dict) else {}
+                score = _score_of(out)
+                # Map common fields for frontend to avoid empty cards
+                if type_key == 'triple_tops':
+                    if out.get('target_level') is None and out.get('target') is not None:
+                        out['target_level'] = out.get('target')
+                    if out.get('stop_level') is None:
+                        # Prefer support_level if available
+                        stop = out.get('support_level')
+                        if stop is None and isinstance(out.get('neckline'), dict):
+                            stop = out['neckline'].get('level')
+                        if stop is not None:
+                            out['stop_level'] = stop
+                elif type_key == 'triple_bottoms':
+                    if out.get('target_level') is None and out.get('target') is not None:
+                        out['target_level'] = out.get('target')
+                    if out.get('stop_level') is None and out.get('resistance_level') is not None:
+                        out['stop_level'] = out.get('resistance_level')
+                elif type_key == 'channel_patterns':
+                    if out.get('target_level') is None and out.get('target') is not None:
+                        out['target_level'] = out.get('target')
+                    # stop_level is ambiguous for channels; keep absent if unknown
+                else:
+                    # For other patterns, map target if present
+                    if out.get('target_level') is None and out.get('target') is not None:
+                        out['target_level'] = out.get('target')
+
+                # Derive strength/reliability if missing
+                if 'strength' not in out:
+                    out['strength'] = _strength_from_score(score)
+                if 'reliability' not in out:
+                    out['reliability'] = _reliability_from_score(score)
+                return out
+
+            def _signature(type_key: str, p: dict) -> tuple:
+                # Build a stable signature for de-duplication per type
+                try:
+                    if type_key == 'triple_tops':
+                        sup = round(float(p.get('support_level') or 0.0), 2)
+                        tgt = round(float(p.get('target') or p.get('target_level') or 0.0), 2)
+                        # Include first/last peak indices if present
+                        peaks = p.get('peaks') or []
+                        first_idx = int((peaks[0] or {}).get('index', 0)) if peaks else 0
+                        last_idx = int((peaks[-1] or {}).get('index', 0)) if peaks else 0
+                        return (type_key, sup, tgt, first_idx, last_idx)
+                    if type_key == 'triple_bottoms':
+                        res = round(float(p.get('resistance_level') or 0.0), 2)
+                        tgt = round(float(p.get('target') or p.get('target_level') or 0.0), 2)
+                        lows = p.get('lows') or []
+                        first_idx = int((lows[0] or {}).get('index', 0)) if lows else 0
+                        last_idx = int((lows[-1] or {}).get('index', 0)) if lows else 0
+                        return (type_key, res, tgt, first_idx, last_idx)
+                    if type_key == 'channel_patterns':
+                        s = int(p.get('start_index') or 0)
+                        e = int(p.get('end_index') or 0)
+                        subtype = str(p.get('type') or '')
+                        return (type_key, subtype, s, e)
+                    # Generic fallback
+                    s = int(p.get('start_index') or 0)
+                    e = int(p.get('end_index') or 0)
+                    tgt = round(float(p.get('target') or p.get('target_level') or 0.0), 2)
+                    return (type_key, s, e, tgt)
+                except Exception:
+                    return (type_key, id(p))
+
+            def _dedupe_sort_limit(arr: list, type_key: str, k: int = 3) -> list:
+                if not isinstance(arr, list) or not arr:
+                    return []
+                normalized = [_normalize_entry(type_key, p) for p in arr if isinstance(p, dict)]
+                seen = set()
+                unique = []
+                for p in normalized:
+                    sig = _signature(type_key, p)
+                    if sig in seen:
+                        continue
+                    seen.add(sig)
+                    unique.append(p)
+                unique.sort(key=_score_of, reverse=True)
+                return unique[:k]
+
+            # Apply per-type cleanup
+            cleaned_advanced = {}
+            for key, arr in merged_advanced.items():
+                if key in (
+                    'triple_tops', 'triple_bottoms', 'channel_patterns',
+                    'wedge_patterns', 'cup_and_handle',
+                    'head_and_shoulders', 'inverse_head_and_shoulders'
+                ):
+                    cleaned_advanced[key] = _dedupe_sort_limit(arr or [], key, k=3)
+                else:
+                    cleaned_advanced[key] = arr or []
+            merged_advanced = cleaned_advanced
 
             # Ensure the structure matches frontend expectations
             return {
