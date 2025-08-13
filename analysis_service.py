@@ -42,7 +42,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-# Local imports
+# Local imports (top-level, since backend/ is added to sys.path by start scripts)
 from agent_capabilities import StockAnalysisOrchestrator
 from analysis_storage import store_analysis_in_supabase
 from sector_benchmarking import sector_benchmarking_provider
@@ -591,18 +591,34 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             # Use sector benchmarking provider directly
             from sector_benchmarking import sector_benchmarking_provider
 
-            # Always attempt to build sector benchmarking/rotation/correlation
-            sector_benchmarking = await sector_benchmarking_provider.get_comprehensive_benchmarking_async(
+            # Launch sector tasks in parallel for reduced latency
+            benchmarking_task = sector_benchmarking_provider.get_comprehensive_benchmarking_async(
                 request.stock,
                 stock_data,
-                user_sector=request.sector  # Pass user-provided sector
+                user_sector=request.sector
+            )
+            rotation_task = sector_benchmarking_provider.analyze_sector_rotation_async("1M")
+            correlation_task = sector_benchmarking_provider.generate_sector_correlation_matrix_async("3M")
+
+            sector_benchmarking, sector_rotation, sector_correlation = await asyncio.gather(
+                benchmarking_task,
+                rotation_task,
+                correlation_task,
+                return_exceptions=True,
             )
 
-            sector_rotation = await sector_benchmarking_provider.analyze_sector_rotation_async("1M")
-            sector_correlation = await sector_benchmarking_provider.generate_sector_correlation_matrix_async("3M")
+            # Robust fallback handling
+            if isinstance(sector_benchmarking, Exception):
+                print(f"Warning: sector_benchmarking failed: {sector_benchmarking}")
+                sector_benchmarking = {}
+            if isinstance(sector_rotation, Exception):
+                print(f"Warning: sector_rotation failed: {sector_rotation}")
+                sector_rotation = None
+            if isinstance(sector_correlation, Exception):
+                print(f"Warning: sector_correlation failed: {sector_correlation}")
+                sector_correlation = None
 
             # Prefer explicit request.sector, then detected, then fallback from benchmarking payload
-            # Since we now pass request.sector to benchmarking, it will use the correct priority
             sector_value = request.sector or detected_sector or (
                 (sector_benchmarking or {}).get('sector_info', {}).get('sector') if isinstance(sector_benchmarking, dict) else None
             ) or ''
@@ -624,20 +640,20 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         mtf_context = None
         try:
             from enhanced_mtf_analysis import enhanced_mtf_analyzer
-            
-            # Perform comprehensive multi-timeframe analysis
+
+            # Perform comprehensive multi-timeframe analysis in parallel with sector tasks already done
             mtf_results = await enhanced_mtf_analyzer.comprehensive_mtf_analysis(
                 symbol=request.stock,
                 exchange=request.exchange
             )
-            
+
             if mtf_results.get('success', False):
                 mtf_context = mtf_results
                 print(f"✅ Enhanced MTF analysis generated successfully for {request.stock}")
             else:
                 print(f"Warning: Enhanced MTF analysis failed: {mtf_results.get('error', 'Unknown error')}")
                 mtf_context = {}
-                
+
         except Exception as e:
             print(f"Warning: Could not get Enhanced MTF context: {e}")
             mtf_context = {}

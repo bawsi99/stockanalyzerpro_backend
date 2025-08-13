@@ -8,8 +8,8 @@ import logging
 from datetime import datetime
 from typing import Dict, Any
 import pandas as pd
-from .volume_profile import calculate_volume_profile, identify_significant_levels
-from .market_regime import detect_market_regime
+from volume_profile import calculate_volume_profile, identify_significant_levels
+from market_regime import detect_market_regime
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +25,20 @@ class FrontendResponseBuilder:
         Build the exact response structure that the frontend expects.
         """
         try:
+            # Normalize/guard input data
+            from utils import ensure_ohlcv_dataframe, interval_to_frontend_display
+            try:
+                data = ensure_ohlcv_dataframe(data)
+            except Exception:
+                pass
+
             # Get latest price and basic info
             latest_price = data['close'].iloc[-1] if not data.empty else 0
             price_change = data['close'].iloc[-1] - data['close'].iloc[-2] if len(data) > 1 else 0
             price_change_pct = (price_change / data['close'].iloc[-2]) * 100 if len(data) > 1 and data['close'].iloc[-2] != 0 else 0
             
-            # Convert interval format for frontend
-            interval_map = {'day': '1D', 'week': '1W', 'month': '1M'}
-            frontend_interval = interval_map.get(interval, interval)
+            # Convert interval format for frontend display
+            frontend_interval = interval_to_frontend_display(interval)
             
             # Build basic response structure
             result = {
@@ -77,7 +83,13 @@ class FrontendResponseBuilder:
                         "scenario_analysis_metrics": advanced_analysis.get("scenario_analysis", {})
                     },
                     "charts": chart_paths,
-                    "overlays": FrontendResponseBuilder._build_overlays(data, advanced_analysis.get("advanced_patterns", {})),
+                    "overlays": FrontendResponseBuilder._build_overlays(
+                        data,
+                        advanced_analysis.get("advanced_patterns", {}),
+                        symbol=symbol,
+                        exchange=exchange,
+                        interval=interval,
+                    ),
                     # Derive risk level and recommendation from AI analysis to match legacy behavior
                     "risk_level": (lambda conf: (
                         'Low' if conf >= 80 else 'Medium' if conf >= 60 else 'High' if conf >= 40 else 'Very High'
@@ -778,7 +790,7 @@ class FrontendResponseBuilder:
             return "short-term"
 
     @staticmethod
-    def _build_overlays(data: pd.DataFrame, advanced_patterns: dict = None) -> dict:
+    def _build_overlays(data: pd.DataFrame, advanced_patterns: dict = None, symbol: str = "", exchange: str = "NSE", interval: str = "day") -> dict:
         """Build overlays structure using actual pattern recognition."""
         try:
             # Early fallback for insufficient data to avoid index errors downstream
@@ -808,7 +820,7 @@ class FrontendResponseBuilder:
 
             # Import the orchestrator to use its pattern recognition
             from agent_capabilities import StockAnalysisOrchestrator
-            from .bayesian_scorer import BayesianPatternScorer
+            from bayesian_scorer import BayesianPatternScorer
             
             # Create orchestrator instance
             orchestrator = StockAnalysisOrchestrator()
@@ -818,7 +830,28 @@ class FrontendResponseBuilder:
             # that could prematurely trigger the fallback path (returning empty
             # pattern lists). The _create_overlays method internally performs
             # all required computations for pattern detection.
-            overlays = orchestrator._create_overlays(data, {})
+            # Prefer precomputed patterns from central cache if available to avoid recomputation
+            cached_patterns = None
+            if symbol:
+                try:
+                    from central_data_provider import central_data_provider
+                    cached_patterns = central_data_provider.get_patterns(symbol=symbol, exchange=exchange, interval=interval, data=data)
+                except Exception:
+                    cached_patterns = None
+
+            if isinstance(cached_patterns, dict) and cached_patterns:
+                overlays = {
+                    "triangles": cached_patterns.get("triangles", []),
+                    "flags": cached_patterns.get("flags", []),
+                    "support_resistance": cached_patterns.get("support_resistance", {"support": [], "resistance": []}),
+                    "double_tops": cached_patterns.get("double_tops", []),
+                    "double_bottoms": cached_patterns.get("double_bottoms", []),
+                    "divergences": cached_patterns.get("divergences", []),
+                    "volume_anomalies": cached_patterns.get("volume_anomalies", []),
+                    "advanced_patterns": cached_patterns.get("advanced_patterns", {}),
+                }
+            else:
+                overlays = orchestrator._create_overlays(data, {})
 
             # Prefer orchestrator-detected advanced patterns; merge in any external ones (from advanced_analysis)
             backend_adv = overlays.get("advanced_patterns", {}) or {}
@@ -948,7 +981,7 @@ class FrontendResponseBuilder:
                     out['reliability'] = _reliability_from_score(score)
                 # Compute risk metrics when possible
                 try:
-                    from .risk_scoring import calculate_risk_score, extract_reward_risk
+                    from risk_scoring import calculate_risk_score, extract_reward_risk
                     current_price = float(data['close'].iloc[-1]) if not data.empty else 0.0
                     rr, _risk_abs = extract_reward_risk(out, current_price)
                     # Approximate volatility from Bollinger bandwidth or ADX if present

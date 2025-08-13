@@ -16,7 +16,7 @@ Step 3: Identify any truly missing, ambiguous, or contradictory data. If any, me
 Step 4: For each recommendation (entry, stop, targets), provide a brief rationale, referencing indicators and chart patterns.
 Step 5: Use all available data, and highlight any contradictions or uncertainties.
 Step 6: Focus on technical patterns and indicators for your analysis.
-step 7: Use python for making any calculations, comparing values
+step 7: You may use python for making calculations and comparisons, but you MUST still return the final JSON as plain text in the model's response body; do not rely on printing from code execution or tool outputs.
 Step 8: CRITICAL: Output ONLY a valid JSON object with the following schema. NO PROSE, NO NARRATIVE TEXT, NO EXPLANATIONS OUTSIDE THE JSON. The response must be parseable JSON.
 
 {{
@@ -59,3 +59,5 @@ CRITICAL REQUIREMENTS:
 - The chart insights are for reference - incorporate their key findings into your JSON rationale fields
 - DO NOT flag current price as missing data - it's normal market timing behavior 
 - Do Not mention any technical issues, words like 'JSON' in the final json.
+ - If you run code/tools, you must include the final JSON as the response's text content (not only as tool output). Do not emit code or tool outputs; return the JSON directly as plain text.
+ - Do not wrap the JSON in code fences; return raw JSON text only.

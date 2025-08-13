@@ -14,6 +14,8 @@ import time
 import asyncio
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor
+import tempfile
+from threading import RLock
 
 
 # Set up logging
@@ -42,6 +44,7 @@ class CacheManager:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
         self.metadata_file = self.cache_dir / "cache_metadata.json"
+        self._lock = RLock()
         self.metadata = self._load_metadata()
     
     def _load_metadata(self) -> Dict:
@@ -57,8 +60,16 @@ class CacheManager:
     def _save_metadata(self):
         """Save cache metadata to file."""
         try:
-            with open(self.metadata_file, 'w') as f:
-                json.dump(self.metadata, f)
+            with self._lock:
+                # Take a snapshot to avoid 'dictionary changed size during iteration'
+                metadata_copy = dict(self.metadata)
+                # Write atomically via temp file and replace
+                with tempfile.NamedTemporaryFile('w', delete=False, dir=str(self.cache_dir)) as tmp_file:
+                    json.dump(metadata_copy, tmp_file)
+                    tmp_file.flush()
+                    os.fsync(tmp_file.fileno())
+                    temp_path = tmp_file.name
+                os.replace(temp_path, str(self.metadata_file))
         except Exception as e:
             logger.error(f"Error saving cache metadata: {e}")
     
@@ -77,7 +88,9 @@ class CacheManager:
         cache_key = self._generate_cache_key(symbol, exchange, interval, from_date, to_date)
         cache_file = self.cache_dir / f"{cache_key}.csv"
         
-        if cache_key in self.metadata and cache_file.exists():
+        with self._lock:
+            key_present = cache_key in self.metadata
+        if key_present and cache_file.exists():
             try:
                 data = pd.read_csv(cache_file, parse_dates=['date'])
                 data.set_index('date', inplace=True)
@@ -98,15 +111,16 @@ class CacheManager:
         
         try:
             data.to_csv(cache_file)
-            self.metadata[cache_key] = {
-                'symbol': symbol,
-                'exchange': exchange,
-                'interval': interval,
-                'from_date': from_date.isoformat(),
-                'to_date': to_date.isoformat(),
-                'cached_at': datetime.now().isoformat()
-            }
-            self._save_metadata()
+            with self._lock:
+                self.metadata[cache_key] = {
+                    'symbol': symbol,
+                    'exchange': exchange,
+                    'interval': interval,
+                    'from_date': from_date.isoformat(),
+                    'to_date': to_date.isoformat(),
+                    'cached_at': datetime.now().isoformat()
+                }
+                self._save_metadata()
         except Exception as e:
             logger.error(f"Error caching data: {e}")
     
@@ -139,17 +153,36 @@ def auto_refresh_token(func):
 class ZerodhaDataClient:
     """
     Client for fetching data from Zerodha API with async support.
+    Implements singleton pattern to ensure only one instance exists.
     """
+    
+    _instance = None
+    
+    def __new__(cls, *args, **kwargs):
+        """Implement singleton pattern to prevent multiple sessions."""
+        if cls._instance is None:
+            cls._instance = super(ZerodhaDataClient, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
     
     def __init__(self, api_key: str = None, api_secret: str = None, access_token: str = None):
         """
         Initialize the Zerodha client with authentication credentials.
         Always read the latest access and request tokens from .env.
         """
+        # Skip initialization if already initialized (singleton pattern)
+        if hasattr(self, '_initialized') and self._initialized:
+            logger.info("ZerodhaDataClient already initialized - reusing instance")
+            return
+            
         self.api_key = api_key or get_env_value("ZERODHA_API_KEY")
         self.api_secret = api_secret or get_env_value("ZERODHA_API_SECRET")
         self.access_token = access_token or get_env_value("ZERODHA_ACCESS_TOKEN")
         self.request_token = get_env_value("ZERODHA_REQUEST_TOKEN")
+        
+        # Mark as initialized
+        self._initialized = True
+        logger.info("ZerodhaDataClient initialized with new session")
 
         # Initialize KiteConnect client
         self.kite = KiteConnect(api_key=self.api_key)

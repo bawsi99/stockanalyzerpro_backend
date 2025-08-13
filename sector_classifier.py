@@ -56,7 +56,17 @@ class SectorClassifier:
     """
     Classifies stocks into sectors and provides sector-specific index mappings.
     Now reads sector data from JSON files in the sector_category folder.
+    Implements singleton pattern for optimization.
     """
+    
+    _instance = None
+    
+    def __new__(cls, *args, **kwargs):
+        """Implement singleton pattern to prevent duplicate data loading."""
+        if cls._instance is None:
+            cls._instance = super(SectorClassifier, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
     
     def __init__(self, sector_folder: str = "sector_category"):
         """
@@ -65,6 +75,10 @@ class SectorClassifier:
         Args:
             sector_folder: Path to the folder containing sector JSON files
         """
+        # Skip initialization if already initialized (singleton pattern)
+        if hasattr(self, '_initialized') and self._initialized:
+            return
+            
         self.sector_folder = Path(sector_folder)
         self.sector_mappings = {}
         self.stock_to_sector = {}
@@ -75,6 +89,9 @@ class SectorClassifier:
         
         # Create reverse mapping for quick lookup
         self._build_stock_to_sector_mapping()
+        
+        # Mark as initialized
+        self._initialized = True
     
     def _load_sector_data(self):
         """Load sector data from all JSON files in the sector folder."""

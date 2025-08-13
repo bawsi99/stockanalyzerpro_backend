@@ -9,7 +9,7 @@ try:
 except Exception:  # pragma: no cover - optional
     HAS_SKLEARN = False
 
-from .pattern_database import PatternDatabase, PatternRecord
+from pattern_database import PatternDatabase, PatternRecord
 
 logger = logging.getLogger(__name__)
 

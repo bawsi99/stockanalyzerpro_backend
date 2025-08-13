@@ -25,6 +25,7 @@ class MarketStatus(Enum):
     HOLIDAY = "holiday"
 from zerodha_client import ZerodhaDataClient
 from zerodha_ws_client import zerodha_ws_client
+from utils import normalize_interval, ensure_ohlcv_dataframe
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +96,11 @@ class EnhancedDataService:
             "market_always_open": True
         }
         
+        # Normalize interval for consistency across the stack
+        normalized_interval = normalize_interval(request.interval)
+
         # Check cache first
-        cache_key = f"{request.symbol}_{request.exchange}_{request.interval}_{request.period}"
+        cache_key = f"{request.symbol}_{request.exchange}_{normalized_interval}_{request.period}"
         if cache_key in self.data_cache:
             cached_data, metadata = self.data_cache[cache_key]
             if self._is_cache_valid(metadata, strategy["cache_duration"]):
@@ -114,15 +118,15 @@ class EnhancedDataService:
         # Determine data source based on strategy
         # For analysis purposes, we need historical data unless specifically requesting live data
         if request.force_live:
-            data, source = await self._get_live_data(request)
+            data, source = await self._get_live_data(request, normalized_interval)
         else:
             # Always prefer historical data for analysis - live quotes are insufficient for risk calculations
-            data, source = await self._get_historical_data(request)
+            data, source = await self._get_historical_data(request, normalized_interval)
             
             # Only fallback to live data if historical data completely fails
             if data is None or data.empty:
                 logger.warning(f"Historical data failed for {request.symbol}, falling back to live data")
-                data, source = await self._get_live_data(request)
+                data, source = await self._get_live_data(request, normalized_interval)
         
         if data is None or data.empty:
             logger.error(f"Failed to get data for {request.symbol}")
@@ -139,6 +143,12 @@ class EnhancedDataService:
         cost = 0.0  # Continuous flow mode - no cost tracking
         self.total_cost += cost
         
+        # Normalize dataframe to canonical OHLCV schema
+        try:
+            data = ensure_ohlcv_dataframe(data)
+        except Exception:
+            pass
+
         # Create response
         response = DataResponse(
             data=data,
@@ -155,23 +165,27 @@ class EnhancedDataService:
         
         return response
     
-    async def _get_live_data(self, request: DataRequest) -> Tuple[Optional[pd.DataFrame], str]:
+    async def _get_live_data(self, request: DataRequest, normalized_interval: str) -> Tuple[Optional[pd.DataFrame], str]:
         """Get live data from WebSocket or real-time API."""
         try:
             # Get token for the symbol
             token = await self.zerodha_client.get_instrument_token_async(request.symbol, request.exchange)
             if token is None:
                 logger.warning(f"Token not found for {request.symbol}, falling back to historical")
-                return await self._get_historical_data(request)
+                return await self._get_historical_data(request, normalized_interval)
             
             # Check if we have recent WebSocket data
-            if request.interval in ["1m", "5m", "15m"]:
-                candle = zerodha_ws_client.get_latest_candle(token, request.interval)
+            if normalized_interval in ["1m", "5m", "15m"]:
+                candle = zerodha_ws_client.get_latest_candle(token, normalized_interval)
                 if candle:
                     # Convert to DataFrame
                     df = pd.DataFrame([candle])
                     df['datetime'] = pd.to_datetime(df['start'], unit='s')
                     df = df.set_index('datetime')
+                    try:
+                        df = ensure_ohlcv_dataframe(df)
+                    except Exception:
+                        pass
                     return df, "websocket"
             
             # Fallback to real-time quote
@@ -186,6 +200,10 @@ class EnhancedDataService:
                     'volume': quote.get('volume', 0)
                 }])
                 df.index = [datetime.now()]
+                try:
+                    df = ensure_ohlcv_dataframe(df)
+                except Exception:
+                    pass
                 return df, "realtime_quote"
             
         except Exception as e:
@@ -193,7 +211,7 @@ class EnhancedDataService:
         
         return None, "error"
     
-    async def _get_historical_data(self, request: DataRequest) -> Tuple[Optional[pd.DataFrame], str]:
+    async def _get_historical_data(self, request: DataRequest, normalized_interval: str) -> Tuple[Optional[pd.DataFrame], str]:
         """Get historical data from Zerodha API."""
         try:
             # Map interval format to Zerodha format
@@ -202,10 +220,10 @@ class EnhancedDataService:
                 "5m": "5minute", 
                 "15m": "15minute",
                 "1h": "60minute",
-                "1d": "day"
+                "day": "day"
             }
             
-            zerodha_interval = interval_mapping.get(request.interval, request.interval)
+            zerodha_interval = interval_mapping.get(normalized_interval, normalized_interval)
             
             data = await self.zerodha_client.get_historical_data_async(
                 symbol=request.symbol,
@@ -215,6 +233,10 @@ class EnhancedDataService:
             )
             
             if data is not None and not data.empty:
+                try:
+                    data = ensure_ohlcv_dataframe(data)
+                except Exception:
+                    pass
                 return data, "historical_api"
             
         except Exception as e:

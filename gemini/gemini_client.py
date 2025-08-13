@@ -557,7 +557,7 @@ JSON:
             print(f"Error determining entry strategy: {e}")
             return "breakout"
 
-    async def analyze_stock_with_enhanced_calculations(self, symbol, indicators, chart_paths, period, interval, knowledge_context=""):
+    async def analyze_stock_with_enhanced_calculations(self, symbol, indicators, chart_paths, period, interval, knowledge_context="", exchange: str = "NSE"):
         """
         Enhanced version of analyze_stock with comprehensive mathematical validation.
         """
@@ -656,6 +656,31 @@ JSON:
             aux_tasks.append(("risk_synthesis", self.synthesize_risk_summary(parsed_adv)))
         if has_sector:
             aux_tasks.append(("sector_synthesis", self.synthesize_sector_summary(knowledge_context)))
+        
+        # Add pattern detection as a parallel task
+        try:
+            from .parallel_pattern_detection import parallel_pattern_detection
+            # Fetch stock data for pattern detection via central data provider (non-blocking)
+            stock_data_for_patterns = None
+            try:
+                from central_data_provider import central_data_provider
+                stock_data_for_patterns = await central_data_provider.get_stock_data_async(
+                    symbol=symbol,
+                    exchange=exchange,
+                    interval=interval,
+                    period=period,
+                )
+            except Exception as e_fetch:
+                print(f"[ASYNC-OPTIMIZED-ENHANCED] Warning: could not fetch stock data for pattern detection: {e_fetch}")
+
+            if stock_data_for_patterns is not None and not getattr(stock_data_for_patterns, 'empty', True):
+                pattern_task = parallel_pattern_detection.detect_patterns_async(stock_data_for_patterns)
+                aux_tasks.append(("pattern_detection", pattern_task))
+                print("[ASYNC-OPTIMIZED-ENHANCED] Added pattern_detection task")
+            else:
+                print("[ASYNC-OPTIMIZED-ENHANCED] Skipping pattern_detection task due to missing data")
+        except Exception as e:
+            print(f"[ASYNC-OPTIMIZED-ENHANCED] Error adding pattern detection task: {e}")
 
         # EXECUTE ALL INDEPENDENT TASKS IN PARALLEL
         total_independent = 1 + len(chart_analysis_tasks) + len(aux_tasks)
@@ -702,6 +727,14 @@ JSON:
         
         # Combine indicator task with chart tasks and auxiliary synthesis tasks
         all_tasks = [indicator_task] + [task for _, task in chart_analysis_tasks] + [task for _, task in aux_tasks]
+        
+        # Create a mapping of tasks to their names for result processing
+        task_to_name = {}
+        task_to_name[indicator_task] = "indicator_summary"
+        for name, task in chart_analysis_tasks:
+            task_to_name[task] = name
+        for name, task in aux_tasks:
+            task_to_name[task] = name
         
         # Log that we're about to gather all tasks
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Sending all {len(all_tasks)} tasks to asyncio.gather() at: {time.strftime('%H:%M:%S.%f')[:-3]}")

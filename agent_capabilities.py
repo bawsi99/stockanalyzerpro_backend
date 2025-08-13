@@ -398,10 +398,19 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             enhanced_knowledge_context = enhanced_knowledge_context + "\n" + mtf_context_str
         
         # Pass MTF context to the LLM analysis
-        result, ind_summary_md, chart_insights_md = await self.orchestrate_llm_analysis_with_mtf(symbol, indicators, chart_paths, period, interval, enhanced_knowledge_context, mtf_context)
+            result, ind_summary_md, chart_insights_md = await self.orchestrate_llm_analysis_with_mtf(
+                symbol,
+                indicators,
+                chart_paths,
+                period,
+                interval,
+                enhanced_knowledge_context,
+                mtf_context,
+                exchange,
+            )
         return result, ind_summary_md, chart_insights_md
 
-    async def orchestrate_llm_analysis_with_mtf(self, symbol: str, indicators: dict, chart_paths: dict, period: int, interval: str, knowledge_context: str = "", mtf_context: dict = None) -> tuple:
+    async def orchestrate_llm_analysis_with_mtf(self, symbol: str, indicators: dict, chart_paths: dict, period: int, interval: str, knowledge_context: str = "", mtf_context: dict = None, exchange: str = "NSE") -> tuple:
         """Orchestrate the LLM analysis workflow with MTF context integration."""
         try:
             # Initialize token tracker
@@ -418,7 +427,13 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             # 2. Chart analysis (already optimized for MTF)
             print(f"[LLM-ANALYSIS] Starting enhanced chart analysis for {symbol}...")
             result, ind_summary_md, chart_insights_md = await self.gemini_client.analyze_stock_with_enhanced_calculations(
-                symbol, indicators, chart_paths, period, interval, knowledge_context
+                symbol=symbol,
+                indicators=indicators,
+                chart_paths=chart_paths,
+                period=period,
+                interval=interval,
+                knowledge_context=knowledge_context,
+                exchange=exchange,
             )
             
             return result, ind_summary_md, chart_insights_md
@@ -967,7 +982,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             # Combine knowledge context with sector context
             enhanced_knowledge_context = knowledge_context
             if sector_context:
-                enhanced_knowledge_context += f"\n\nSector Context:\n{json.dumps(sector_context, indent=2)}"
+                from utils import clean_for_json
+                enhanced_knowledge_context += f"\n\nSector Context:\n{json.dumps(clean_for_json(sector_context), indent=2)}"
             
             # Prepare compact deterministic signals JSON for context (multi-timeframe when available)
             try:
@@ -1059,9 +1075,11 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             # Build supplemental context blocks
             supplemental_blocks: list[str] = []
             if compact_signals:
-                supplemental_blocks.append("DeterministicSignals:\n" + json.dumps(compact_signals))
+                from utils import clean_for_json
+                supplemental_blocks.append("DeterministicSignals:\n" + json.dumps(clean_for_json(compact_signals)))
             if isinstance(mtf_context, dict) and mtf_context:
-                supplemental_blocks.append("MultiTimeframeContext:\n" + json.dumps(mtf_context))
+                from utils import clean_for_json
+                supplemental_blocks.append("MultiTimeframeContext:\n" + json.dumps(clean_for_json(mtf_context)))
             if isinstance(advanced_analysis, dict) and advanced_analysis:
                 # Keep concise: include only top-level risk/stress summaries
                 adv_digest = {
@@ -1072,7 +1090,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                         if k in ("best_case", "worst_case", "overall_confidence")
                     }
                 }
-                supplemental_blocks.append("AdvancedAnalysisDigest:\n" + json.dumps(adv_digest))
+                from utils import clean_for_json
+                supplemental_blocks.append("AdvancedAnalysisDigest:\n" + json.dumps(clean_for_json(adv_digest)))
 
             # Use enhanced analysis with code execution
             ai_analysis, indicator_summary, chart_insights = await self.gemini_client.analyze_stock_with_enhanced_calculations(
@@ -1441,6 +1460,22 @@ if __name__ == "__main__":
             
             # Create overlays for visualization
             overlays = self._create_overlays(stock_data, state.indicators)
+            # Store detected patterns into central cache for reuse by frontend builder or later stages
+            try:
+                from central_data_provider import central_data_provider
+                patterns_payload = {
+                    "triangles": overlays.get("triangles", []),
+                    "flags": overlays.get("flags", []),
+                    "support_resistance": overlays.get("support_resistance", {}),
+                    "double_tops": overlays.get("double_tops", []),
+                    "double_bottoms": overlays.get("double_bottoms", []),
+                    "divergences": overlays.get("divergences", []),
+                    "volume_anomalies": overlays.get("volume_anomalies", []),
+                    "advanced_patterns": overlays.get("advanced_patterns", {}),
+                }
+                central_data_provider.set_patterns_cache(symbol, exchange, interval, patterns_payload)
+            except Exception:
+                pass
             
             # Build optimized analysis results with enhanced MTF data
             analysis_results = self.build_optimized_analysis_result(
