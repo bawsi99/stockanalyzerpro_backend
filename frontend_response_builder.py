@@ -8,6 +8,8 @@ import logging
 from datetime import datetime
 from typing import Dict, Any
 import pandas as pd
+from .volume_profile import calculate_volume_profile, identify_significant_levels
+from .market_regime import detect_market_regime
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +109,27 @@ class FrontendResponseBuilder:
                     "trading_guidance": {}
                 }
             }
-            
+            # Augment with market regime and volume-based S/R (safe fallbacks)
+            try:
+                market_regime = detect_market_regime(data)
+            except Exception as _e:
+                logger.warning(f"market_regime detection failed: {_e}")
+                market_regime = "unknown"
+
+            try:
+                vp = calculate_volume_profile(data)
+                support_levels, resistance_levels = identify_significant_levels(vp, float(latest_price))
+                volume_profile_analysis = {
+                    "support": [{"price": float(p), "strength": "high"} for p in (support_levels[:3] if support_levels else [])],
+                    "resistance": [{"price": float(p), "strength": "high"} for p in (resistance_levels[:3] if resistance_levels else [])],
+                }
+            except Exception as _e:
+                logger.warning(f"volume_profile analysis failed: {_e}")
+                volume_profile_analysis = {"support": [], "resistance": []}
+
+            result["results"]["market_regime"] = market_regime
+            result["results"]["volume_profile_analysis"] = volume_profile_analysis
+
             return result
             
         except Exception as e:
@@ -786,6 +808,7 @@ class FrontendResponseBuilder:
 
             # Import the orchestrator to use its pattern recognition
             from agent_capabilities import StockAnalysisOrchestrator
+            from .bayesian_scorer import BayesianPatternScorer
             
             # Create orchestrator instance
             orchestrator = StockAnalysisOrchestrator()
@@ -846,11 +869,31 @@ class FrontendResponseBuilder:
             merged_advanced = _filter_zero_quality(merged_advanced)
 
             # Normalize, de-duplicate and limit advanced patterns to keep UI clean
+            # Bayesian scorer singleton (lazy init)
+            scorer = getattr(FrontendResponseBuilder, "_pattern_scorer", None)
+            if scorer is None:
+                scorer = BayesianPatternScorer()
+                setattr(FrontendResponseBuilder, "_pattern_scorer", scorer)
+
             def _score_of(p: dict) -> float:
+                # Replace raw heuristic with probabilistic success estimate
                 try:
-                    return float(p.get('quality_score') or p.get('completion') or p.get('confidence') or 0.0)
+                    pattern_type = (
+                        str(p.get('pattern_type'))
+                        or str(p.get('type'))
+                        or "unknown"
+                    )
+                    features = {
+                        'duration': float(p.get('duration') or p.get('length') or 0.0),
+                        'volume_ratio': float(p.get('volume_ratio') or 1.0),
+                        'trend_alignment': float(p.get('trend_alignment') or 0.0),
+                        'completion': float(p.get('completion') or p.get('quality_score') or p.get('confidence') or 0.0),
+                    }
+                    proba = scorer.predict_probability(pattern_type, features)
+                    # Convert probability [0,1] -> score [0,100]
+                    return float(max(0.0, min(1.0, proba)) * 100.0)
                 except Exception:
-                    return 0.0
+                    return 50.0
 
             def _strength_from_score(score: float) -> str:
                 if score >= 80:
@@ -870,6 +913,9 @@ class FrontendResponseBuilder:
                 # Create a shallow copy to avoid mutating original
                 out = dict(p) if isinstance(p, dict) else {}
                 score = _score_of(out)
+                # Keep probability (0-100) for frontend; store also as 0-1
+                out['probability'] = float(score)
+                out['probability_fraction'] = float(score) / 100.0
                 # Map common fields for frontend to avoid empty cards
                 if type_key == 'triple_tops':
                     if out.get('target_level') is None and out.get('target') is not None:
@@ -900,6 +946,26 @@ class FrontendResponseBuilder:
                     out['strength'] = _strength_from_score(score)
                 if 'reliability' not in out:
                     out['reliability'] = _reliability_from_score(score)
+                # Compute risk metrics when possible
+                try:
+                    from .risk_scoring import calculate_risk_score, extract_reward_risk
+                    current_price = float(data['close'].iloc[-1]) if not data.empty else 0.0
+                    rr, _risk_abs = extract_reward_risk(out, current_price)
+                    # Approximate volatility from Bollinger bandwidth or ADX if present
+                    vol_proxy = 0.1
+                    try:
+                        bb = (FrontendResponseBuilder._build_technical_indicators(data, {}) or {}).get('bollinger_bands', {})
+                        vol_proxy = float(bb.get('bandwidth', vol_proxy))
+                    except Exception:
+                        pass
+                    risk_payload = calculate_risk_score(
+                        probability=out['probability_fraction'],
+                        reward_risk_ratio=rr,
+                        volatility=vol_proxy,
+                    )
+                    out['risk_metrics'] = risk_payload
+                except Exception:
+                    pass
                 return out
 
             def _signature(type_key: str, p: dict) -> tuple:
