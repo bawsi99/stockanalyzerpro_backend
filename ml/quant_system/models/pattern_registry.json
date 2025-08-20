@@ -1,0 +1,16 @@
+{
+  "model_path": "/Users/aaryanmanawat/Aaryan/StockAnalyzer Pro/version3.0/3.0/backend/ml/quant_system/ml/../models/pattern_catboost.joblib",
+  "trained_at": "2025-08-18T16:51:30.137211",
+  "metrics": {
+    "brier": 0.20784382335931706,
+    "logloss": 2.006662494587204,
+    "n_samples": 2985
+  },
+  "feature_schema": {
+    "duration": "numeric",
+    "volume_ratio": "numeric",
+    "trend_alignment": "numeric",
+    "completion": "numeric",
+    "pattern_type": "categorical"
+  }
+}

@@ -66,21 +66,31 @@ class ParallelPatternDetection:
             logger.debug(f"Head and Shoulders patterns detected: {len(hs_patterns)}")
             advanced_patterns["head_and_shoulders"] = []
             for pattern in hs_patterns:
-                if pattern.get("head_idx") is not None:
+                if pattern.get("head") is not None:
+                    # Extract indices from the nested structure
+                    left_shoulder_idx = pattern["left_shoulder"]["index"]
+                    head_idx = pattern["head"]["index"]
+                    right_shoulder_idx = pattern["right_shoulder"]["index"]
+                    neckline_idx = pattern["neckline"]["index"]
+                    
+                    # Calculate start and end indices
+                    start_idx = min(left_shoulder_idx, head_idx, right_shoulder_idx)
+                    end_idx = max(left_shoulder_idx, head_idx, right_shoulder_idx)
+                    
                     advanced_patterns["head_and_shoulders"].append({
                         "pattern_type": "head_and_shoulders",
-                        "start_index": pattern["start_idx"],
-                        "end_index": pattern["end_idx"],
-                        "head_index": pattern["head_idx"],
-                        "left_shoulder_index": pattern["left_shoulder_idx"],
-                        "right_shoulder_index": pattern["right_shoulder_idx"],
+                        "start_index": start_idx,
+                        "end_index": end_idx,
+                        "head_index": head_idx,
+                        "left_shoulder_index": left_shoulder_idx,
+                        "right_shoulder_index": right_shoulder_idx,
                         "neckline": {
-                            "level": float(pattern["neckline_value"])
+                            "level": float(pattern["neckline"]["level"])
                         },
                         "target": float(pattern.get("target", 0.0)),
-                        "completion": float(pattern.get("completion", 0.0)),
+                        "completion": float(pattern.get("completion_status", 0.0) == "completed"),
                         "quality_score": float(pattern.get("quality_score", 0.0)),
-                        "confidence": float(pattern.get("confidence", 0.0))
+                        "confidence": float(pattern.get("quality_score", 0.0) / 100.0)  # Convert quality score to confidence
                     })
             
             # Inverse Head and Shoulders patterns
@@ -88,21 +98,31 @@ class ParallelPatternDetection:
             logger.debug(f"Inverse Head and Shoulders patterns detected: {len(ihs_patterns)}")
             advanced_patterns["inverse_head_and_shoulders"] = []
             for pattern in ihs_patterns:
-                if pattern.get("head_idx") is not None:
+                if pattern.get("head") is not None:
+                    # Extract indices from the nested structure
+                    left_shoulder_idx = pattern["left_shoulder"]["index"]
+                    head_idx = pattern["head"]["index"]
+                    right_shoulder_idx = pattern["right_shoulder"]["index"]
+                    neckline_idx = pattern["neckline"]["index"]
+                    
+                    # Calculate start and end indices
+                    start_idx = min(left_shoulder_idx, head_idx, right_shoulder_idx)
+                    end_idx = max(left_shoulder_idx, head_idx, right_shoulder_idx)
+                    
                     advanced_patterns["inverse_head_and_shoulders"].append({
                         "pattern_type": "inverse_head_and_shoulders",
-                        "start_index": pattern["start_idx"],
-                        "end_index": pattern["end_idx"],
-                        "head_index": pattern["head_idx"],
-                        "left_shoulder_index": pattern["left_shoulder_idx"],
-                        "right_shoulder_index": pattern["right_shoulder_idx"],
+                        "start_index": start_idx,
+                        "end_index": end_idx,
+                        "head_index": head_idx,
+                        "left_shoulder_index": left_shoulder_idx,
+                        "right_shoulder_index": right_shoulder_idx,
                         "neckline": {
-                            "level": float(pattern["neckline_value"])
+                            "level": float(pattern["neckline"]["level"])
                         },
                         "target": float(pattern.get("target", 0.0)),
-                        "completion": float(pattern.get("completion", 0.0)),
+                        "completion": float(pattern.get("completion_status", 0.0) == "completed"),
                         "quality_score": float(pattern.get("quality_score", 0.0)),
-                        "confidence": float(pattern.get("confidence", 0.0))
+                        "confidence": float(pattern.get("quality_score", 0.0) / 100.0)  # Convert quality score to confidence
                     })
             
             # Cup and Handle patterns
@@ -110,19 +130,31 @@ class ParallelPatternDetection:
             logger.debug(f"Cup and Handle patterns detected: {len(ch_patterns)}")
             advanced_patterns["cup_and_handle"] = []
             for pattern in ch_patterns:
+                # Extract indices from the nested structure
+                cup_start_idx = pattern["cup"]["start_index"]
+                cup_end_idx = pattern["cup"]["end_index"]
+                handle_start_idx = pattern["handle"]["start_index"]
+                handle_end_idx = pattern["handle"]["end_index"]
+                cup_bottom_idx = pattern["cup"]["low_index"]
+                handle_bottom_idx = pattern["handle"]["start_index"]  # Handle start is usually the handle bottom
+                
+                # Calculate overall start and end indices
+                start_idx = min(cup_start_idx, handle_start_idx)
+                end_idx = max(cup_end_idx, handle_end_idx)
+                
                 advanced_patterns["cup_and_handle"].append({
                     "pattern_type": "cup_and_handle",
-                    "start_index": pattern["start_idx"],
-                    "end_index": pattern["end_idx"],
-                    "left_rim_index": pattern.get("left_rim_idx", 0),
-                    "right_rim_index": pattern.get("right_rim_idx", 0),
-                    "cup_bottom_index": pattern.get("bottom_idx", 0),
-                    "handle_bottom_index": pattern.get("handle_bottom_idx", 0),
-                    "rim_level": float(pattern.get("rim_level", 0.0)),
+                    "start_index": start_idx,
+                    "end_index": end_idx,
+                    "left_rim_index": cup_start_idx,
+                    "right_rim_index": cup_end_idx,
+                    "cup_bottom_index": cup_bottom_idx,
+                    "handle_bottom_index": handle_bottom_idx,
+                    "rim_level": float(pattern["cup"]["start_price"]),  # Use cup start price as rim level
                     "target": float(pattern.get("target", 0.0)),
-                    "completion": float(pattern.get("completion", 0.0)),
+                    "completion": float(pattern.get("completion_status", 0.0) == "completed"),
                     "quality_score": float(pattern.get("quality_score", 0.0)),
-                    "confidence": float(pattern.get("confidence", 0.0))
+                    "confidence": float(pattern.get("quality_score", 0.0) / 100.0)  # Convert quality score to confidence
                 })
             
             # Triple Tops patterns
@@ -130,18 +162,24 @@ class ParallelPatternDetection:
             logger.debug(f"Triple Tops patterns detected: {len(tt_patterns)}")
             advanced_patterns["triple_tops"] = []
             for pattern in tt_patterns:
-                if pattern.get("peaks") is not None:
-                    advanced_patterns["triple_tops"].append({
-                        "pattern_type": "triple_top",
-                        "start_index": pattern["start_idx"],
-                        "end_index": pattern["end_idx"],
-                        "peaks": [{"index": idx, "price": float(price)} for idx, price in pattern["peaks"]],
-                        "support_level": float(pattern.get("support_level", 0.0)),
-                        "target": float(pattern.get("target", 0.0)),
-                        "completion": float(pattern.get("completion", 0.0)),
-                        "quality_score": float(pattern.get("quality_score", 0.0)),
-                        "confidence": float(pattern.get("confidence", 0.0))
-                    })
+                if pattern.get("lows") is not None:
+                    # Extract indices from the nested structure
+                    lows = pattern["lows"]
+                    if len(lows) >= 3:
+                        start_idx = min(low["index"] for low in lows)
+                        end_idx = max(low["index"] for low in lows)
+                        
+                        advanced_patterns["triple_tops"].append({
+                            "pattern_type": "triple_top",
+                            "start_index": start_idx,
+                            "end_index": end_idx,
+                            "peaks": [{"index": low["index"], "price": float(low["price"])} for low in lows],
+                            "support_level": float(pattern.get("support_level", 0.0)),
+                            "target": float(pattern.get("target", 0.0)),
+                            "completion": float(pattern.get("completion_status", 0.0) == "completed"),
+                            "quality_score": float(pattern.get("quality_score", 0.0)),
+                            "confidence": float(pattern.get("quality_score", 0.0) / 100.0)  # Convert quality score to confidence
+                        })
             
             # Triple Bottoms patterns
             tb_patterns = PatternRecognition.detect_triple_bottom(data['close'])
@@ -149,40 +187,46 @@ class ParallelPatternDetection:
             advanced_patterns["triple_bottoms"] = []
             for pattern in tb_patterns:
                 if pattern.get("lows") is not None:
-                    advanced_patterns["triple_bottoms"].append({
-                        "pattern_type": "triple_bottom",
-                        "start_index": pattern["start_idx"],
-                        "end_index": pattern["end_idx"],
-                        "lows": [{"index": idx, "price": float(price)} for idx, price in pattern["lows"]],
-                        "resistance_level": float(pattern.get("resistance_level", 0.0)),
-                        "target": float(pattern.get("target", 0.0)),
-                        "completion": float(pattern.get("completion", 0.0)),
-                        "quality_score": float(pattern.get("quality_score", 0.0)),
-                        "confidence": float(pattern.get("confidence", 0.0))
-                    })
+                    # Extract indices from the nested structure
+                    lows = pattern["lows"]
+                    if len(lows) >= 3:
+                        start_idx = min(low["index"] for low in lows)
+                        end_idx = max(low["index"] for low in lows)
+                        
+                        advanced_patterns["triple_bottoms"].append({
+                            "pattern_type": "triple_bottom",
+                            "start_index": start_idx,
+                            "end_index": end_idx,
+                            "lows": [{"index": low["index"], "price": float(low["price"])} for low in lows],
+                            "resistance_level": float(pattern.get("resistance_level", 0.0)),
+                            "target": float(pattern.get("target", 0.0)),
+                            "completion": float(pattern.get("completion_status", 0.0) == "completed"),
+                            "quality_score": float(pattern.get("quality_score", 0.0)),
+                            "confidence": float(pattern.get("quality_score", 0.0) / 100.0)  # Convert quality score to confidence
+                        })
             
             # Wedge patterns
-            wedge_patterns = PatternRecognition.detect_wedge(data)
+            wedge_patterns = PatternRecognition.detect_wedge_patterns(data['close'])
             logger.debug(f"Wedge patterns detected: {len(wedge_patterns)}")
             advanced_patterns["wedge_patterns"] = []
             for pattern in wedge_patterns:
                 advanced_patterns["wedge_patterns"].append({
                     "pattern_type": "wedge",
-                    "start_index": pattern["start_idx"],
-                    "end_index": pattern["end_idx"],
+                    "start_index": pattern["start_index"],
+                    "end_index": pattern["end_index"],
                     "type": pattern.get("type", "rising"),
                     "upper_line": {
-                        "slope": float(pattern.get("upper_slope", 0.0)),
-                        "intercept": float(pattern.get("upper_intercept", 0.0))
+                        "slope": float(pattern.get("slope_highs", 0.0)),
+                        "intercept": float(pattern.get("start_price", 0.0))  # Use start price as intercept approximation
                     },
                     "lower_line": {
-                        "slope": float(pattern.get("lower_slope", 0.0)),
-                        "intercept": float(pattern.get("lower_intercept", 0.0))
+                        "slope": float(pattern.get("slope_lows", 0.0)),
+                        "intercept": float(pattern.get("start_price", 0.0))  # Use start price as intercept approximation
                     },
                     "target": float(pattern.get("target", 0.0)),
-                    "completion": float(pattern.get("completion", 0.0)),
+                    "completion": float(pattern.get("completion_status", 0.0) == "completed"),
                     "quality_score": float(pattern.get("quality_score", 0.0)),
-                    "confidence": float(pattern.get("confidence", 0.0))
+                    "confidence": float(pattern.get("quality_score", 0.0) / 100.0)  # Convert quality score to confidence
                 })
             
             # Channel patterns (if implemented)
@@ -211,52 +255,70 @@ class ParallelPatternDetection:
             double_top_indices = PatternRecognition.detect_double_top(data['close'])
             double_tops = []
             for dt in double_top_indices:
-                if "peak1_idx" in dt and "peak2_idx" in dt:
+                if isinstance(dt, tuple) and len(dt) == 2:
+                    peak1_idx, peak2_idx = dt
+                    # Find the trough between the peaks
+                    trough_idx = None
+                    if peak1_idx < peak2_idx:
+                        trough_data = data['close'].iloc[peak1_idx:peak2_idx+1]
+                        if not trough_data.empty:
+                            trough_ts = trough_data.idxmin()
+                            trough_idx = int(data.index.get_loc(trough_ts))
+                    
                     double_tops.append({
                         "peak1": {
-                            "date": str(data.index[dt["peak1_idx"]]),
-                            "price": float(data['close'].iloc[dt["peak1_idx"]]),
-                            "index": dt["peak1_idx"]
+                            "date": str(data.index[peak1_idx]),
+                            "price": float(data['close'].iloc[peak1_idx]),
+                            "index": peak1_idx
                         },
                         "peak2": {
-                            "date": str(data.index[dt["peak2_idx"]]),
-                            "price": float(data['close'].iloc[dt["peak2_idx"]]),
-                            "index": dt["peak2_idx"]
+                            "date": str(data.index[peak2_idx]),
+                            "price": float(data['close'].iloc[peak2_idx]),
+                            "index": peak2_idx
                         },
                         "trough": {
-                            "date": str(data.index[dt["trough_idx"]]) if "trough_idx" in dt else None,
-                            "price": float(data['close'].iloc[dt["trough_idx"]]) if "trough_idx" in dt else None,
-                            "index": dt["trough_idx"] if "trough_idx" in dt else None
+                            "date": str(data.index[trough_idx]) if trough_idx is not None else None,
+                            "price": float(data['close'].iloc[trough_idx]) if trough_idx is not None else None,
+                            "index": trough_idx if trough_idx is not None else None
                         },
-                        "neckline": float(dt.get("neckline_value", 0.0)),
-                        "target": float(dt.get("target", 0.0)),
-                        "confidence": float(dt.get("confidence", 0.7))
+                        "neckline": float(data['close'].iloc[trough_idx]) if trough_idx is not None else 0.0,
+                        "target": 0.0,  # Placeholder
+                        "confidence": 0.7
                     })
             
             # Double Bottoms
             double_bottom_indices = PatternRecognition.detect_double_bottom(data['close'])
             double_bottoms = []
             for db in double_bottom_indices:
-                if "trough1_idx" in db and "trough2_idx" in db:
+                if isinstance(db, tuple) and len(db) == 2:
+                    trough1_idx, trough2_idx = db
+                    # Find the peak between the troughs
+                    peak_idx = None
+                    if trough1_idx < trough2_idx:
+                        peak_data = data['close'].iloc[trough1_idx:trough2_idx+1]
+                        if not peak_data.empty:
+                            peak_ts = peak_data.idxmax()
+                            peak_idx = int(data.index.get_loc(peak_ts))
+                    
                     double_bottoms.append({
                         "trough1": {
-                            "date": str(data.index[db["trough1_idx"]]),
-                            "price": float(data['close'].iloc[db["trough1_idx"]]),
-                            "index": db["trough1_idx"]
+                            "date": str(data.index[trough1_idx]),
+                            "price": float(data['close'].iloc[trough1_idx]),
+                            "index": trough1_idx
                         },
                         "trough2": {
-                            "date": str(data.index[db["trough2_idx"]]),
-                            "price": float(data['close'].iloc[db["trough2_idx"]]),
-                            "index": db["trough2_idx"]
+                            "date": str(data.index[trough2_idx]),
+                            "price": float(data['close'].iloc[trough2_idx]),
+                            "index": trough2_idx
                         },
                         "peak": {
-                            "date": str(data.index[db["peak_idx"]]) if "peak_idx" in db else None,
-                            "price": float(data['close'].iloc[db["peak_idx"]]) if "peak_idx" in db else None,
-                            "index": db["peak_idx"] if "peak_idx" in db else None
+                            "date": str(data.index[peak_idx]) if peak_idx is not None else None,
+                            "price": float(data['close'].iloc[peak_idx]) if peak_idx is not None else None,
+                            "index": peak_idx if peak_idx is not None else None
                         },
-                        "neckline": float(db.get("neckline_value", 0.0)),
-                        "target": float(db.get("target", 0.0)),
-                        "confidence": float(db.get("confidence", 0.7))
+                        "neckline": float(data['close'].iloc[peak_idx]) if peak_idx is not None else 0.0,
+                        "target": 0.0,  # Placeholder
+                        "confidence": 0.7
                     })
             
             # Assemble the final patterns dictionary

@@ -11,13 +11,27 @@ from .config import load_timeframe_weights
 
 def _safe_last(series_like) -> float:
     try:
+        # Handle simple numeric values
+        if isinstance(series_like, (int, float)):
+            return float(series_like)
+        
+        # Handle None
+        if series_like is None:
+            return np.nan
+            
+        # Handle lists and tuples
         if isinstance(series_like, (list, tuple)) and series_like:
             return float(series_like[-1])
+        
+        # Handle pandas Series
         if hasattr(series_like, "iloc") and len(series_like) > 0:
             return float(series_like.iloc[-1])
+        
+        # Handle numpy arrays
         if hasattr(series_like, "__array__"):
             arr = np.asarray(series_like)
             return float(arr[-1]) if arr.size else np.nan
+            
     except Exception:
         return np.nan
     return np.nan

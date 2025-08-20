@@ -20,7 +20,7 @@ class FrontendResponseBuilder:
     def build_frontend_response(symbol: str, exchange: str, data: pd.DataFrame, 
                               indicators: dict, ai_analysis: dict, indicator_summary: str, 
                               chart_insights: str, chart_paths: dict, sector_context: dict, 
-                              mtf_context: dict, advanced_analysis: dict, period: int, interval: str) -> dict:
+                              mtf_context: dict, advanced_analysis: dict, ml_predictions: dict | None, period: int, interval: str) -> dict:
         """
         Build the exact response structure that the frontend expects.
         """
@@ -83,6 +83,8 @@ class FrontendResponseBuilder:
                         "scenario_analysis_metrics": advanced_analysis.get("scenario_analysis", {})
                     },
                     "charts": chart_paths,
+                    # Unified ML predictions surfaced for frontend (if available)
+                    "ml_predictions": ml_predictions or {},
                     "overlays": FrontendResponseBuilder._build_overlays(
                         data,
                         advanced_analysis.get("advanced_patterns", {}),
@@ -902,30 +904,43 @@ class FrontendResponseBuilder:
             merged_advanced = _filter_zero_quality(merged_advanced)
 
             # Normalize, de-duplicate and limit advanced patterns to keep UI clean
-            # Bayesian scorer singleton (lazy init)
-            scorer = getattr(FrontendResponseBuilder, "_pattern_scorer", None)
-            if scorer is None:
-                scorer = BayesianPatternScorer()
-                setattr(FrontendResponseBuilder, "_pattern_scorer", scorer)
+            # Use ML-powered CatBoost predictor for modern pattern analysis
+            from ml.inference import predict_probability, get_model_version, get_pattern_prediction_breakdown
 
             def _score_of(p: dict) -> float:
-                # Replace raw heuristic with probabilistic success estimate
+                # ML-powered probability estimate using unified ML system
                 try:
                     pattern_type = (
-                        str(p.get('pattern_type'))
-                        or str(p.get('type'))
+                        str(p.get('pattern_type', ''))  # Use empty string instead of None
+                        or str(p.get('type', ''))  # Use empty string instead of None
                         or "unknown"
                     )
+                    # Ensure we don't have "None" as a string
+                    if pattern_type == "None" or pattern_type == "null":
+                        pattern_type = "unknown"
+                        
                     features = {
                         'duration': float(p.get('duration') or p.get('length') or 0.0),
                         'volume_ratio': float(p.get('volume_ratio') or 1.0),
                         'trend_alignment': float(p.get('trend_alignment') or 0.0),
                         'completion': float(p.get('completion') or p.get('quality_score') or p.get('confidence') or 0.0),
                     }
-                    proba = scorer.predict_probability(pattern_type, features)
-                    # Convert probability [0,1] -> score [0,100]
+                    
+                    # Get ML-powered prediction
+                    proba = predict_probability(features, pattern_type)
+                    
+                    # Get detailed breakdown for enhanced analysis
+                    breakdown = get_pattern_prediction_breakdown(features, pattern_type)
+                    
+                    # Store enhanced ML insights in the pattern data
+                    p['ml_breakdown'] = breakdown
+                    p['prediction_source'] = 'unified_ml_system'
+                    p['model_version'] = breakdown.get('model_version', '1.0.0')
+                    
                     return float(max(0.0, min(1.0, proba)) * 100.0)
-                except Exception:
+                    
+                except Exception as e:
+                    logger.warning(f"ML prediction failed, using default score: {e}")
                     return 50.0
 
             def _strength_from_score(score: float) -> str:
@@ -1156,12 +1171,14 @@ class FrontendResponseBuilder:
         try:
             from signals.scoring import compute_signals_summary
             per_timeframe_indicators: dict[str, dict] = {}
+            
             # Prefer MTF indicators if present in ai_analysis
             mtf_block = ai_analysis.get('multi_timeframe') if isinstance(ai_analysis, dict) else None
             if isinstance(mtf_block, dict) and mtf_block.get('timeframes'):
                 for tf, tf_obj in mtf_block['timeframes'].items():
                     if isinstance(tf_obj, dict) and 'indicators' in tf_obj:
                         per_timeframe_indicators[tf] = tf_obj.get('indicators') or {}
+            
             # Otherwise synthesize from mtf_context
             if not per_timeframe_indicators and isinstance(mtf_context, dict) and mtf_context.get('timeframe_analyses'):
                 try:
@@ -1194,8 +1211,11 @@ class FrontendResponseBuilder:
                             per_timeframe_indicators[tf] = indicators_min
                 except Exception:
                     per_timeframe_indicators = {}
+            
+            # If no MTF indicators, flatten the nested indicators structure for signals scoring
             if not per_timeframe_indicators:
-                per_timeframe_indicators['day'] = indicators or {}
+                flattened_indicators = FrontendResponseBuilder._flatten_indicators_for_scoring(indicators)
+                per_timeframe_indicators['day'] = flattened_indicators
 
             summary = compute_signals_summary(per_timeframe_indicators)
 
@@ -1214,12 +1234,16 @@ class FrontendResponseBuilder:
             if per_tf_sorted:
                 top = per_tf_sorted[0]
                 for r in getattr(top, 'reasons', [])[:5]:
+                    # Extract the actual value from the indicators for display
+                    indicator_value = FrontendResponseBuilder._extract_indicator_value(r.indicator, indicators)
+                    
                     signal_details.append({
                         "indicator": getattr(r, 'indicator', 'unknown'),
                         "signal": getattr(r, 'bias', 'neutral'),
                         "strength": "medium",
                         "weight": float(getattr(r, 'weight', 0.1) or 0.1),
                         "score": float(getattr(top, 'score', 0.0) or 0.0),
+                        "value": indicator_value,
                         "description": getattr(r, 'description', '')
                     })
 
@@ -1262,4 +1286,83 @@ class FrontendResponseBuilder:
                 "bullish_count": 1,
                 "bearish_count": 1,
                 "neutral_count": 1
-            } 
+            }
+
+    @staticmethod
+    def _flatten_indicators_for_scoring(indicators: dict) -> dict:
+        """Flatten nested indicators structure for signals scoring system."""
+        flattened = {}
+        
+        # Extract RSI
+        if indicators.get('rsi') and isinstance(indicators['rsi'], dict):
+            rsi_data = indicators['rsi']
+            if 'rsi_14' in rsi_data:
+                flattened['rsi_14'] = rsi_data['rsi_14']
+        
+        # Extract MACD
+        if indicators.get('macd') and isinstance(indicators['macd'], dict):
+            macd_data = indicators['macd']
+            if 'macd_line' in macd_data:
+                flattened['macd_line'] = macd_data['macd_line']
+            if 'signal_line' in macd_data:
+                flattened['signal_line'] = macd_data['signal_line']
+        
+        # Extract Moving Averages
+        if indicators.get('moving_averages') and isinstance(indicators['moving_averages'], dict):
+            ma_data = indicators['moving_averages']
+            if 'sma_50' in ma_data:
+                flattened['sma_50'] = ma_data['sma_50']
+            if 'sma_200' in ma_data:
+                flattened['sma_200'] = ma_data['sma_200']
+        
+        # Extract ADX
+        if indicators.get('adx') and isinstance(indicators['adx'], dict):
+            adx_data = indicators['adx']
+            if 'adx' in adx_data:
+                flattened['adx'] = adx_data['adx']
+        
+        # Extract Bollinger Bands
+        if indicators.get('bollinger_bands') and isinstance(indicators['bollinger_bands'], dict):
+            bb_data = indicators['bollinger_bands']
+            if 'percent_b' in bb_data:
+                flattened['percent_b'] = bb_data['percent_b']
+        
+        # Extract Volume
+        if indicators.get('volume') and isinstance(indicators['volume'], dict):
+            volume_data = indicators['volume']
+            if 'volume_ratio' in volume_data:
+                flattened['volume_ratio'] = volume_data['volume_ratio']
+        
+        return flattened 
+
+    @staticmethod
+    def _extract_indicator_value(indicator_name: str, indicators: dict) -> float | None:
+        """Extract the actual value of an indicator for display in signal details."""
+        try:
+            if indicator_name == "RSI":
+                if indicators.get('rsi') and isinstance(indicators['rsi'], dict):
+                    return float(indicators['rsi'].get('rsi_14', 0))
+            elif indicator_name == "MACD":
+                if indicators.get('macd') and isinstance(indicators['macd'], dict):
+                    macd_line = indicators['macd'].get('macd_line', 0)
+                    signal_line = indicators['macd'].get('signal_line', 0)
+                    return float(macd_line - signal_line)  # Return histogram value
+            elif indicator_name == "MA":
+                if indicators.get('moving_averages') and isinstance(indicators['moving_averages'], dict):
+                    sma_50 = indicators['moving_averages'].get('sma_50', 0)
+                    sma_200 = indicators['moving_averages'].get('sma_200', 0)
+                    if sma_200 != 0:
+                        return float((sma_50 / sma_200 - 1) * 100)  # Return percentage difference
+            elif indicator_name == "ADX":
+                if indicators.get('adx') and isinstance(indicators['adx'], dict):
+                    return float(indicators['adx'].get('adx', 0))
+            elif indicator_name == "BollingerBands":
+                if indicators.get('bollinger_bands') and isinstance(indicators['bollinger_bands'], dict):
+                    return float(indicators['bollinger_bands'].get('percent_b', 0.5))
+            elif indicator_name == "Volume":
+                if indicators.get('volume') and isinstance(indicators['volume'], dict):
+                    return float(indicators['volume'].get('volume_ratio', 1.0))
+        except (ValueError, TypeError, KeyError):
+            pass
+        
+        return None 

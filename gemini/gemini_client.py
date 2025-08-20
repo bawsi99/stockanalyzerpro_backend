@@ -81,13 +81,20 @@ class GeminiClient:
             if "SECTOR CONTEXT" in knowledge_context:
                 enhanced_context += self._build_sector_context_for_indicators(knowledge_context)
             
+            # Extract ML guidance if present
+            try:
+                ml_block = self._extract_labeled_json_block(knowledge_context or "", label="MLSystemValidation:")
+                ml_guidance_text = self._build_ml_guidance_text(ml_block) if ml_block else ""
+            except Exception:
+                ml_guidance_text = ""
+
             # Structure context using context engineering
             context = self.context_engineer.structure_context(
                 curated_indicators, 
                 AnalysisType.INDICATOR_SUMMARY, 
                 symbol, 
                 timeframe, 
-                enhanced_context
+                (enhanced_context + ("\n\n" + ml_guidance_text if ml_guidance_text else ""))
             )
             
             # Use optimized prompt template
@@ -222,6 +229,39 @@ class GeminiClient:
         except Exception as e:
             print(f"Error enhancing with calculations: {e}")
             return parsed_result
+
+    def _build_ml_guidance_text(self, ml_block: dict) -> str:
+        """
+        Convert compact ML block into short guidance text for prompts with clear weighting rules.
+        """
+        try:
+            if not isinstance(ml_block, dict) or not ml_block:
+                return ""
+            lines = ["## ML System Guidance (Use as Evidence):"]
+            price = ml_block.get("price") or {}
+            vol = ml_block.get("volatility") or {}
+            reg = ml_block.get("market_regime") or {}
+            cons = ml_block.get("consensus") or {}
+            patt = ml_block.get("pattern_ml") or {}
+
+            if price:
+                lines.append(f"- ML price: direction={price.get('direction')}, magnitude={price.get('magnitude')}, confidence={price.get('confidence')}")
+            if vol:
+                lines.append(f"- Volatility: current={vol.get('current')}, predicted={vol.get('predicted')}, regime={vol.get('regime')}")
+            if reg:
+                lines.append(f"- Market regime: {reg.get('regime')} (confidence={reg.get('confidence')})")
+            if patt:
+                lines.append(f"- Pattern ML: success_probability={patt.get('success_probability')}, confidence={patt.get('confidence')}, signal={patt.get('signal')}")
+            if cons:
+                lines.append(f"- ML consensus: {cons.get('overall_signal')} (confidence={cons.get('confidence')}, risk={cons.get('risk_level')})")
+
+            # Guardrails
+            lines.append("- Prefer higher-timeframe consensus when ML conflicts with MTF/indicators.")
+            lines.append("- If volatility regime is 'high', reflect elevated risk and down-weight aggressive entries.")
+            lines.append("- Explicitly explain any ML vs indicator/MTF disagreements.")
+            return "\n".join(lines)
+        except Exception:
+            return ""
 
     @staticmethod
     def extract_markdown_and_json(llm_response: str):
@@ -560,7 +600,11 @@ JSON:
     async def analyze_stock_with_enhanced_calculations(self, symbol, indicators, chart_paths, period, interval, knowledge_context="", exchange: str = "NSE"):
         """
         Enhanced version of analyze_stock with comprehensive mathematical validation.
+        Now includes ML system feedback to enhance LLM analysis.
         """
+        # Store current knowledge context for ML enhancement
+        self._current_knowledge_context = knowledge_context
+        
         # Ensure chart_paths is a dict
         if chart_paths is None:
             chart_paths = {}
@@ -796,6 +840,14 @@ JSON:
             indicator_json=json.dumps(clean_for_json(self.convert_numpy_types(ind_json)), indent=2),
             chart_insights=chart_insights_md
         )
+        # Append ML guidance to final decision prompt if present in knowledge context
+        try:
+            ml_block = self._extract_labeled_json_block(knowledge_context or "", label="MLSystemValidation:")
+            ml_guidance_text = self._build_ml_guidance_text(ml_block) if ml_block else ""
+            if ml_guidance_text:
+                decision_prompt += "\n\n" + ml_guidance_text
+        except Exception:
+            pass
         try:
             # Use code execution for final decision analysis
             text_response, code_results, execution_results = await self.core.call_llm_with_code_execution(decision_prompt)
@@ -1043,31 +1095,40 @@ Use Python code for all calculations and include the results in your analysis.
         return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
 
     async def analyze_pattern_analysis(self, image: bytes, indicators: dict = None) -> str:
-        """Analyze the comprehensive pattern analysis chart showing all reversal and continuation patterns."""
+        """
+        Analyze the comprehensive pattern analysis chart showing all reversal and continuation patterns.
+        Now enhanced with ML validation context for better pattern analysis.
+        """
         try:
-            # Use context engineering for pattern analysis
-            if indicators:
-                curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.REVERSAL_PATTERNS)
-                context = self.context_engineer.structure_context(curated_indicators, AnalysisType.REVERSAL_PATTERNS, "", "", "")
-                prompt = self.prompt_manager.format_prompt("optimized_pattern_analysis", context=context)
-            else:
-                # Provide default context when no indicators are available
-                default_context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
-                prompt = self.prompt_manager.format_prompt("optimized_pattern_analysis", context=default_context)
+            # Get ML validation context if available
+            ml_context = self._extract_ml_validation_context(getattr(self, '_current_knowledge_context', ''))
             
-            # Add the solving line at the very end
-            prompt += self.prompt_manager.SOLVING_LINE
-            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
-        except Exception as ex:
-            print(f"[DEBUG-ERROR] Exception during pattern analysis context engineering: {ex}")
-            print(f"[DEBUG-ERROR] Exception type: {type(ex).__name__}")
-            import traceback
-            print(f"[DEBUG-ERROR] Traceback: {traceback.format_exc()}")
-            # Fallback to original method with default context
-            default_context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
-            prompt = self.prompt_manager.format_prompt("optimized_pattern_analysis", context=default_context)
-            prompt += self.prompt_manager.SOLVING_LINE
-            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+            # Create enhanced prompt with ML context
+            if ml_context and self.prompt_manager:
+                try:
+                    enhanced_prompt = self.prompt_manager.create_ml_enhanced_prompt(
+                        'optimized_pattern_analysis',
+                        ml_context,
+                        context=f"## Analysis Context:\nAnalyze the pattern analysis chart with ML validation insights. Use the ML system's pattern success probabilities and risk assessments to enhance your analysis."
+                    )
+                except Exception as e:
+                    print(f"Failed to create ML-enhanced prompt, using default: {e}")
+                    enhanced_prompt = self.prompt_manager.format_prompt(
+                        'optimized_pattern_analysis',
+                        context="## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
+                    )
+            else:
+                # Fallback to default prompt
+                enhanced_prompt = self.prompt_manager.format_prompt(
+                    'optimized_pattern_analysis',
+                    context="## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
+                )
+            
+            return await self.core.call_llm_with_image(enhanced_prompt, self.image_utils.bytes_to_image(image))
+            
+        except Exception as e:
+            print(f"Error in analyze_pattern_analysis: {e}")
+            return f"Pattern analysis failed: {str(e)}"
 
     async def analyze_volume_analysis(self, image: bytes, indicators: dict = None) -> str:
         """Analyze the comprehensive volume analysis chart showing all volume patterns and correlations."""
@@ -1230,6 +1291,25 @@ SECTOR OPPORTUNITY ASSESSMENT:
 - **Sector Stability**: Sector showing stable performance
 """
         return sector_context_str
+
+    def _extract_ml_validation_context(self, knowledge_context: str) -> dict:
+        """
+        Extract ML system validation context from the knowledge context.
+        This allows the LLM to utilize ML validation insights for better analysis.
+        """
+        try:
+            if not knowledge_context:
+                return {}
+            
+            # Look for MLSystemValidation block
+            ml_block = self._extract_labeled_json_block(knowledge_context, label="MLSystemValidation:")
+            if ml_block:
+                return ml_block
+            return {}
+            
+        except Exception as e:
+            print(f"Error extracting ML validation context: {e}")
+            return {}
 
     def _extract_mtf_context_from_analysis(self, ind_json: dict, chart_insights: str) -> dict:
         """

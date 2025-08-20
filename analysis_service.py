@@ -63,6 +63,61 @@ logger = logging.getLogger(__name__)
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080").split(",")
 CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS if origin.strip()]
 
+# --- ML endpoints for CatBoost training and prediction ---
+from pydantic import BaseModel
+
+class MLTrainRequest(BaseModel):
+    days: int | None = None
+    patterns: list[str] | None = None
+
+class MLPredictRequest(BaseModel):
+    features: dict
+    pattern_type: str | None = None
+
+@app.post("/ml/train")
+async def ml_train(req: MLTrainRequest):
+    try:
+        # Lazy import to avoid heavy import-time overhead
+        from ml.dataset import build_pooled_dataset
+        from ml.model import train_global_model
+        ds = build_pooled_dataset()
+        rep = train_global_model(ds)
+        if rep is None:
+            raise HTTPException(status_code=500, detail="Training failed or no data")
+        return {
+            "model_path": rep.model_path,
+            "trained_at": rep.trained_at,
+            "metrics": rep.metrics,
+            "feature_schema": rep.feature_schema,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"/ml/train failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/ml/model")
+async def ml_model():
+    try:
+        from ml.model import load_registry
+        reg = load_registry() or {}
+        if not reg:
+            return {"status": "unavailable"}
+        return reg
+    except Exception as e:
+        logger.error(f"/ml/model failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ml/predict")
+async def ml_predict(req: MLPredictRequest):
+    try:
+        from ml.inference import predict_probability, get_model_version, get_pattern_prediction_breakdown
+        p = predict_probability(req.features or {}, req.pattern_type)
+        return {"probability": p, "model_version": get_model_version()}
+    except Exception as e:
+        logger.error(f"/ml/predict failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -670,6 +725,21 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             print(f"Warning: Could not get advanced analysis: {e}")
             advanced_analysis = {}
         
+        # Generate ML predictions (price direction, magnitude, volatility, regime)
+        ml_predictions = {}
+        try:
+            from ml.quant_system.ml.unified_manager import unified_ml_manager
+            # Train engines that require stock data (raw_data_ml, hybrid) before prediction
+            try:
+                _ = unified_ml_manager.train_all_engines(stock_data, None)
+            except Exception:
+                pass
+            ml_predictions = unified_ml_manager.get_comprehensive_prediction(stock_data)
+            print(f"✅ ML predictions generated successfully for {request.stock}")
+        except Exception as e:
+            print(f"Warning: Could not generate ML predictions: {e}")
+            ml_predictions = {}
+        
         # Build frontend-expected response structure
         frontend_response = FrontendResponseBuilder.build_frontend_response(
             symbol=request.stock,
@@ -683,6 +753,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             sector_context=sector_context,
             mtf_context=mtf_context,
             advanced_analysis=advanced_analysis,
+            ml_predictions=ml_predictions,
             period=request.period,
             interval=request.interval
         )

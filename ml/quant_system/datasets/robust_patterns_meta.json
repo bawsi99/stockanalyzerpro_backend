@@ -1,0 +1,37 @@
+{
+  "generated_at": "2025-08-18T15:45:32.109236",
+  "config": {
+    "exchange": "NSE",
+    "num_symbols": 50,
+    "from_date": "2020-01-01",
+    "to_date": "2024-12-31",
+    "interval": "day",
+    "horizon_days": 20,
+    "tp_pct": 0.04,
+    "sl_pct": 0.02,
+    "symbols_file": "zerodha_instruments.csv",
+    "output": "ml/quant_system/datasets/robust_patterns.parquet"
+  },
+  "num_symbols": 50,
+  "num_events": 4265,
+  "columns": [
+    "event_id",
+    "symbol",
+    "exchange",
+    "event_date",
+    "pattern_type",
+    "duration",
+    "quality_score",
+    "completion_status",
+    "entry_price",
+    "tp_price",
+    "sl_price",
+    "horizon_days",
+    "y_success",
+    "close",
+    "volume",
+    "volume_ratio20",
+    "ret_5",
+    "ret_20"
+  ]
+}

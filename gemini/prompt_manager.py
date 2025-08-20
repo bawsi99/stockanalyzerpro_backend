@@ -84,3 +84,83 @@ class PromptManager:
             return escaped_context
         
         return context 
+
+    def create_ml_enhanced_prompt(self, base_template: str, ml_context: dict, **kwargs) -> str:
+        """
+        Create an enhanced prompt that incorporates ML validation context.
+        This method helps the LLM utilize ML system insights for better analysis.
+        """
+        try:
+            # Load the base template
+            template = self.load_template(base_template)
+            if not template:
+                raise FileNotFoundError(f"Base template '{base_template}.txt' not found")
+            
+            # Create ML context instructions
+            ml_instructions = self._create_ml_instructions(ml_context)
+            
+            # Add ML instructions to the context
+            if 'context' in kwargs:
+                kwargs['context'] += f"\n\n{ml_instructions}"
+            else:
+                kwargs['context'] = ml_instructions
+            
+            # Format the enhanced prompt
+            return self.format_prompt(base_template, **kwargs)
+            
+        except Exception as e:
+            # logger.error(f"Failed to create ML-enhanced prompt: {e}") # Assuming logger is defined elsewhere
+            # Fallback to base template
+            return self.format_prompt(base_template, **kwargs)
+    
+    def _create_ml_instructions(self, ml_context: dict) -> str:
+        """
+        Create specific instructions for the LLM to utilize ML validation context.
+        """
+        if not ml_context or not isinstance(ml_context, dict):
+            return ""
+        
+        instructions = "\n## ML System Validation Context (Use This to Enhance Your Analysis):\n"
+        
+        # Add pattern validation insights
+        if ml_context.get('pattern_validation'):
+            instructions += "\n### Pattern Success Probabilities (ML-Validated):\n"
+            for pattern, data in ml_context['pattern_validation'].items():
+                if isinstance(data, dict):
+                    prob = data.get('success_probability', 0)
+                    confidence = data.get('confidence', 'medium')
+                    risk = data.get('risk_level', 'medium')
+                    instructions += f"- {pattern.replace('_', ' ').title()}: {prob:.1%} success rate, {confidence} confidence, {risk} risk\n"
+        
+        # Add risk assessment
+        if ml_context.get('risk_assessment'):
+            risk_data = ml_context['risk_assessment']
+            instructions += f"\n### Overall Risk Assessment (ML-Generated):\n"
+            instructions += f"- Overall Pattern Success Rate: {risk_data.get('overall_pattern_success_rate', 0):.1%}\n"
+            instructions += f"- High Confidence Patterns: {risk_data.get('high_confidence_patterns', 0)}\n"
+            instructions += f"- Low Risk Patterns: {risk_data.get('low_risk_patterns', 0)}\n"
+            
+            if risk_data.get('risk_distribution'):
+                dist = risk_data['risk_distribution']
+                instructions += f"- Risk Distribution: Low: {dist.get('low', 0)}, Medium: {dist.get('medium', 0)}, High: {dist.get('high', 0)}\n"
+        
+        # Add confidence metrics
+        if ml_context.get('confidence_metrics'):
+            conf_data = ml_context['confidence_metrics']
+            instructions += f"\n### Confidence Metrics (ML-Validated):\n"
+            instructions += f"- Average Confidence: {conf_data.get('average_confidence', 0):.1%}\n"
+            
+            if conf_data.get('confidence_distribution'):
+                conf_dist = conf_data['confidence_distribution']
+                instructions += f"- Confidence Distribution: Very High: {conf_dist.get('very_high', 0)}, High: {conf_dist.get('high', 0)}, Medium: {conf_dist.get('medium', 0)}, Low: {conf_dist.get('low', 0)}\n"
+        
+        # Add specific instructions for the LLM
+        instructions += "\n### Instructions for Enhanced Analysis:\n"
+        instructions += "1. **Use ML probabilities** to validate your pattern identification\n"
+        instructions += "2. **Adjust confidence levels** based on ML validation results\n"
+        instructions += "3. **Incorporate risk assessments** from ML system into your recommendations\n"
+        instructions += "4. **Highlight patterns** with high ML confidence scores\n"
+        instructions += "5. **Provide risk-adjusted recommendations** using ML risk levels\n"
+        instructions += "6. **Mention ML validation** when discussing pattern reliability\n"
+        
+        return instructions 

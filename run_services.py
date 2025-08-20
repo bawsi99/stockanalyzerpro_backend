@@ -124,7 +124,8 @@ def main():
     services = {
         "Data Service": "start_data_service.py",
         "Analysis Service": "start_analysis_service.py",
-        "WebSocket Stream Service": "start_websocket_service.py"
+        "WebSocket Stream Service": "start_websocket_service.py",
+        "Service Endpoints": "start_service_endpoints.py"
     }
     
     # Start services
@@ -142,6 +143,8 @@ def main():
             port = 8001
         elif "WebSocket" in service_name:
             port = 8081
+        elif "Service Endpoints" in service_name:
+            port = 8002
         else:
             port = 8000
             
@@ -174,6 +177,7 @@ def main():
     print("🌐 Data Service:     http://localhost:8000/health")
     print("🧠 Analysis Service: http://localhost:8001/health")
     print("🔗 WebSocket Stream: http://localhost:8081/health")
+    print("🔧 Service Endpoints: http://localhost:8002/health")
     print("\n📝 Logs will appear below:")
     print("-" * 60)
     

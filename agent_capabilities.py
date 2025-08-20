@@ -580,9 +580,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Head and Shoulders patterns detected: {len(hs_patterns)}")
                 for pattern in hs_patterns:
                     try:
-                        # Filter out patterns with quality score 0
+                        # Use configurable quality threshold instead of hard 0
                         quality_score = pattern.get('quality_score', 0)
-                        if quality_score <= 0:
+                        min_quality = Config.PATTERNS["head_and_shoulders"]["min_quality_score"]
+                        if quality_score < min_quality:
                             continue
                             
                         start_index = pattern.get('start_index', 0)
@@ -594,7 +595,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_price": float(pattern.get('end_price', 0)),
                             "quality_score": float(quality_score),
                             "confidence": float(quality_score),
-                            "type": "head_and_shoulders",
+                            "pattern_type": "head_and_shoulders",  # Fixed: explicit pattern type
+                            "type": "head_and_shoulders",  # Also set type for compatibility
                             "description": f"Head and Shoulders pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -606,9 +608,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Inverse Head and Shoulders patterns detected: {len(ihs_patterns)}")
                 for pattern in ihs_patterns:
                     try:
-                        # Filter out patterns with quality score 0
+                        # Use configurable quality threshold
                         quality_score = pattern.get('quality_score', 0)
-                        if quality_score <= 0:
+                        min_quality = Config.PATTERNS["head_and_shoulders"]["min_quality_score"]
+                        if quality_score < min_quality:
                             continue
                             
                         start_index = pattern.get('start_index', 0)
@@ -620,7 +623,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_price": float(pattern.get('end_price', 0)),
                             "quality_score": float(quality_score),
                             "confidence": float(quality_score),
-                            "type": "inverse_head_and_shoulders",
+                            "pattern_type": "inverse_head_and_shoulders",  # Fixed: explicit pattern type
+                            "type": "inverse_head_and_shoulders",  # Also set type for compatibility
                             "description": f"Inverse Head and Shoulders pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -632,9 +636,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Cup and Handle patterns detected: {len(ch_patterns)}")
                 for pattern in ch_patterns:
                     try:
-                        # Filter out patterns with quality score 0
+                        # Use configurable quality threshold
                         quality_score = pattern.get('quality_score', 0)
-                        if quality_score <= 0:
+                        min_quality = Config.PATTERNS["cup_and_handle"]["min_quality_score"]
+                        if quality_score < min_quality:
                             continue
                             
                         start_index = pattern.get('start_index', 0)
@@ -646,7 +651,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_price": float(pattern.get('end_price', 0)),
                             "quality_score": float(quality_score),
                             "confidence": float(quality_score),
-                            "type": "cup_and_handle",
+                            "pattern_type": "cup_and_handle",  # Fixed: explicit pattern type
+                            "type": "cup_and_handle",  # Also set type for compatibility
                             "description": f"Cup and Handle pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -658,9 +664,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Triple Tops patterns detected: {len(triple_tops)}")
                 for pattern in triple_tops:
                     try:
-                        # Filter out patterns with quality score 0
+                        # Use configurable quality threshold
                         quality_score = pattern.get('quality_score', 0)
-                        if quality_score <= 0:
+                        min_quality = Config.PATTERNS["triple_patterns"]["min_quality_score"]
+                        if quality_score < min_quality:
                             continue
                             
                         start_index = pattern.get('start_index', 0)
@@ -672,7 +679,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_price": float(pattern.get('end_price', 0)),
                             "quality_score": float(quality_score),
                             "confidence": float(quality_score),
-                            "type": "triple_tops",
+                            "pattern_type": "triple_tops",  # Fixed: explicit pattern type
+                            "type": "triple_tops",  # Also set type for compatibility
                             "description": f"Triple Top pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -683,9 +691,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Triple Bottoms patterns detected: {len(triple_bottoms)}")
                 for pattern in triple_bottoms:
                     try:
-                        # Filter out patterns with quality score 0
+                        # Use configurable quality threshold
                         quality_score = pattern.get('quality_score', 0)
-                        if quality_score <= 0:
+                        min_quality = Config.PATTERNS["triple_patterns"]["min_quality_score"]
+                        if quality_score < min_quality:
                             continue
                             
                         start_index = pattern.get('start_index', 0)
@@ -697,7 +706,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_price": float(pattern.get('end_price', 0)),
                             "quality_score": float(quality_score),
                             "confidence": float(quality_score),
-                            "type": "triple_bottoms",
+                            "pattern_type": "triple_bottoms",  # Fixed: explicit pattern type
+                            "type": "triple_bottoms",  # Also set type for compatibility
                             "description": f"Triple Bottom pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -709,9 +719,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Wedge patterns detected: {len(wedge_patterns)}")
                 for pattern in wedge_patterns:
                     try:
-                        # Filter out patterns with quality score 0
+                        # Use configurable quality threshold
                         quality_score = pattern.get('quality_score', 0)
-                        if quality_score <= 0:
+                        min_quality = Config.PATTERNS["wedge_patterns"]["min_quality_score"]
+                        if quality_score < min_quality:
                             continue
                             
                         start_index = pattern.get('start_index', 0)
@@ -723,7 +734,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_price": float(pattern.get('end_price', 0)),
                             "quality_score": float(quality_score),
                             "confidence": float(quality_score),
-                            "type": "wedge",
+                            "pattern_type": pattern.get('type', 'wedge'),  # Use pattern's own type
+                            "type": pattern.get('type', 'wedge'),  # Also set type for compatibility
                             "description": f"Wedge pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -735,9 +747,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 print(f"🔍 DEBUG: Channel patterns detected: {len(channel_patterns)}")
                 for pattern in channel_patterns:
                     try:
-                        # Filter out patterns with quality score 0
+                        # Use configurable quality threshold
                         quality_score = pattern.get('quality_score', 0)
-                        if quality_score <= 0:
+                        min_quality = Config.PATTERNS["channel_patterns"]["min_quality_score"]
+                        if quality_score < min_quality:
                             continue
                             
                         start_index = pattern.get('start_index', 0)
@@ -749,7 +762,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "end_price": float(pattern.get('end_price', 0)),
                             "quality_score": float(quality_score),
                             "confidence": float(quality_score),
-                            "type": "channel",
+                            "pattern_type": pattern.get('type', 'channel'),  # Use pattern's own type
+                            "type": pattern.get('type', 'channel'),  # Also set type for compatibility
                             "description": f"Channel pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -941,7 +955,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             ai_analysis, indicator_summary, chart_insights = await self.enhanced_analyze_with_ai(
                 symbol, indicators, chart_paths, period, interval, knowledge_context, sector_context,
                 mtf_context=mtf_context,
-                advanced_analysis=advanced_digest
+                advanced_analysis=advanced_digest,
+                stock_data=data
             )
             
             # Step 6: Build enhanced result with mathematical validation
@@ -974,9 +989,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
     async def enhanced_analyze_with_ai(self, symbol: str, indicators: dict, chart_paths: dict, 
                                      period: int, interval: str, knowledge_context: str = "", 
                                      sector_context: dict = None, mtf_context: dict | None = None,
-                                     advanced_analysis: dict | None = None) -> tuple:
+                                     advanced_analysis: dict | None = None, stock_data: pd.DataFrame | None = None) -> tuple:
         """
         Enhanced AI analysis with code execution for mathematical validation.
+        Now includes ML system feedback to enhance LLM analysis.
         """
         try:
             # Combine knowledge context with sector context
@@ -1093,7 +1109,15 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 from utils import clean_for_json
                 supplemental_blocks.append("AdvancedAnalysisDigest:\n" + json.dumps(clean_for_json(adv_digest)))
 
-            # Use enhanced analysis with code execution
+            # NEW: Build compact ML system context before LLM analysis
+            try:
+                ml_block = await self._build_compact_ml_context(stock_data)
+                if ml_block:
+                    supplemental_blocks.append("MLSystemValidation:\n" + json.dumps(ml_block))
+            except Exception as ml_ex:
+                logger.warning(f"Compact ML context generation failed: {ml_ex}")
+
+            # Use enhanced analysis with code execution and ML validation context
             ai_analysis, indicator_summary, chart_insights = await self.gemini_client.analyze_stock_with_enhanced_calculations(
                 symbol=symbol,
                 indicators=indicators,
@@ -1108,6 +1132,60 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
         except Exception as e:
             logger.error(f"[ENHANCED ANALYSIS] Error in enhanced AI analysis for {symbol}: {e}")
             raise
+
+    async def _build_compact_ml_context(self, stock_data: pd.DataFrame | None) -> dict:
+        """
+        Build a compact ML summary (price direction/magnitude, volatility, regime, pattern ML, consensus)
+        for conditioning the LLM. Keep it concise and advisory to control tokens and avoid override.
+        """
+        try:
+            if stock_data is None or getattr(stock_data, 'empty', True):
+                return {}
+            from ml.quant_system.ml.unified_manager import unified_ml_manager
+            try:
+                _ = unified_ml_manager.train_all_engines(stock_data, None)
+            except Exception:
+                pass
+            preds = unified_ml_manager.get_comprehensive_prediction(stock_data) or {}
+
+            raw_ml = preds.get('raw_data_ml', {}) if isinstance(preds, dict) else {}
+            pattern_ml = preds.get('pattern_ml', {}) if isinstance(preds, dict) else {}
+            consensus = preds.get('consensus', {}) if isinstance(preds, dict) else {}
+
+            compact = {
+                "price": {
+                    "direction": (raw_ml.get('price_prediction') or {}).get('direction'),
+                    "magnitude": (raw_ml.get('price_prediction') or {}).get('magnitude'),
+                    "confidence": (raw_ml.get('price_prediction') or {}).get('confidence'),
+                },
+                "volatility": {
+                    "current": (raw_ml.get('volatility_prediction') or {}).get('current'),
+                    "predicted": (raw_ml.get('volatility_prediction') or {}).get('predicted'),
+                    "regime": (raw_ml.get('volatility_prediction') or {}).get('regime'),
+                },
+                "market_regime": raw_ml.get('market_regime') or {},
+                "pattern_ml": {
+                    "success_probability": pattern_ml.get('success_probability'),
+                    "confidence": pattern_ml.get('confidence'),
+                    "signal": pattern_ml.get('signal')
+                } if isinstance(pattern_ml, dict) else {},
+                "consensus": {
+                    "overall_signal": consensus.get('overall_signal'),
+                    "confidence": consensus.get('confidence'),
+                    "risk_level": consensus.get('risk_level')
+                } if isinstance(consensus, dict) else {},
+                "instructions": [
+                    "Use ML as evidence; do not override higher-timeframe consensus.",
+                    "Down-weight ML bias under high volatility regime.",
+                    "Explain disagreements between ML and indicator/MTF signals."
+                ]
+            }
+            # Remove empty sections
+            compact = {k: v for k, v in compact.items() if v}
+            return compact
+        except Exception as e:
+            logger.warning(f"Compact ML context build failed: {e}")
+            return {}
 
     def _build_enhanced_analysis_result(self, symbol: str, exchange: str, data: pd.DataFrame, 
                                       indicators: dict, ai_analysis: dict, indicator_summary: str, 
@@ -2598,6 +2676,86 @@ if __name__ == "__main__":
         except Exception as e:
             logger.error(f"Error extracting resistance levels: {e}")
             return []
+
+    async def _get_ml_validation_context(self, indicators: dict, chart_paths: dict) -> dict:
+        """Get ML system validation context to enhance LLM analysis."""
+        try:
+            from ml.inference import predict_probability, get_pattern_prediction_breakdown, get_model_version
+        
+            ml_context = {
+                "ml_system_status": "active",
+                "model_version": get_model_version(),
+                "validation_timestamp": datetime.now().isoformat(),
+                "pattern_validation": {},
+                "risk_assessment": {},
+                "confidence_metrics": {}
+            }
+        
+            # Validate key patterns using ML system
+            pattern_types = [
+                "head_shoulders", "inverse_head_shoulders", "double_tops", "double_bottoms",
+                "triple_tops", "triple_bottoms", "ascending_triangle", "descending_triangle",
+                "symmetrical_triangle", "flag_pattern", "pennant", "wedge_pattern"
+            ]
+            
+            for pattern_type in pattern_types:
+                try:
+                    # Create features for pattern validation
+                    features = {
+                        'duration': float(indicators.get('pattern_duration', {}).get('value', 5.0)),
+                        'volume_ratio': float(indicators.get('volume', {}).get('volume_ratio', 1.0)),
+                        'trend_alignment': float(indicators.get('trend', {}).get('alignment_score', 0.5)),
+                        'completion': float(indicators.get('pattern', {}).get('completion_rate', 0.8))
+                    }
+                    
+                    # Get ML prediction
+                    probability = predict_probability(features, pattern_type)
+                    breakdown = get_pattern_prediction_breakdown(features, pattern_type)
+                    
+                    ml_context["pattern_validation"][pattern_type] = {
+                        "success_probability": probability,
+                        "confidence": breakdown.get('confidence', 'medium'),
+                        "strength": breakdown.get('strength', 'weak'),
+                        "risk_level": breakdown.get('risk_level', 'medium'),
+                        "features": features
+                    }
+                    
+                except Exception as e:
+                    logger.warning(f"ML validation failed for pattern {pattern_type}: {e}")
+                    continue
+            
+            # Add overall risk assessment
+            if ml_context["pattern_validation"]:
+                probabilities = [p["success_probability"] for p in ml_context["pattern_validation"].values()]
+                avg_probability = sum(probabilities) / len(probabilities)
+                
+                ml_context["risk_assessment"] = {
+                    "overall_pattern_success_rate": avg_probability,
+                    "high_confidence_patterns": len([p for p in ml_context["pattern_validation"].values() if p["confidence"] == "very_high"]),
+                    "low_risk_patterns": len([p for p in ml_context["pattern_validation"].values() if p["risk_level"] == "low"]),
+                    "risk_distribution": {
+                        "low": len([p for p in ml_context["pattern_validation"].values() if p["risk_level"] == "low"]),
+                        "medium": len([p for p in ml_context["pattern_validation"].values() if p["risk_level"] == "medium"]),
+                        "high": len([p for p in ml_context["pattern_validation"].values() if p["risk_level"] == "high"])
+                    }
+                }
+                
+                ml_context["confidence_metrics"] = {
+                    "average_confidence": avg_probability,
+                    "confidence_distribution": {
+                        "very_high": len([p for p in ml_context["pattern_validation"].values() if p["confidence"] == "very_high"]),
+                        "high": len([p for p in ml_context["pattern_validation"].values() if p["confidence"] == "high"]),
+                        "medium": len([p for p in ml_context["pattern_validation"].values() if p["confidence"] == "medium"]),
+                        "low": len([p for p in ml_context["pattern_validation"].values() if p["confidence"] == "low"])
+                    }
+                }
+            
+            logger.info(f"✅ ML validation context generated with {len(ml_context['pattern_validation'])} patterns")
+            return ml_context
+        
+        except Exception as e:
+            logger.error(f"❌ Failed to generate ML validation context: {e}")
+            return None
 
 
 

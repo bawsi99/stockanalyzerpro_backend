@@ -562,14 +562,39 @@ class SectorBenchmarkingProvider:
                 volatility = sector_data[sector].std() * np.sqrt(252) * 100  # Annualized %
                 sector_volatility[sector] = round(volatility, 2)
             
+            # Convert numpy types to native Python types for JSON serialization
+            def convert_numpy_types(obj):
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, dict):
+                    return {key: convert_numpy_types(value) for key, value in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_numpy_types(item) for item in obj]
+                else:
+                    return obj
+            
+            # Convert correlation matrix to native types
+            correlation_matrix_dict = correlation_matrix.round(3).to_dict()
+            correlation_matrix_clean = convert_numpy_types(correlation_matrix_dict)
+            
+            # Convert other data to native types
+            high_correlation_pairs_clean = convert_numpy_types(high_correlation_pairs)
+            low_correlation_pairs_clean = convert_numpy_types(low_correlation_pairs)
+            sector_volatility_clean = convert_numpy_types(sector_volatility)
+            diversification_insights_clean = convert_numpy_types(diversification_insights)
+            
             return {
                 'timeframe': timeframe,
-                'correlation_matrix': correlation_matrix.round(3).to_dict(),
-                'average_correlation': round(avg_correlation, 3),
-                'high_correlation_pairs': high_correlation_pairs,
-                'low_correlation_pairs': low_correlation_pairs,
-                'sector_volatility': sector_volatility,
-                'diversification_insights': diversification_insights,
+                'correlation_matrix': correlation_matrix_clean,
+                'average_correlation': float(round(avg_correlation, 3)),
+                'high_correlation_pairs': high_correlation_pairs_clean,
+                'low_correlation_pairs': low_correlation_pairs_clean,
+                'sector_volatility': sector_volatility_clean,
+                'diversification_insights': diversification_insights_clean,
                 'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'optimization_note': 'Timeframes optimized for reduced data fetching'
             }
@@ -683,14 +708,39 @@ class SectorBenchmarkingProvider:
                 volatility = sector_data[sector].std() * np.sqrt(252) * 100  # Annualized %
                 sector_volatility[sector] = round(volatility, 2)
             
+            # Convert numpy types to native Python types for JSON serialization
+            def convert_numpy_types(obj):
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, dict):
+                    return {key: convert_numpy_types(value) for key, value in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_numpy_types(item) for item in obj]
+                else:
+                    return obj
+            
+            # Convert correlation matrix to native types
+            correlation_matrix_dict = correlation_matrix.round(3).to_dict()
+            correlation_matrix_clean = convert_numpy_types(correlation_matrix_dict)
+            
+            # Convert other data to native types
+            high_correlation_pairs_clean = convert_numpy_types(high_correlation_pairs)
+            low_correlation_pairs_clean = convert_numpy_types(low_correlation_pairs)
+            sector_volatility_clean = convert_numpy_types(sector_volatility)
+            diversification_insights_clean = convert_numpy_types(diversification_insights)
+            
             return {
                 'timeframe': timeframe,
-                'correlation_matrix': correlation_matrix.round(3).to_dict(),
-                'average_correlation': round(avg_correlation, 3),
-                'high_correlation_pairs': high_correlation_pairs,
-                'low_correlation_pairs': low_correlation_pairs,
-                'sector_volatility': sector_volatility,
-                'diversification_insights': diversification_insights,
+                'correlation_matrix': correlation_matrix_clean,
+                'average_correlation': float(round(avg_correlation, 3)),
+                'high_correlation_pairs': high_correlation_pairs_clean,
+                'low_correlation_pairs': low_correlation_pairs_clean,
+                'sector_volatility': sector_volatility_clean,
+                'diversification_insights': diversification_insights_clean,
                 'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'optimization_note': 'Async timeframes optimized for reduced data fetching'
             }

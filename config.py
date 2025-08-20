@@ -49,38 +49,63 @@ class Config:
     # === PATTERN DETECTION CONFIGURATION ===
     PATTERNS = {
         "head_and_shoulders": {
-            "shoulder_tolerance": 0.02,  # 2% tolerance for shoulder similarity
-            "head_prominence_threshold": 0.02,  # 2% minimum head prominence
+            "shoulder_tolerance": 0.03,  # Increased from 0.02 to 0.03 (3% tolerance)
+            "head_prominence_threshold": 0.015,  # Reduced from 0.02 to 0.015 (1.5% minimum)
             "quality_weights": {
-                "head_prominence": 30,
-                "shoulder_symmetry": 20,
-                "volume_confirmation": 10,
+                "head_prominence": 25,  # Reduced from 30
+                "shoulder_symmetry": 25,  # Increased from 20
+                "volume_confirmation": 15,  # Increased from 10
                 "completion": 20
-            }
+            },
+            "min_quality_score": 20  # New: minimum quality score to include pattern
         },
         "cup_and_handle": {
-            "min_cup_duration": 20,
-            "max_cup_duration": 100,
-            "handle_duration_ratio": 0.3,
-            "depth_tolerance": 0.15,
-            "min_depth": 0.05,
-            "max_breakdown": 0.02
+            "min_cup_duration": 15,  # Reduced from 20
+            "max_cup_duration": 120,  # Increased from 100
+            "handle_duration_ratio": 0.4,  # Increased from 0.3
+            "depth_tolerance": 0.2,  # Increased from 0.15
+            "min_depth": 0.03,  # Reduced from 0.05
+            "max_breakdown": 0.03,  # Increased from 0.02
+            "min_quality_score": 15  # New: minimum quality score
         },
         "triple_patterns": {
-            "price_tolerance": 0.02,
-            "min_spacing": 5,
-            "min_valley_ratio": 0.03,
-            "min_peak_ratio": 0.03
+            "price_tolerance": 0.025,  # Increased from 0.02
+            "min_spacing": 3,  # Reduced from 5
+            "min_valley_ratio": 0.02,  # Reduced from 0.03
+            "min_peak_ratio": 0.02,  # Reduced from 0.03
+            "min_quality_score": 20  # New: minimum quality score
         },
         "wedge_patterns": {
-            "min_points": 6,
-            "min_duration": 30,  # Increased for more reliable patterns
-            "min_quality_score": 40  # Balanced quality threshold
+            "min_points": 5,  # Reduced from 6
+            "min_duration": 15,  # Reduced from 30
+            "min_quality_score": 25,  # Reduced from 40
+            "r_squared_threshold": 0.4,  # Reduced from 0.5
+            "convergence_threshold": 0.3  # New: relaxation for convergence
         },
         "channel_patterns": {
-            "min_points": 4,
-            "min_duration": 15,
-            "parallelism_tolerance": 0.1
+            "min_points": 3,  # Reduced from 4
+            "min_duration": 10,  # Reduced from 15
+            "parallelism_tolerance": 0.15,  # Increased from 0.1
+            "min_quality_score": 20,  # New: minimum quality score
+            "r_squared_threshold": 0.4  # Reduced from 0.5
+        },
+        "double_patterns": {
+            "price_tolerance": 0.025,  # Increased from 0.02
+            "min_spacing": 3,  # Reduced from 5
+            "min_quality_score": 15  # New: minimum quality score
+        },
+        "flag_patterns": {
+            "impulse_threshold": 0.06,  # Reduced from 0.08 (6% instead of 8%)
+            "pullback_ratio": 0.4,  # Increased from 0.35
+            "volatility_threshold": 0.025,  # Increased from 0.02
+            "min_quality_score": 20  # New: minimum quality score
+        },
+        "general": {
+            "enable_adaptive_thresholds": True,  # New: adapt thresholds based on market volatility
+            "volatility_adjustment_factor": 0.8,  # New: reduce thresholds in high volatility
+            "min_data_points": 30,  # Reduced from various higher values
+            "max_patterns_per_type": 5,  # New: limit patterns to avoid spam
+            "quality_score_floor": 10  # New: absolute minimum quality score
         }
     }
     

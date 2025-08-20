@@ -66,11 +66,25 @@ class GeminiCore:
             # Log API response
             debug_logger.log_api_response(response, response_time, "call_llm")
             
-            if response and hasattr(response, 'text'):
+            if response and hasattr(response, 'candidates') and response.candidates:
+                # Extract text from response parts, ignoring executable_code parts
+                text_response = ""
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and candidate.content:
+                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                text_response += part.text
+                    else:
+                        if hasattr(candidate.content, 'text'):
+                            text_response = candidate.content.text
+                
                 if return_full_response:
                     return response
+                elif text_response:
+                    return text_response
                 else:
-                    return response.text
+                    raise Exception("No text content found in LLM response")
             else:
                 raise Exception("Empty or invalid response from LLM")
         except Exception as ex:
@@ -172,8 +186,23 @@ class GeminiCore:
             # Log API response
             debug_logger.log_api_response(response, response_time, "call_llm_with_image")
             
-            if response and hasattr(response, 'text'):
-                return response.text
+            if response and hasattr(response, 'candidates') and response.candidates:
+                # Extract text from response parts, ignoring executable_code parts
+                text_response = ""
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and candidate.content:
+                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                text_response += part.text
+                    else:
+                        if hasattr(candidate.content, 'text'):
+                            text_response = candidate.content.text
+                
+                if text_response:
+                    return text_response
+                else:
+                    raise Exception("No text content found in LLM response")
             else:
                 raise Exception("Empty or invalid response from LLM (multi-modal)")
         except Exception as ex:
@@ -228,8 +257,23 @@ class GeminiCore:
             # Log API response
             debug_logger.log_api_response(response, response_time, "call_llm_with_images")
             
-            if response and hasattr(response, 'text'):
-                return response.text
+            if response and hasattr(response, 'candidates') and response.candidates:
+                # Extract text from response parts, ignoring executable_code parts
+                text_response = ""
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and candidate.content:
+                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                text_response += part.text
+                    else:
+                        if hasattr(candidate.content, 'text'):
+                            text_response = candidate.content.text
+                
+                if text_response:
+                    return text_response
+                else:
+                    raise Exception("No text content found in LLM response")
             else:
                 raise Exception("Empty or invalid response from LLM (multi-modal, multi-image)")
         except Exception as ex:
