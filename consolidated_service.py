@@ -160,6 +160,50 @@ async def redirect_analyze():
         headers={"Location": "/analysis/analyze"}
     )
 
+@app.get("/stock/{symbol}/sector")
+async def redirect_stock_sector(symbol: str, request: Request):
+    """Redirect stock sector requests to analysis service."""
+    query_params = str(request.query_params)
+    redirect_url = f"/analysis/stock/{symbol}/sector{query_params}"
+    return JSONResponse(
+        status_code=307,
+        content={"detail": f"Redirecting to {redirect_url}"},
+        headers={"Location": redirect_url}
+    )
+
+@app.get("/auth/verify")
+async def redirect_auth_verify(request: Request):
+    """Redirect auth verify requests to data service."""
+    query_params = str(request.query_params)
+    redirect_url = f"/data/auth/verify{query_params}"
+    return JSONResponse(
+        status_code=307,
+        content={"detail": f"Redirecting to {redirect_url}"},
+        headers={"Location": redirect_url}
+    )
+
+@app.post("/auth/token")
+async def redirect_auth_token(request: Request):
+    """Redirect auth token requests to data service."""
+    query_params = str(request.query_params)
+    redirect_url = f"/data/auth/token{query_params}"
+    return JSONResponse(
+        status_code=307,
+        content={"detail": f"Redirecting to {redirect_url}"},
+        headers={"Location": redirect_url}
+    )
+
+@app.options("/auth/token")
+async def redirect_auth_token_options(request: Request):
+    """Redirect auth token OPTIONS requests to data service."""
+    query_params = str(request.query_params)
+    redirect_url = f"/data/auth/token{query_params}"
+    return JSONResponse(
+        status_code=307,
+        content={"detail": f"Redirecting to {redirect_url}"},
+        headers={"Location": redirect_url}
+    )
+
 # WebSocket endpoint (needs special handling)
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket):
