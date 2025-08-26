@@ -21,6 +21,16 @@ import uvicorn
 # Add the backend directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ Loaded environment variables from .env file")
+except ImportError:
+    print("⚠️  python-dotenv not available, using system environment variables")
+except Exception as e:
+    print(f"⚠️  Error loading .env file: {e}")
+
 # Create the main FastAPI app
 app = FastAPI(
     title="Stock Analyzer Pro - Consolidated Service",
@@ -40,6 +50,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Check and log environment variables
+print("🔧 Environment Check:")
+print(f"   ZERODHA_API_KEY: {'✅ Set' if os.getenv('ZERODHA_API_KEY') else '❌ Not Set'}")
+print(f"   ZERODHA_ACCESS_TOKEN: {'✅ Set' if os.getenv('ZERODHA_ACCESS_TOKEN') else '❌ Not Set'}")
+print(f"   GEMINI_API_KEY: {'✅ Set' if os.getenv('GEMINI_API_KEY') else '❌ Not Set'}")
+print(f"   SUPABASE_URL: {'✅ Set' if os.getenv('SUPABASE_URL') else '❌ Not Set'}")
+print(f"   CORS_ORIGINS: {CORS_ORIGINS}")
 
 # Import both service apps
 try:
@@ -77,6 +95,12 @@ async def root():
             "sector_list": "/analysis/sector/list",
             "websocket": "/data/ws/stream"
         },
+        "environment": {
+            "zerodha_configured": bool(os.getenv("ZERODHA_API_KEY")),
+            "gemini_configured": bool(os.getenv("GEMINI_API_KEY")),
+            "supabase_configured": bool(os.getenv("SUPABASE_URL")),
+            "cors_origins_count": len(CORS_ORIGINS)
+        },
         "timestamp": "2025-08-26T20:20:00Z"
     }
 
@@ -87,6 +111,11 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "consolidated",
+        "environment": {
+            "zerodha_configured": bool(os.getenv("ZERODHA_API_KEY")),
+            "gemini_configured": bool(os.getenv("GEMINI_API_KEY")),
+            "supabase_configured": bool(os.getenv("SUPABASE_URL"))
+        },
         "timestamp": "2025-08-26T20:20:00Z"
     }
 
