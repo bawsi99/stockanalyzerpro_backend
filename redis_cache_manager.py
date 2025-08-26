@@ -95,8 +95,8 @@ class RedisCacheManager:
             self.redis_client.ping()
             self.redis_available = True
             logger.info(f"✅ Redis connection established: {self.redis_url}")
-        except Exception as e:
-            logger.warning(f"❌ Failed to connect to Redis at {self.redis_url}: {e}")
+        except (redis.exceptions.AuthenticationError, redis.exceptions.ConnectionError, Exception) as e:
+            logger.warning(f"⚠️  Redis connection failed: {e}. Using in-memory fallback.")
             self.redis_available = False
             self.redis_client = None
     

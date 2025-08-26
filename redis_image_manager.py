@@ -69,9 +69,10 @@ class RedisImageManager:
             # Test connection
             self.redis_client.ping()
             logger.info(f"✅ Redis connection established: {self.redis_url}")
-        except Exception as e:
-            logger.error(f"❌ Failed to connect to Redis at {self.redis_url}: {e}")
-            raise ConnectionError(f"Cannot connect to Redis: {e}")
+        except (redis.exceptions.AuthenticationError, redis.exceptions.ConnectionError, Exception) as e:
+            logger.warning(f"⚠️  Redis connection failed: {e}. Using file-based fallback.")
+            self.redis_client = None
+            self.redis_available = False
     
     def _generate_image_key(self, symbol: str, interval: str, chart_type: str) -> str:
         """Generate a unique Redis key for an image."""

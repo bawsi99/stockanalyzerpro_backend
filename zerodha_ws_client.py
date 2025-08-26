@@ -27,11 +27,25 @@ class MarketStatus(Enum):
     WEEKEND = "weekend"
     HOLIDAY = "holiday"
 
+# Setup logging first
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Try to import optional dependencies
 try:
     import redis
     REDIS_AVAILABLE = True
-    redis_client = redis.from_url(os.getenv('REDIS_URL', 'redis://localhost:6379/0'))
+    # Try to connect to Redis with error handling
+    try:
+        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+        redis_client = redis.from_url(redis_url)
+        # Test the connection
+        redis_client.ping()
+        logger.info(f"✅ Redis connection established: {redis_url}")
+    except (redis.exceptions.AuthenticationError, redis.exceptions.ConnectionError, Exception) as e:
+        logger.warning(f"⚠️  Redis connection failed: {e}. Using in-memory fallback.")
+        redis_client = None
+        REDIS_AVAILABLE = False
 except ImportError:
     REDIS_AVAILABLE = False
     redis_client = None
@@ -52,10 +66,6 @@ except ImportError:
 # Configurations (should be set via environment variables or config file)
 API_KEY = os.getenv('ZERODHA_API_KEY') or os.getenv('KITE_API_KEY', 'your_api_key')
 ACCESS_TOKEN = os.getenv('ZERODHA_ACCESS_TOKEN') or os.getenv('KITE_ACCESS_TOKEN', 'your_access_token')
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Global data stores
 tick_store: Dict[int, Dict[str, Any]] = {}
