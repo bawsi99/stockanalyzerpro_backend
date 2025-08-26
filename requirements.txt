@@ -121,3 +121,11 @@ PySocks==1.7.1
 
 # Tabular ML
 catboost==1.2.5
+
+# Fix for y-py compilation issues in read-only environments
+y-py==0.6.2
+
+# Exclude problematic Jupyter dependencies if not needed
+# Uncomment the following lines if you don't need Jupyter functionality:
+# --exclude jupyterlab
+# --exclude jupyter-ydoc
