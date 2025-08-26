@@ -109,36 +109,23 @@ class DatabaseManager:
             if not self.ensure_user_exists(user_id):
                 raise ValueError(f"Failed to ensure user exists: {user_id}")
             
-            # Prepare analysis data
+            # Prepare analysis data for stock_analyses_simple table
+            # This table only accepts: id, user_id, stock_symbol, analysis_data, created_at, updated_at
             analysis_data = {
                 "user_id": user_id,
                 "stock_symbol": symbol,
-                "analysis_data": analysis,
-                "exchange": exchange,
-                "period_days": period,
-                "interval": interval,
-                "overall_signal": analysis.get("summary", {}).get("overall_signal"),
-                "confidence_score": analysis.get("ai_analysis", {}).get("confidence_pct"),
-                "risk_level": analysis.get("summary", {}).get("risk_level"),
-                "current_price": analysis.get("metadata", {}).get("current_price"),
-                "price_change_percentage": analysis.get("metadata", {}).get("price_change_pct"),
-                "sector": analysis.get("metadata", {}).get("sector"),
-                "analysis_type": analysis.get("analysis_type", "standard"),
-                "analysis_quality": analysis.get("summary", {}).get("analysis_quality", "standard"),
-                "mathematical_validation": analysis.get("mathematical_validation", False),
-                "chart_paths": analysis.get("chart_paths"),
-                "metadata": analysis.get("metadata", {})
+                "analysis_data": analysis  # Store complete analysis in JSONB
             }
             
             # Insert analysis
-            result = self.supabase.table("stock_analyses").insert(analysis_data).execute()
+            result = self.supabase.table("stock_analyses_simple").insert(analysis_data).execute()
             
             if result.data:
                 analysis_id = result.data[0]["id"]
                 print(f"✅ Stored analysis successfully: {analysis_id}")
                 
-                # Store related data if available
-                self._store_related_data(analysis_id, analysis)
+                # Note: Related data storage is disabled for simple table structure
+                # All analysis data is stored in the main analysis_data JSON field
                 
                 return analysis_id
             else:
@@ -356,7 +343,7 @@ class DatabaseManager:
             List of analysis records
         """
         try:
-            result = self.supabase.table("stock_analyses")\
+            result = self.supabase.table("stock_analyses_simple")\
                 .select("*")\
                 .eq("user_id", user_id)\
                 .order("created_at", desc=True)\
@@ -380,7 +367,7 @@ class DatabaseManager:
             Analysis record or None
         """
         try:
-            result = self.supabase.table("stock_analyses")\
+            result = self.supabase.table("stock_analyses_simple")\
                 .select("*")\
                 .eq("id", analysis_id)\
                 .execute()
@@ -412,6 +399,86 @@ class DatabaseManager:
                     
         except Exception as e:
             print(f"Error updating user analysis count: {e}")
+
+    def get_analyses_by_signal(self, signal: str, user_id: Optional[str] = None, limit: int = 20) -> List[Dict]:
+        """
+        Get analyses filtered by signal type.
+        
+        Args:
+            signal: Signal type to filter by
+            user_id: Optional user ID to filter by
+            limit: Maximum number of analyses to return
+            
+        Returns:
+            List of analysis records
+        """
+        try:
+            query = self.supabase.table("stock_analyses_simple")\
+                .select("*")\
+                .eq("overall_signal", signal)\
+                .order("created_at", desc=True)\
+                .limit(limit)
+            
+            if user_id:
+                query = query.eq("user_id", user_id)
+            
+            result = query.execute()
+            return result.data if result.data else []
+            
+        except Exception as e:
+            print(f"Error getting analyses by signal: {e}")
+            return []
+
+    def get_analyses_by_sector(self, sector: str, user_id: Optional[str] = None, limit: int = 20) -> List[Dict]:
+        """
+        Get analyses filtered by sector.
+        
+        Args:
+            sector: Sector to filter by
+            user_id: Optional user ID to filter by
+            limit: Maximum number of analyses to return
+            
+        Returns:
+            List of analysis records
+        """
+        try:
+            query = self.supabase.table("stock_analyses_simple")\
+                .select("*")\
+                .eq("sector", sector)\
+                .order("created_at", desc=True)\
+                .limit(limit)
+            
+            if user_id:
+                query = query.eq("user_id", user_id)
+            
+            result = query.execute()
+            return result.data if result.data else []
+            
+        except Exception as e:
+            print(f"Error getting analyses by sector: {e}")
+            return []
+
+    def get_user_id_by_email(self, email: str) -> Optional[str]:
+        """
+        Get user ID by email address.
+        
+        Args:
+            email: User email address
+            
+        Returns:
+            User ID or None if not found
+        """
+        try:
+            result = self.supabase.table("profiles")\
+                .select("id")\
+                .eq("email", email)\
+                .execute()
+            
+            return result.data[0]["id"] if result.data else None
+            
+        except Exception as e:
+            print(f"Error getting user ID by email: {e}")
+            return None
 
 # Global database manager instance
 db_manager = DatabaseManager() 

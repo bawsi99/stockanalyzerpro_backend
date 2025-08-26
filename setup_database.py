@@ -34,16 +34,16 @@ def create_profiles_table(supabase):
         return False
 
 def create_stock_analyses_table(supabase):
-    """Create the stock_analyses table if it doesn't exist."""
+    """Create the stock_analyses_simple table if it doesn't exist."""
     try:
-        # Check if stock_analyses table exists
-        result = supabase.table("stock_analyses").select("id").limit(1).execute()
-        print("✅ Stock analyses table already exists")
+        # Check if stock_analyses_simple table exists
+        result = supabase.table("stock_analyses_simple").select("id").limit(1).execute()
+        print("✅ Stock analyses simple table already exists")
         return True
     except Exception as e:
-        print(f"❌ Stock analyses table error: {e}")
-        print("⚠️ You need to create the stock_analyses table manually in Supabase")
-        print("   Required columns: id, user_id, stock_symbol, analysis_data_json, exchange, period_days, interval")
+        print(f"❌ Stock analyses simple table error: {e}")
+        print("⚠️ You need to create the stock_analyses_simple table manually in Supabase")
+        print("   Required columns: id, user_id, stock_symbol, analysis_data, created_at")
         return False
 
 def create_technical_indicators_table(supabase):
@@ -137,7 +137,7 @@ def main():
         tables_status = {}
         
         tables_status["profiles"] = create_profiles_table(supabase)
-        tables_status["stock_analyses"] = create_stock_analyses_table(supabase)
+        tables_status["stock_analyses_simple"] = create_stock_analyses_table(supabase)
         tables_status["technical_indicators"] = create_technical_indicators_table(supabase)
         tables_status["pattern_recognition"] = create_pattern_recognition_table(supabase)
         tables_status["trading_levels"] = create_trading_levels_table(supabase)

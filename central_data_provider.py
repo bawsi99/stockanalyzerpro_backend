@@ -38,7 +38,17 @@ class CentralDataProvider:
         if hasattr(self, '_initialized') and self._initialized:
             return
             
-        # Initialize caches for different data types
+        # Try to initialize Redis cache manager
+        self.redis_cache_manager = None
+        try:
+            from redis_cache_manager import get_redis_cache_manager
+            self.redis_cache_manager = get_redis_cache_manager()
+            logger.info("Using Redis cache manager")
+        except Exception as e:
+            logger.warning(f"Redis cache manager not available: {e}")
+            logger.info("Falling back to local cache")
+        
+        # Initialize local caches as fallback
         self.stock_data_cache = {}  # {(symbol, exchange, interval, period): (data, timestamp)}
         self.index_data_cache = {}  # {(index, interval, period): (data, timestamp)}
         self.sector_data_cache = {}  # {sector: (data, timestamp)}
@@ -94,13 +104,19 @@ class CentralDataProvider:
         Returns:
             DataFrame with stock data or None if failed
         """
-        cache_key = (symbol, exchange, interval, period)
+        # Try Redis cache first
+        if self.redis_cache_manager and not force_refresh:
+            cached_data = self.redis_cache_manager.get('stock_data', symbol, exchange, interval, period)
+            if cached_data is not None:
+                logger.debug(f"Redis cache hit for {symbol} {interval} data")
+                return cached_data
         
-        # Check if we have non-expired data in cache
+        # Fallback to local cache
+        cache_key = (symbol, exchange, interval, period)
         if not force_refresh and cache_key in self.stock_data_cache:
             data, timestamp = self.stock_data_cache[cache_key]
             if time.time() - timestamp < self.cache_expiration['stock_data']:
-                logger.debug(f"Cache hit for {symbol} {interval} data")
+                logger.debug(f"Local cache hit for {symbol} {interval} data")
                 return data
         
         # If not in cache or expired, fetch new data
@@ -124,6 +140,12 @@ class CentralDataProvider:
             
             # Cache the result
             if data is not None and not data.empty:
+                # Cache in Redis if available
+                if self.redis_cache_manager:
+                    self.redis_cache_manager.set('stock_data', data, self.cache_expiration['stock_data'], 
+                                               symbol, exchange, interval, period)
+                
+                # Also cache locally as fallback
                 self.stock_data_cache[cache_key] = (data, time.time())
                 return data
             else:

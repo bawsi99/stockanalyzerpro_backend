@@ -50,7 +50,7 @@ from sector_classifier import sector_classifier
 from enhanced_sector_classifier import enhanced_sector_classifier
 from patterns.recognition import PatternRecognition
 from technical_indicators import TechnicalIndicators
-from simple_database_manager import simple_db_manager
+from database_manager import DatabaseManager
 from frontend_response_builder import FrontendResponseBuilder
 from chart_manager import get_chart_manager, initialize_chart_manager
 from deployment_config import DeploymentConfig
@@ -58,6 +58,9 @@ from storage_config import StorageConfig
 
 app = FastAPI(title="Stock Analysis Service", version="1.0.0")
 logger = logging.getLogger(__name__)
+
+# Initialize database manager
+simple_db_manager = DatabaseManager()
 
 # Load CORS origins from environment variable
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080").split(",")
@@ -161,6 +164,28 @@ async def startup_event():
         chart_config = DeploymentConfig.get_chart_config()
         chart_manager = initialize_chart_manager(**chart_config)
         print(f"✅ Chart manager initialized: max_age={chart_manager.max_age_hours}h, max_size={chart_manager.max_total_size_mb}MB")
+        
+        # Initialize Redis image manager
+        print("🖼️  Initializing Redis image manager...")
+        try:
+            redis_image_config = DeploymentConfig.get_redis_image_config()
+            from redis_image_manager import initialize_redis_image_manager
+            redis_image_manager = initialize_redis_image_manager(**redis_image_config)
+            print(f"✅ Redis image manager initialized: max_age={redis_image_manager.max_age_hours}h, max_size={redis_image_manager.max_total_size_mb}MB, format={redis_image_manager.image_format}")
+        except Exception as redis_e:
+            print(f"⚠️  Warning: Could not initialize Redis image manager: {redis_e}")
+            print("ℹ️  Falling back to file-based chart storage")
+        
+        # Initialize Redis cache manager
+        print("💾 Initializing Redis cache manager...")
+        try:
+            redis_cache_config = DeploymentConfig.get_redis_cache_config()
+            from redis_cache_manager import initialize_redis_cache_manager
+            redis_cache_manager = initialize_redis_cache_manager(**redis_cache_config)
+            print(f"✅ Redis cache manager initialized: compression={redis_cache_manager.enable_compression}, local_fallback={redis_cache_manager.enable_local_fallback}")
+        except Exception as cache_e:
+            print(f"⚠️  Warning: Could not initialize Redis cache manager: {cache_e}")
+            print("ℹ️  Falling back to local caching")
         
         # Initialize storage configuration
         print("📁 Initializing storage configuration...")
@@ -332,17 +357,77 @@ def convert_charts_to_base64(charts_dict: dict) -> dict:
     import base64
     converted_charts = {}
     
+    # Try to use Redis image manager if available
+    redis_image_manager = None
+    try:
+        from redis_image_manager import get_redis_image_manager
+        redis_image_manager = get_redis_image_manager()
+    except Exception:
+        pass
+    
     for chart_name, chart_path in charts_dict.items():
         if isinstance(chart_path, str) and os.path.exists(chart_path):
             try:
-                with open(chart_path, 'rb') as f:
-                    img_data = f.read()
-                    img_base64 = base64.b64encode(img_data).decode('utf-8')
-                    converted_charts[chart_name] = {
-                        'data': f"data:image/png;base64,{img_base64}",
-                        'filename': os.path.basename(chart_path),
-                        'type': 'image/png'
-                    }
+                # If Redis is available, store the image there first
+                if redis_image_manager:
+                    try:
+                        # Read the image file
+                        with open(chart_path, 'rb') as f:
+                            img_data = f.read()
+                        
+                        # Store in Redis (extract symbol and interval from path if possible)
+                        # Default to generic values if we can't parse the path
+                        symbol = "unknown"
+                        interval = "day"
+                        chart_type = chart_name
+                        
+                        # Try to extract symbol and interval from path
+                        path_parts = chart_path.split('/')
+                        if len(path_parts) > 1:
+                            # Look for pattern like "SYMBOL_INTERVAL" in path
+                            for part in path_parts:
+                                if '_' in part and not part.endswith('.png'):
+                                    symbol_interval = part.split('_')
+                                    if len(symbol_interval) >= 2:
+                                        symbol = symbol_interval[0]
+                                        interval = symbol_interval[1]
+                                        break
+                        
+                        # Store in Redis
+                        redis_key = redis_image_manager.store_image(
+                            img_data, symbol, interval, chart_type
+                        )
+                        
+                        # Convert to base64 for immediate response
+                        img_base64 = base64.b64encode(img_data).decode('utf-8')
+                        converted_charts[chart_name] = {
+                            'data': f"data:image/png;base64,{img_base64}",
+                            'filename': os.path.basename(chart_path),
+                            'type': 'image/png',
+                            'redis_key': redis_key  # Store Redis key for future reference
+                        }
+                        
+                    except Exception as redis_e:
+                        print(f"Warning: Could not store chart {chart_name} in Redis: {redis_e}")
+                        # Fall back to file-based approach
+                        with open(chart_path, 'rb') as f:
+                            img_data = f.read()
+                            img_base64 = base64.b64encode(img_data).decode('utf-8')
+                            converted_charts[chart_name] = {
+                                'data': f"data:image/png;base64,{img_base64}",
+                                'filename': os.path.basename(chart_path),
+                                'type': 'image/png'
+                            }
+                else:
+                    # No Redis available, use file-based approach
+                    with open(chart_path, 'rb') as f:
+                        img_data = f.read()
+                        img_base64 = base64.b64encode(img_data).decode('utf-8')
+                        converted_charts[chart_name] = {
+                            'data': f"data:image/png;base64,{img_base64}",
+                            'filename': os.path.basename(chart_path),
+                            'type': 'image/png'
+                        }
             except Exception as e:
                 print(f"Error converting chart {chart_name}: {e}")
                 converted_charts[chart_name] = {
@@ -629,7 +714,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         # Create visualizations
         chart_paths = {}
         if request.output:
-            chart_paths = orchestrator.create_visualizations(stock_data, indicators, request.stock, request.output)
+            chart_paths = orchestrator.create_visualizations(stock_data, indicators, request.stock, request.output, request.interval)
         
         # Get sector context (auto-detect sector if not provided)
         sector_context = None
@@ -1626,7 +1711,7 @@ async def get_charts(
         output_dir = str(chart_dir)
         
         # Generate charts
-        chart_paths = orchestrator.create_visualizations(df, indicators, symbol, output_dir)
+        chart_paths = orchestrator.create_visualizations(df, indicators, symbol, output_dir, backend_interval)
         
         # Convert charts to base64
         charts_base64 = convert_charts_to_base64(chart_paths)
@@ -1661,8 +1746,7 @@ async def get_charts(
 async def get_user_analyses(user_id: str, limit: int = 50):
     """Get analysis history for a user."""
     try:
-        # Import the database manager
-        from simple_database_manager import simple_db_manager
+
         
         # Validate that user_id is not empty
         if not user_id or not user_id.strip():
@@ -1696,7 +1780,6 @@ async def get_user_analyses(user_id: str, limit: int = 50):
 async def get_analysis_by_id(analysis_id: str):
     """Get a specific analysis by ID."""
     try:
-        from simple_database_manager import simple_db_manager
         
         # Validate that analysis_id is not empty
         if not analysis_id or not analysis_id.strip():
@@ -1722,7 +1805,6 @@ async def get_analysis_by_id(analysis_id: str):
 async def get_analyses_by_signal(signal: str, user_id: Optional[str] = None, limit: int = 20):
     """Get analyses filtered by signal type."""
     try:
-        from simple_database_manager import simple_db_manager
         
         actual_user_id = None
         if user_id:
@@ -1758,7 +1840,6 @@ async def get_analyses_by_signal(signal: str, user_id: Optional[str] = None, lim
 async def get_analyses_by_sector(sector: str, user_id: Optional[str] = None, limit: int = 20):
     """Get analyses filtered by sector."""
     try:
-        from simple_database_manager import simple_db_manager
         
         actual_user_id = None
         if user_id:
@@ -1794,7 +1875,6 @@ async def get_analyses_by_sector(sector: str, user_id: Optional[str] = None, lim
 async def get_high_confidence_analyses(min_confidence: float = 80.0, user_id: Optional[str] = None, limit: int = 20):
     """Get analyses with confidence above threshold."""
     try:
-        from simple_database_manager import simple_db_manager
         
         actual_user_id = None
         if user_id:
@@ -1830,7 +1910,6 @@ async def get_high_confidence_analyses(min_confidence: float = 80.0, user_id: Op
 async def get_user_analysis_summary(user_id: str):
     """Get analysis summary for a user."""
     try:
-        from simple_database_manager import simple_db_manager
         
         # Validate that user_id is not empty
         if not user_id or not user_id.strip():
@@ -1875,9 +1954,20 @@ async def get_chart_storage_stats():
     try:
         chart_manager = get_chart_manager()
         stats = chart_manager.get_storage_stats()
+        
+        # Also get Redis image stats if available
+        redis_stats = None
+        try:
+            from redis_image_manager import get_redis_image_manager
+            redis_image_manager = get_redis_image_manager()
+            redis_stats = redis_image_manager.get_storage_stats()
+        except Exception:
+            pass
+        
         return {
             "success": True,
-            "stats": stats
+            "file_storage_stats": stats,
+            "redis_storage_stats": redis_stats
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get chart storage stats: {str(e)}")
@@ -1887,11 +1977,22 @@ async def cleanup_charts():
     """Manually trigger chart cleanup."""
     try:
         chart_manager = get_chart_manager()
-        stats = chart_manager.cleanup_old_charts()
+        file_stats = chart_manager.cleanup_old_charts()
+        
+        # Also cleanup Redis images if available
+        redis_stats = None
+        try:
+            from redis_image_manager import get_redis_image_manager
+            redis_image_manager = get_redis_image_manager()
+            redis_stats = redis_image_manager.cleanup_old_images()
+        except Exception:
+            pass
+        
         return {
             "success": True,
             "message": "Chart cleanup completed",
-            "stats": stats
+            "file_cleanup_stats": file_stats,
+            "redis_cleanup_stats": redis_stats
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to cleanup charts: {str(e)}")
@@ -1901,11 +2002,28 @@ async def cleanup_specific_charts(symbol: str, interval: str):
     """Clean up charts for a specific symbol and interval."""
     try:
         chart_manager = get_chart_manager()
-        success = chart_manager.cleanup_specific_charts(symbol, interval)
-        if success:
+        file_success = chart_manager.cleanup_specific_charts(symbol, interval)
+        
+        # Also cleanup Redis images for this symbol/interval if available
+        redis_success = False
+        try:
+            from redis_image_manager import get_redis_image_manager
+            redis_image_manager = get_redis_image_manager()
+            # Get all images for this symbol and interval
+            images = redis_image_manager.get_images_by_symbol(symbol, interval)
+            for image in images:
+                if 'key' in image:
+                    redis_image_manager.delete_image(image['key'])
+            redis_success = len(images) > 0
+        except Exception:
+            pass
+        
+        if file_success or redis_success:
             return {
                 "success": True,
-                "message": f"Cleaned up charts for {symbol}_{interval}"
+                "message": f"Cleaned up charts for {symbol}_{interval}",
+                "file_cleanup": file_success,
+                "redis_cleanup": redis_success
             }
         else:
             return {
@@ -1913,7 +2031,7 @@ async def cleanup_specific_charts(symbol: str, interval: str):
                 "message": f"No charts found for {symbol}_{interval}"
             }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to cleanup specific charts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup charts for {symbol}_{interval}: {str(e)}")
 
 @app.delete("/charts/all")
 async def cleanup_all_charts():
@@ -1928,6 +2046,155 @@ async def cleanup_all_charts():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to cleanup all charts: {str(e)}")
+
+# Redis Image Management Endpoints
+@app.get("/redis/images/stats")
+async def get_redis_image_stats():
+    """Get Redis image storage statistics."""
+    try:
+        from redis_image_manager import get_redis_image_manager
+        redis_image_manager = get_redis_image_manager()
+        stats = redis_image_manager.get_storage_stats()
+        return {
+            "success": True,
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get Redis image stats: {str(e)}")
+
+@app.post("/redis/images/cleanup")
+async def cleanup_redis_images():
+    """Manually trigger Redis image cleanup."""
+    try:
+        from redis_image_manager import get_redis_image_manager
+        redis_image_manager = get_redis_image_manager()
+        stats = redis_image_manager.cleanup_old_images()
+        return {
+            "success": True,
+            "message": "Redis image cleanup completed",
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup Redis images: {str(e)}")
+
+@app.get("/redis/images/{symbol}")
+async def get_redis_images_by_symbol(symbol: str, interval: str = None):
+    """Get all Redis images for a specific symbol."""
+    try:
+        from redis_image_manager import get_redis_image_manager
+        redis_image_manager = get_redis_image_manager()
+        images = redis_image_manager.get_images_by_symbol(symbol, interval)
+        return {
+            "success": True,
+            "symbol": symbol,
+            "interval": interval,
+            "images": images,
+            "count": len(images)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get Redis images for {symbol}: {str(e)}")
+
+@app.delete("/redis/images/{symbol}")
+async def cleanup_redis_images_by_symbol(symbol: str, interval: str = None):
+    """Clean up Redis images for a specific symbol."""
+    try:
+        from redis_image_manager import get_redis_image_manager
+        redis_image_manager = get_redis_image_manager()
+        images = redis_image_manager.get_images_by_symbol(symbol, interval)
+        
+        deleted_count = 0
+        for image in images:
+            if 'key' in image:
+                if redis_image_manager.delete_image(image['key']):
+                    deleted_count += 1
+        
+        return {
+            "success": True,
+            "message": f"Cleaned up {deleted_count} Redis images for {symbol}",
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup Redis images for {symbol}: {str(e)}")
+
+@app.delete("/redis/images")
+async def clear_all_redis_images():
+    """Clear all Redis images."""
+    try:
+        from redis_image_manager import get_redis_image_manager
+        redis_image_manager = get_redis_image_manager()
+        stats = redis_image_manager.clear_all_images()
+        return {
+            "success": True,
+            "message": "All Redis images cleared",
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear all Redis images: {str(e)}")
+
+# Redis Cache Management Endpoints
+@app.get("/redis/cache/stats")
+async def get_redis_cache_stats():
+    """Get Redis cache statistics."""
+    try:
+        from redis_cache_manager import get_redis_cache_manager
+        cache_manager = get_redis_cache_manager()
+        stats = cache_manager.get_stats()
+        return {
+            "success": True,
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get Redis cache stats: {str(e)}")
+
+@app.post("/redis/cache/clear")
+async def clear_redis_cache(data_type: str = None):
+    """Clear Redis cache entries."""
+    try:
+        from redis_cache_manager import get_redis_cache_manager
+        cache_manager = get_redis_cache_manager()
+        deleted_counts = cache_manager.clear(data_type)
+        return {
+            "success": True,
+            "message": f"Redis cache cleared for {data_type if data_type else 'all data types'}",
+            "deleted_counts": deleted_counts
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear Redis cache: {str(e)}")
+
+@app.delete("/redis/cache/stock/{symbol}")
+async def clear_stock_cache(symbol: str, exchange: str = "NSE"):
+    """Clear cache for a specific stock."""
+    try:
+        from redis_cache_manager import clear_stock_cache
+        stats = clear_stock_cache(symbol, exchange)
+        return {
+            "success": True,
+            "message": f"Cache cleared for {symbol}",
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear stock cache: {str(e)}")
+
+@app.get("/redis/cache/stock/{symbol}")
+async def get_cached_stock_data(symbol: str, exchange: str = "NSE", interval: str = "day", period: int = 365):
+    """Get cached stock data."""
+    try:
+        from redis_cache_manager import get_cached_stock_data
+        data = get_cached_stock_data(symbol, exchange, interval, period)
+        if data is not None:
+            return {
+                "success": True,
+                "data": data.to_dict('records') if hasattr(data, 'to_dict') else data,
+                "cached": True
+            }
+        else:
+            return {
+                "success": False,
+                "message": "No cached data found",
+                "cached": False
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get cached stock data: {str(e)}")
 
 # Storage Management Endpoints
 @app.get("/storage/info")

@@ -191,7 +191,7 @@ class StockAnalysisOrchestrator:
         return indicators
     
     def create_visualizations(self, data: pd.DataFrame, indicators: Dict[str, Any], 
-                             symbol: str, output_dir: str) -> Dict[str, Any]:
+                             symbol: str, output_dir: str, interval: str = "day") -> Dict[str, Any]:
         """
         Create optimized visualization charts for AI analysis.
         Reduced from 8 charts to 4 comprehensive charts to eliminate redundancy.
@@ -201,6 +201,7 @@ class StockAnalysisOrchestrator:
             indicators: Dictionary containing calculated indicators
             symbol: Stock symbol
             output_dir: Directory to save chart images
+            interval: Time interval for the data (default: "day")
         Returns:
             Dict[str, Any]: Dictionary containing chart data and metadata
         """
@@ -245,6 +246,36 @@ class StockAnalysisOrchestrator:
             logger.warning(f"Failed to create MTF comparison chart for {symbol}: {e}")
         
         logger.info(f"Created {len(charts)} optimized charts for {symbol}")
+        
+        # Store charts in Redis immediately after creation
+        try:
+            from redis_image_manager import get_redis_image_manager
+            redis_image_manager = get_redis_image_manager()
+            
+            if redis_image_manager:
+                print(f"🖼️ [REDIS DEBUG] Storing {len(charts)} charts in Redis for {symbol}")
+                
+                for chart_type, chart_path in charts.items():
+                    try:
+                        # Read the chart file
+                        with open(chart_path, 'rb') as f:
+                            chart_data = f.read()
+                        
+                        # Store in Redis
+                        redis_key = redis_image_manager.store_image(
+                            chart_data, 
+                            symbol=symbol, 
+                            interval=interval, 
+                            chart_type=chart_type
+                        )
+                        print(f"✅ [REDIS DEBUG] Stored {chart_type} in Redis: {redis_key}")
+                        
+                    except Exception as e:
+                        print(f"⚠️ [REDIS DEBUG] Failed to store {chart_type} in Redis: {e}")
+                        
+        except Exception as e:
+            print(f"⚠️ [REDIS DEBUG] Redis image manager not available: {e}")
+        
         return charts
     
     def serialize_indicators(self, indicators: Dict[str, Any]) -> Dict[str, Any]:
@@ -915,7 +946,7 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             
             # Step 3: Create visualizations
             logger.info(f"[ENHANCED ANALYSIS] Creating visualizations for {symbol}")
-            chart_paths = self.create_visualizations(data, indicators, symbol, output_dir or "output")
+            chart_paths = self.create_visualizations(data, indicators, symbol, output_dir or "output", interval)
             
             # Step 4: Get sector context if available
             sector_context = None
@@ -1506,7 +1537,7 @@ if __name__ == "__main__":
             # Create visualizations for AI analysis
             chart_paths = {}
             if output_dir:
-                chart_paths = self.create_visualizations(stock_data, state.indicators, symbol, output_dir)
+                chart_paths = self.create_visualizations(stock_data, state.indicators, symbol, output_dir, interval)
             
             # Get sector context if available
             sector_benchmarking = None

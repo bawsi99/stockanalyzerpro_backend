@@ -70,6 +70,8 @@ class Trade:
         self.trailing_stop = None
         self.highest_price = entry_price
         self.lowest_price = entry_price
+        self.entry_commission = 0.0
+        self.exit_commission = 0.0
     
     def update_trailing_stop(self, current_price: float, trailing_distance: float):
         """Update trailing stop."""
@@ -133,13 +135,17 @@ class Trade:
 class Portfolio:
     """Manages portfolio state during backtesting."""
     
-    def __init__(self, initial_capital: float):
+    def __init__(self, initial_capital: float, commission_rate: float = 0.0, slippage_rate: float = 0.0, trailing_stop_enabled: bool = True, trailing_stop_distance: float = 0.0):
         self.initial_capital = initial_capital
         self.capital = initial_capital
         self.positions = {}  # symbol -> Trade
         self.closed_trades = []
         self.equity_curve = []
         self.daily_returns = []
+        self.commission_rate = commission_rate
+        self.slippage_rate = slippage_rate
+        self.trailing_stop_enabled = trailing_stop_enabled
+        self.trailing_stop_distance = trailing_stop_distance
         
     def add_trade(self, trade: Trade):
         """Add a new trade to the portfolio."""
@@ -147,16 +153,32 @@ class Portfolio:
             logger.warning(f"Trade for {trade.symbol} already exists")
             return False
         
-        # Calculate position value
-        position_value = trade.entry_price * trade.shares
+        # Apply slippage to entry and compute commission
+        if trade.direction == 'long':
+            effective_entry_price = trade.entry_price * (1 + self.slippage_rate)
+        else:
+            effective_entry_price = trade.entry_price * (1 - self.slippage_rate)
+        position_value = effective_entry_price * trade.shares
+        entry_commission = position_value * self.commission_rate
         
         # Check if we have enough capital
-        if position_value > self.capital:
+        if position_value + entry_commission > self.capital:
             logger.warning(f"Insufficient capital for trade: {trade.symbol}")
             return False
         
-        # Deduct capital
-        self.capital -= position_value
+        # Deduct capital (including commission)
+        self.capital -= (position_value + entry_commission)
+
+        # Persist effective entry and commission
+        trade.entry_price = effective_entry_price
+        trade.entry_commission = entry_commission
+
+        # Initialize trailing stop if enabled
+        if self.trailing_stop_enabled and self.trailing_stop_distance > 0:
+            if trade.direction == 'long':
+                trade.trailing_stop = trade.entry_price * (1 - self.trailing_stop_distance)
+            else:
+                trade.trailing_stop = trade.entry_price * (1 + self.trailing_stop_distance)
         self.positions[trade.symbol] = trade
         
         return True
@@ -167,11 +189,28 @@ class Portfolio:
             return False
         
         trade = self.positions[symbol]
-        trade.close_trade(exit_date, exit_price)
+        # Apply slippage to exit and compute commission
+        if trade.direction == 'long':
+            effective_exit_price = exit_price * (1 - self.slippage_rate)
+        else:
+            effective_exit_price = exit_price * (1 + self.slippage_rate)
+
+        exit_gross_value = effective_exit_price * trade.shares
+        exit_commission = exit_gross_value * self.commission_rate
+
+        # Set trade exit details
+        trade.close_trade(exit_date, effective_exit_price)
+        trade.exit_commission = exit_commission
         
-        # Add back capital
-        position_value = exit_price * trade.shares
-        self.capital += position_value
+        # Add back capital net of commission
+        self.capital += (exit_gross_value - exit_commission)
+
+        # Recalculate P&L net of commissions
+        gross_pnl = (trade.exit_price - trade.entry_price) * trade.shares if trade.direction == 'long' \
+            else (trade.entry_price - trade.exit_price) * trade.shares
+        net_pnl = gross_pnl - trade.entry_commission - trade.exit_commission
+        trade.pnl = net_pnl
+        trade.pnl_pct = net_pnl / (trade.entry_price * trade.shares) if trade.shares > 0 else 0.0
         
         # Move to closed trades
         self.closed_trades.append(trade)
@@ -216,7 +255,13 @@ class BacktestEngine:
     
     def __init__(self, config: BacktestConfig = None):
         self.config = config or BacktestConfig()
-        self.portfolio = Portfolio(self.config.initial_capital)
+        self.portfolio = Portfolio(
+            self.config.initial_capital,
+            commission_rate=self.config.commission_rate,
+            slippage_rate=self.config.slippage_rate,
+            trailing_stop_enabled=self.config.trailing_stop,
+            trailing_stop_distance=self.config.trailing_stop_distance,
+        )
         self.data = {}
         self.benchmark_data = None
         self.results = {}
@@ -252,6 +297,10 @@ class BacktestEngine:
             end_idx = min(len(all_dates), np.searchsorted(all_dates, self.config.end_date))
         
         backtest_dates = all_dates[start_idx:end_idx]
+        if not backtest_dates:
+            logger.warning("No dates available in the selected backtest range")
+            self.results = {}
+            return self.results
         logger.info(f"Running backtest from {backtest_dates[0]} to {backtest_dates[-1]}")
         
         # Main backtest loop
@@ -263,16 +312,18 @@ class BacktestEngine:
                     current_prices[symbol] = df.loc[date, 'close']
             
             # Update trailing stops
-            for symbol, trade in self.portfolio.positions.items():
-                if symbol in current_prices:
-                    trade.update_trailing_stop(current_prices[symbol], 
-                                             self.config.trailing_stop_distance)
+            if self.config.trailing_stop:
+                for symbol, trade in self.portfolio.positions.items():
+                    if symbol in current_prices:
+                        trade.update_trailing_stop(current_prices[symbol], 
+                                                   self.config.trailing_stop_distance)
             
             # Check exit conditions
             for symbol, trade in list(self.portfolio.positions.items()):
                 if symbol in current_prices:
                     if trade.check_exit_conditions(current_prices[symbol], date):
-                        self.portfolio.close_trade(symbol, date, current_prices[symbol])
+                        # Use the exit price determined by the triggered condition
+                        self.portfolio.close_trade(symbol, date, trade.exit_price)
             
             # Run strategy
             if len(self.portfolio.positions) < self.config.max_positions:
@@ -328,9 +379,14 @@ class BacktestEngine:
         profit_factor = abs(avg_win * winning_trades / (avg_loss * losing_trades)) if losing_trades > 0 and avg_loss != 0 else float('inf')
         
         # Store results
+        num_days = max(1, len(self.portfolio.equity_curve))
+        try:
+            cagr = (final_value / initial_value) ** (252 / num_days) - 1
+        except Exception:
+            cagr = 0.0
         self.results = {
             'total_return': total_return,
-            'annualized_return': total_return * 252 / len(self.portfolio.equity_curve),
+            'annualized_return': cagr,
             'volatility': volatility,
             'sharpe_ratio': sharpe_ratio,
             'max_drawdown': max_drawdown,
@@ -463,6 +519,10 @@ class SimpleMovingAverageStrategy(StrategyTemplate):
         """Execute the moving average strategy."""
         for symbol, df in engine.data.items():
             if symbol in current_prices and date in df.index:
+                # Ensure signals exist; compute if missing
+                if 'signal' not in df.columns:
+                    df = self.generate_signals(df)
+                    engine.data[symbol] = df
                 # Get current signal
                 if date in df.index:
                     signal = df.loc[date, 'signal'] if 'signal' in df.columns else 0

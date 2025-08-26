@@ -632,8 +632,13 @@ JSON:
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for technical_overview: {chart_paths.get('technical_overview')}")
         if chart_paths.get('technical_overview'):
             try:
-                with open(chart_paths['technical_overview'], 'rb') as f:
-                    technical_chart = f.read()
+                # Try to load from Redis first, fallback to file
+                technical_chart = self.image_utils.load_image_from_redis_or_file(
+                    chart_paths['technical_overview'], 
+                    symbol=symbol, 
+                    interval=interval, 
+                    chart_type='technical_overview'
+                )
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read technical_overview: {len(technical_chart)} bytes")
                 task = self.analyze_technical_overview(technical_chart)
                 chart_analysis_tasks.append(("technical_overview_enhanced", task))
@@ -647,8 +652,13 @@ JSON:
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for pattern_analysis: {chart_paths.get('pattern_analysis')}")
         if chart_paths.get('pattern_analysis'):
             try:
-                with open(chart_paths['pattern_analysis'], 'rb') as f:
-                    pattern_chart = f.read()
+                # Try to load from Redis first, fallback to file
+                pattern_chart = self.image_utils.load_image_from_redis_or_file(
+                    chart_paths['pattern_analysis'], 
+                    symbol=symbol, 
+                    interval=interval, 
+                    chart_type='pattern_analysis'
+                )
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read pattern_analysis: {len(pattern_chart)} bytes")
                 task = self.analyze_pattern_analysis(pattern_chart, indicators)
                 chart_analysis_tasks.append(("pattern_analysis_enhanced", task))
@@ -662,8 +672,13 @@ JSON:
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for volume_analysis: {chart_paths.get('volume_analysis')}")
         if chart_paths.get('volume_analysis'):
             try:
-                with open(chart_paths['volume_analysis'], 'rb') as f:
-                    volume_chart = f.read()
+                # Try to load from Redis first, fallback to file
+                volume_chart = self.image_utils.load_image_from_redis_or_file(
+                    chart_paths['volume_analysis'], 
+                    symbol=symbol, 
+                    interval=interval, 
+                    chart_type='volume_analysis'
+                )
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read volume_analysis: {len(volume_chart)} bytes")
                 task = self.analyze_volume_analysis(volume_chart, indicators)
                 chart_analysis_tasks.append(("volume_analysis_enhanced", task))
@@ -677,8 +692,13 @@ JSON:
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for mtf_comparison: {chart_paths.get('mtf_comparison')}")
         if chart_paths.get('mtf_comparison'):
             try:
-                with open(chart_paths['mtf_comparison'], 'rb') as f:
-                    mtf_chart = f.read()
+                # Try to load from Redis first, fallback to file
+                mtf_chart = self.image_utils.load_image_from_redis_or_file(
+                    chart_paths['mtf_comparison'], 
+                    symbol=symbol, 
+                    interval=interval, 
+                    chart_type='mtf_comparison'
+                )
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read mtf_comparison: {len(mtf_chart)} bytes")
                 task = self.analyze_mtf_comparison(mtf_chart, indicators)
                 chart_analysis_tasks.append(("mtf_comparison_enhanced", task))

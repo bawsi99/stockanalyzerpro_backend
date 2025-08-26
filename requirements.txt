@@ -5,7 +5,7 @@ pydantic==2.11.0a2
 python-dotenv==1.0.1
 
 # WebSocket and real-time data
-kiteconnect==6.1.0
+kiteconnect==5.0.1
 websockets==14.2
 msgpack==1.0.8
 
