@@ -4,7 +4,7 @@ from typing import Dict, Optional, List
 import json
 import os
 from pathlib import Path
-from cache_manager import cached
+# Redis cache functionality will be used instead of local cache
 import time
 from functools import wraps
 
@@ -130,7 +130,6 @@ class SectorClassifier:
         
         logging.info(f"Built stock-to-sector mapping for {len(self.stock_to_sector)} stocks")
     
-    @cached(ttl=3600, key_prefix="sector_lookup")  # Cache for 1 hour
     def get_stock_sector(self, symbol: str) -> Optional[str]:
         """
         Get the sector for a given stock symbol.
@@ -143,7 +142,6 @@ class SectorClassifier:
         """
         return self.stock_to_sector.get(symbol.upper())
     
-    @cached(ttl=7200, key_prefix="sector_display")  # Cache for 2 hours
     def get_sector_display_name(self, sector: str) -> Optional[str]:
         """
         Get the display name for a sector.
@@ -156,7 +154,6 @@ class SectorClassifier:
         """
         return self.sector_mappings.get(sector, {}).get('display_name')
     
-    @cached(ttl=7200, key_prefix="sector_indices")  # Cache for 2 hours
     def get_sector_indices(self, sector: str) -> List[str]:
         """
         Get all available indices for a sector.
@@ -169,7 +166,6 @@ class SectorClassifier:
         """
         return self.sector_mappings.get(sector, {}).get('indices', [])
     
-    @cached(ttl=7200, key_prefix="sector_primary_index")  # Cache for 2 hours
     def get_primary_sector_index(self, sector: str) -> Optional[str]:
         """
         Get the primary index for a sector.
@@ -182,7 +178,6 @@ class SectorClassifier:
         """
         return self.sector_mappings.get(sector, {}).get('primary_index')
     
-    @cached(ttl=3600, key_prefix="all_sectors")  # Cache for 1 hour
     def get_all_sectors(self) -> List[Dict[str, str]]:
         """
         Get list of all available sectors with display names.
@@ -199,7 +194,6 @@ class SectorClassifier:
             for sector, data in self.sector_mappings.items()
         ]
     
-    @cached(ttl=3600, key_prefix="sector_stocks")  # Cache for 1 hour
     def get_sector_stocks(self, sector: str) -> List[str]:
         """
         Get all stocks in a sector.

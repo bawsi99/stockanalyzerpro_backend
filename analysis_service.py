@@ -182,7 +182,7 @@ async def startup_event():
             redis_cache_config = DeploymentConfig.get_redis_cache_config()
             from redis_cache_manager import initialize_redis_cache_manager
             redis_cache_manager = initialize_redis_cache_manager(**redis_cache_config)
-            print(f"✅ Redis cache manager initialized: compression={redis_cache_manager.enable_compression}, local_fallback={redis_cache_manager.enable_local_fallback}")
+            print(f"✅ Redis cache manager initialized: compression={redis_cache_manager.enable_compression}")
         except Exception as cache_e:
             print(f"⚠️  Warning: Could not initialize Redis cache manager: {cache_e}")
             print("ℹ️  Falling back to local caching")

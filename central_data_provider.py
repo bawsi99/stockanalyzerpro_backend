@@ -46,16 +46,9 @@ class CentralDataProvider:
             logger.info("Using Redis cache manager")
         except Exception as e:
             logger.warning(f"Redis cache manager not available: {e}")
-            logger.info("Falling back to local cache")
+            logger.error("Redis cache is required for system operation")
         
-        # Initialize local caches as fallback
-        self.stock_data_cache = {}  # {(symbol, exchange, interval, period): (data, timestamp)}
-        self.index_data_cache = {}  # {(index, interval, period): (data, timestamp)}
-        self.sector_data_cache = {}  # {sector: (data, timestamp)}
-        self.indicator_cache = {}   # {(symbol, interval): (indicators, timestamp)}
-        self.pattern_cache = {}     # {(symbol, interval): (patterns, timestamp)}
-        
-        # Cache expiration settings (in seconds)
+        # Cache expiration settings (in seconds) - used for TTL configuration
         self.cache_expiration = {
             'stock_data': 300,      # 5 minutes
             'index_data': 600,      # 10 minutes
@@ -111,14 +104,6 @@ class CentralDataProvider:
                 logger.debug(f"Redis cache hit for {symbol} {interval} data")
                 return cached_data
         
-        # Fallback to local cache
-        cache_key = (symbol, exchange, interval, period)
-        if not force_refresh and cache_key in self.stock_data_cache:
-            data, timestamp = self.stock_data_cache[cache_key]
-            if time.time() - timestamp < self.cache_expiration['stock_data']:
-                logger.debug(f"Local cache hit for {symbol} {interval} data")
-                return data
-        
         # If not in cache or expired, fetch new data
         try:
             # Import ZerodhaDataClient here to avoid circular imports
@@ -145,8 +130,7 @@ class CentralDataProvider:
                     self.redis_cache_manager.set('stock_data', data, self.cache_expiration['stock_data'], 
                                                symbol, exchange, interval, period)
                 
-                # Also cache locally as fallback
-                self.stock_data_cache[cache_key] = (data, time.time())
+
                 return data
             else:
                 logger.error(f"Fetched empty data for {symbol}")
@@ -186,14 +170,12 @@ class CentralDataProvider:
         Returns:
             DataFrame with index data or None if failed
         """
-        cache_key = (index, interval, period)
-        
-        # Check if we have non-expired data in cache
-        if not force_refresh and cache_key in self.index_data_cache:
-            data, timestamp = self.index_data_cache[cache_key]
-            if time.time() - timestamp < self.cache_expiration['index_data']:
-                logger.debug(f"Cache hit for {index} {interval} data")
-                return data
+        # Try Redis cache first
+        if self.redis_cache_manager and not force_refresh:
+            cached_data = self.redis_cache_manager.get('index_data', index, interval, period)
+            if cached_data is not None:
+                logger.debug(f"Redis cache hit for {index} {interval} data")
+                return cached_data
         
         # If not in cache or expired, fetch new data
         try:
@@ -214,9 +196,11 @@ class CentralDataProvider:
                 period=period
             )
             
-            # Cache the result
+            # Cache the result in Redis
             if data is not None and not data.empty:
-                self.index_data_cache[cache_key] = (data, time.time())
+                if self.redis_cache_manager:
+                    self.redis_cache_manager.set('index_data', data, self.cache_expiration['index_data'], 
+                                               index, interval, period)
                 return data
             else:
                 logger.error(f"Fetched empty data for {index}")
@@ -237,12 +221,12 @@ class CentralDataProvider:
         Returns:
             Dict with sector data or None if failed
         """
-        # Check if we have non-expired data in cache
-        if not force_refresh and sector in self.sector_data_cache:
-            data, timestamp = self.sector_data_cache[sector]
-            if time.time() - timestamp < self.cache_expiration['sector_data']:
-                logger.debug(f"Cache hit for {sector} sector data")
-                return data
+        # Try Redis cache first
+        if self.redis_cache_manager and not force_refresh:
+            cached_data = self.redis_cache_manager.get('sector_data', sector)
+            if cached_data is not None:
+                logger.debug(f"Redis cache hit for {sector} sector data")
+                return cached_data
         
         # If not in cache or expired, fetch new data
         try:
@@ -262,8 +246,9 @@ class CentralDataProvider:
                 "stock_count": len(stocks)
             }
             
-            # Cache the result
-            self.sector_data_cache[sector] = (sector_data, time.time())
+            # Cache the result in Redis
+            if self.redis_cache_manager:
+                self.redis_cache_manager.set('sector_data', sector_data, self.cache_expiration['sector_data'], sector)
             return sector_data
                 
         except Exception as e:
@@ -286,14 +271,12 @@ class CentralDataProvider:
         Returns:
             Dict with technical indicators or None if failed
         """
-        cache_key = (symbol, exchange, interval)
-        
-        # Check if we have non-expired data in cache
-        if not force_refresh and cache_key in self.indicator_cache:
-            indicators, timestamp = self.indicator_cache[cache_key]
-            if time.time() - timestamp < self.cache_expiration['indicator_data']:
-                logger.debug(f"Cache hit for {symbol} indicators")
-                return indicators
+        # Try Redis cache first
+        if self.redis_cache_manager and not force_refresh:
+            cached_data = self.redis_cache_manager.get('indicators', symbol, exchange, interval)
+            if cached_data is not None:
+                logger.debug(f"Redis cache hit for {symbol} indicators")
+                return cached_data
         
         # If not in cache or expired, calculate indicators
         try:
@@ -312,8 +295,10 @@ class CentralDataProvider:
             # Calculate indicators
             indicators = TechnicalIndicators.calculate_all_indicators_optimized(data, symbol)
             
-            # Cache the result
-            self.indicator_cache[cache_key] = (indicators, time.time())
+            # Cache the result in Redis
+            if self.redis_cache_manager:
+                self.redis_cache_manager.set('indicators', indicators, self.cache_expiration['indicator_data'], 
+                                           symbol, exchange, interval)
             return indicators
                 
         except Exception as e:
@@ -336,14 +321,12 @@ class CentralDataProvider:
         Returns:
             Dict with pattern data or None if failed
         """
-        cache_key = (symbol, exchange, interval)
-        
-        # Check if we have non-expired data in cache
-        if not force_refresh and cache_key in self.pattern_cache:
-            patterns, timestamp = self.pattern_cache[cache_key]
-            if time.time() - timestamp < self.cache_expiration['pattern_data']:
-                logger.debug(f"Cache hit for {symbol} patterns")
-                return patterns
+        # Try Redis cache first
+        if self.redis_cache_manager and not force_refresh:
+            cached_data = self.redis_cache_manager.get('patterns', symbol, exchange, interval)
+            if cached_data is not None:
+                logger.debug(f"Redis cache hit for {symbol} patterns")
+                return cached_data
         
         # If not in cache or expired, detect patterns
         try:
@@ -408,8 +391,10 @@ class CentralDataProvider:
 
             patterns['advanced_patterns'] = adv
             
-            # Cache the result
-            self.pattern_cache[cache_key] = (patterns, time.time())
+            # Cache the result in Redis
+            if self.redis_cache_manager:
+                self.redis_cache_manager.set('patterns', patterns, self.cache_expiration['pattern_data'], 
+                                           symbol, exchange, interval)
             return patterns
                 
         except Exception as e:
@@ -424,28 +409,32 @@ class CentralDataProvider:
             cache_type: Type of cache to clear ('stock_data', 'index_data', 'sector_data', 
                       'indicator_data', 'pattern_data') or None to clear all
         """
-        if cache_type == 'stock_data' or cache_type is None:
-            self.stock_data_cache = {}
-        if cache_type == 'index_data' or cache_type is None:
-            self.index_data_cache = {}
-        if cache_type == 'sector_data' or cache_type is None:
-            self.sector_data_cache = {}
-        if cache_type == 'indicator_data' or cache_type is None:
-            self.indicator_cache = {}
-        if cache_type == 'pattern_data' or cache_type is None:
-            self.pattern_cache = {}
+        if self.redis_cache_manager:
+            if cache_type == 'stock_data' or cache_type is None:
+                self.redis_cache_manager.clear('stock_data')
+            if cache_type == 'index_data' or cache_type is None:
+                self.redis_cache_manager.clear('index_data')
+            if cache_type == 'sector_data' or cache_type is None:
+                self.redis_cache_manager.clear('sector_data')
+            if cache_type == 'indicator_data' or cache_type is None:
+                self.redis_cache_manager.clear('indicators')
+            if cache_type == 'pattern_data' or cache_type is None:
+                self.redis_cache_manager.clear('patterns')
             
-        logger.info(f"Cleared {'all caches' if cache_type is None else cache_type + ' cache'}")
+            logger.info(f"Cleared {'all caches' if cache_type is None else cache_type + ' cache'} in Redis")
+        else:
+            logger.warning("Redis cache manager not available, cannot clear cache")
 
     # -------------------- Cache Mutation APIs --------------------
     def set_patterns_cache(self, symbol: str, exchange: str, interval: str, patterns: Dict[str, Any]) -> None:
-        """Persist externally computed patterns into the cache for reuse."""
+        """Persist externally computed patterns into the Redis cache for reuse."""
         try:
-            key = (symbol, exchange, interval)
-            self.pattern_cache[key] = (patterns or {}, time.time())
-        except Exception:
+            if self.redis_cache_manager:
+                self.redis_cache_manager.set('patterns', patterns, self.cache_expiration['pattern_data'], 
+                                           symbol, exchange, interval)
+        except Exception as e:
+            logger.warning(f"Failed to cache patterns for {symbol}: {e}")
             # Non-fatal: avoid raising from cache setter
-            pass
 
 # Create a singleton instance
 central_data_provider = CentralDataProvider()

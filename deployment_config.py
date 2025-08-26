@@ -77,8 +77,6 @@ class DeploymentConfig:
     REDIS_CACHE_CONFIGS = {
         "development": {
             "enable_compression": True,
-            "enable_local_fallback": True,
-            "local_cache_size": 1000,
             "cleanup_interval_minutes": 60,
             "redis_url": "redis://localhost:6379/0",
             "ttl_settings": {
@@ -92,8 +90,6 @@ class DeploymentConfig:
         },
         "staging": {
             "enable_compression": True,
-            "enable_local_fallback": True,
-            "local_cache_size": 500,
             "cleanup_interval_minutes": 30,
             "redis_url": "redis://localhost:6379/0",
             "ttl_settings": {
@@ -107,8 +103,6 @@ class DeploymentConfig:
         },
         "production": {
             "enable_compression": True,
-            "enable_local_fallback": False,  # Disable local fallback in production
-            "local_cache_size": 0,
             "cleanup_interval_minutes": 15,
             "redis_url": "redis://localhost:6379/0",
             "ttl_settings": {
@@ -167,8 +161,6 @@ class DeploymentConfig:
         # Override with environment variables if present
         config.update({
             "enable_compression": os.getenv("REDIS_CACHE_ENABLE_COMPRESSION", "true").lower() == "true",
-            "enable_local_fallback": os.getenv("REDIS_CACHE_ENABLE_LOCAL_FALLBACK", "true").lower() == "true",
-            "local_cache_size": int(os.getenv("REDIS_CACHE_LOCAL_SIZE", config["local_cache_size"])),
             "cleanup_interval_minutes": int(os.getenv("REDIS_CACHE_CLEANUP_INTERVAL_MINUTES", config["cleanup_interval_minutes"])),
             "redis_url": os.getenv("REDIS_URL", config["redis_url"])
         })
@@ -196,8 +188,6 @@ class DeploymentConfig:
                 "REDIS_IMAGE_QUALITY": os.getenv("REDIS_IMAGE_QUALITY"),
                 "REDIS_IMAGE_FORMAT": os.getenv("REDIS_IMAGE_FORMAT"),
                 "REDIS_CACHE_ENABLE_COMPRESSION": os.getenv("REDIS_CACHE_ENABLE_COMPRESSION"),
-                "REDIS_CACHE_ENABLE_LOCAL_FALLBACK": os.getenv("REDIS_CACHE_ENABLE_LOCAL_FALLBACK"),
-                "REDIS_CACHE_LOCAL_SIZE": os.getenv("REDIS_CACHE_LOCAL_SIZE"),
                 "REDIS_CACHE_CLEANUP_INTERVAL_MINUTES": os.getenv("REDIS_CACHE_CLEANUP_INTERVAL_MINUTES"),
                 "REDIS_URL": os.getenv("REDIS_URL")
             }

@@ -15,7 +15,7 @@ from patterns.visualization import PatternVisualizer
 
 # Add new imports for configuration and optimization
 from config import Config
-from cache_manager import cached, monitor_performance
+# Redis cache functionality will be used instead of local cache
 from zerodha_client import ZerodhaDataClient
 
 # Add to existing IndianMarketMetricsProvider class
@@ -99,8 +99,6 @@ class TechnicalIndicators:
         return data[column].rolling(window=window).apply(lambda x: np.sum(weights * x) / weights.sum(), raw=True)
     
     @staticmethod
-    @cached(ttl=600, key_prefix="macd")  # Cache for 10 minutes
-    @monitor_performance("calculate_macd")
     def calculate_macd(data: pd.DataFrame, column: str = 'close', fast_period: int = None, 
                       slow_period: int = None, signal_period: int = None) -> Tuple[pd.Series, pd.Series, pd.Series]:
         """
@@ -135,8 +133,6 @@ class TechnicalIndicators:
         return macd_line, signal_line, histogram
     
     @staticmethod
-    @cached(ttl=600, key_prefix="rsi")  # Cache for 10 minutes
-    @monitor_performance("calculate_rsi")
     def calculate_rsi(data: pd.DataFrame, column: str = 'close', window: int = None) -> pd.Series:
         """
         Calculate Relative Strength Index.

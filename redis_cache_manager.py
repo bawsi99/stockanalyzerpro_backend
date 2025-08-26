@@ -13,7 +13,6 @@ Features:
 - Automatic expiration and cleanup
 - Configurable TTL for different data types
 - Compression for large datasets
-- Fallback to local cache if Redis unavailable
 - Performance monitoring and statistics
 """
 
@@ -30,7 +29,6 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 import redis
-from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +39,6 @@ class RedisCacheManager:
     Provides intelligent caching with:
     - Automatic compression for large datasets
     - Configurable TTL for different data types
-    - Fallback to local cache if Redis unavailable
     - Performance monitoring
     - Automatic cleanup
     """
@@ -49,8 +46,6 @@ class RedisCacheManager:
     def __init__(self, 
                  redis_url: str = None,
                  enable_compression: bool = True,
-                 enable_local_fallback: bool = True,
-                 local_cache_size: int = 1000,
                  cleanup_interval_minutes: int = 60,
                  ttl_settings: Dict[str, int] = None):
         """
@@ -59,13 +54,10 @@ class RedisCacheManager:
         Args:
             redis_url: Redis connection URL
             enable_compression: Whether to compress large datasets
-            enable_local_fallback: Whether to use local cache as fallback
-            local_cache_size: Size of local fallback cache
             cleanup_interval_minutes: How often to run cleanup
         """
         self.redis_url = redis_url or os.getenv('REDIS_URL', 'redis://localhost:6379/0')
         self.enable_compression = enable_compression
-        self.enable_local_fallback = enable_local_fallback
         self.cleanup_interval_minutes = cleanup_interval_minutes
         
         # TTL settings for different data types
@@ -81,18 +73,10 @@ class RedisCacheManager:
         # Initialize Redis connection
         self._init_redis_connection()
         
-        # Local fallback cache
-        if self.enable_local_fallback:
-            self.local_cache = OrderedDict()
-            self.local_cache_size = local_cache_size
-            self.local_cache_lock = threading.RLock()
-        
         # Performance monitoring
         self.stats = {
             'redis_hits': 0,
             'redis_misses': 0,
-            'local_hits': 0,
-            'local_misses': 0,
             'compression_savings': 0,
             'errors': 0
         }
@@ -177,23 +161,28 @@ class RedisCacheManager:
                 decompressed = gzip.decompress(data)
                 data = decompressed
             except:
-                # Not compressed, use as-is
-                pass
+                pass  # Not compressed, use as-is
             
             # Deserialize
             deserialized = pickle.loads(data)
             
-            # Handle special types
-            if isinstance(deserialized, dict):
-                if deserialized.get('type') == 'dataframe':
-                    # Reconstruct pandas DataFrame
-                    df = pd.DataFrame(deserialized['data'])
-                    df.index = deserialized['index']
-                    df.columns = deserialized['columns']
-                    return df
-                elif deserialized.get('type') == 'numpy_array':
-                    # Reconstruct numpy array
-                    return np.array(deserialized['data'], dtype=deserialized['dtype'])
+            # Reconstruct pandas DataFrame if needed
+            if isinstance(deserialized, dict) and deserialized.get('type') == 'dataframe':
+                df = pd.DataFrame(deserialized['data'], 
+                                index=deserialized['index'], 
+                                columns=deserialized['columns'])
+                # Restore dtypes
+                for col, dtype_str in deserialized['dtypes'].items():
+                    if col in df.columns:
+                        try:
+                            df[col] = df[col].astype(dtype_str)
+                        except:
+                            pass  # Keep original dtype if conversion fails
+                return df
+            
+            # Reconstruct numpy array if needed
+            elif isinstance(deserialized, dict) and deserialized.get('type') == 'numpy_array':
+                return np.array(deserialized['data'], dtype=deserialized['dtype'])
             
             return deserialized
             
@@ -201,58 +190,41 @@ class RedisCacheManager:
             logger.error(f"Error deserializing data: {e}")
             raise
     
-    def _update_stats(self, stat_name: str, value: int = 1):
-        """Update statistics."""
+    def _update_stats(self, stat_name: str, increment: int = 1):
+        """Update statistics thread-safely."""
         with self.stats_lock:
             if stat_name in self.stats:
-                self.stats[stat_name] += value
+                self.stats[stat_name] += increment
     
     def get(self, data_type: str, *args, **kwargs) -> Optional[Any]:
         """
-        Get data from cache.
+        Retrieve data from cache.
         
         Args:
-            data_type: Type of data (e.g., 'stock_data', 'indicators', 'patterns')
+            data_type: Type of data
             *args, **kwargs: Arguments to generate cache key
             
         Returns:
-            Cached data or None if not found
+            Cached data or None if not found/expired
         """
+        if not self.redis_available:
+            logger.warning("Redis not available, cannot retrieve from cache")
+            return None
+        
         cache_key = self._generate_cache_key(data_type, *args, **kwargs)
         
-        # Try Redis first
-        if self.redis_available:
-            try:
-                cached_data = self.redis_client.get(cache_key)
-                if cached_data:
-                    print(f"🎯 [REDIS DEBUG] Cache HIT in Redis: {cache_key}")
-                    self._update_stats('redis_hits')
-                    return self._deserialize_data(cached_data)
-                else:
-                    print(f"❌ [REDIS DEBUG] Cache MISS in Redis: {cache_key}")
-                    self._update_stats('redis_misses')
-            except Exception as e:
-                logger.warning(f"Redis get error: {e}")
-                self._update_stats('errors')
-        
-        # Try local fallback cache
-        if self.enable_local_fallback:
-            with self.local_cache_lock:
-                if cache_key in self.local_cache:
-                    item = self.local_cache[cache_key]
-                    if not item['expired']():
-                        # Move to end (LRU)
-                        self.local_cache.move_to_end(cache_key)
-                        print(f"📱 [REDIS DEBUG] Cache HIT in local cache: {cache_key}")
-                        self._update_stats('local_hits')
-                        return item['data']
-                    else:
-                        # Remove expired item
-                        print(f"🗑️  [REDIS DEBUG] Removing expired item from local cache: {cache_key}")
-                        del self.local_cache[cache_key]
-                
-                print(f"❌ [REDIS DEBUG] Cache MISS in local cache: {cache_key}")
-                self._update_stats('local_misses')
+        try:
+            cached_data = self.redis_client.get(cache_key)
+            if cached_data is not None:
+                print(f"✅ [REDIS DEBUG] Cache HIT in Redis: {cache_key}")
+                self._update_stats('redis_hits')
+                return self._deserialize_data(cached_data)
+            else:
+                print(f"❌ [REDIS DEBUG] Cache MISS in Redis: {cache_key}")
+                self._update_stats('redis_misses')
+        except Exception as e:
+            logger.warning(f"Redis get error: {e}")
+            self._update_stats('errors')
         
         return None
     
@@ -269,201 +241,125 @@ class RedisCacheManager:
         Returns:
             True if successfully cached, False otherwise
         """
+        if not self.redis_available:
+            logger.warning("Redis not available, cannot store in cache")
+            return False
+        
         # Use TTL from settings if not provided
         if ttl_seconds is None:
             ttl_seconds = self.ttl_settings.get(data_type, 300)
+        
         cache_key = self._generate_cache_key(data_type, *args, **kwargs)
         serialized_data = self._serialize_data(data)
         
-        success = False
-        
-        # Try Redis first
-        if self.redis_available:
-            try:
-                print(f"💾 [REDIS DEBUG] Storing cache: {cache_key} (TTL: {ttl_seconds}s, size: {len(serialized_data)} bytes)")
-                self.redis_client.setex(cache_key, ttl_seconds, serialized_data)
-                success = True
-            except Exception as e:
-                logger.warning(f"Redis set error: {e}")
-                self._update_stats('errors')
-        
-        # Always store in local fallback cache
-        if self.enable_local_fallback:
-            with self.local_cache_lock:
-                # Remove if already exists
-                if cache_key in self.local_cache:
-                    del self.local_cache[cache_key]
-                
-                # Add new item
-                self.local_cache[cache_key] = {
-                    'data': data,
-                    'created_at': time.time(),
-                    'ttl': ttl_seconds,
-                    'expired': lambda: time.time() - self.local_cache[cache_key]['created_at'] > ttl_seconds
-                }
-                
-                print(f"📱 [REDIS DEBUG] Stored in local cache: {cache_key}")
-                
-                # Maintain cache size
-                if len(self.local_cache) > self.local_cache_size:
-                    removed_key = self.local_cache.popitem(last=False)[0]
-                    print(f"🗑️  [REDIS DEBUG] Removed from local cache (size limit): {removed_key}")
-                
-                success = True
-        
-        return success
+        try:
+            print(f"💾 [REDIS DEBUG] Storing cache: {cache_key} (TTL: {ttl_seconds}s, size: {len(serialized_data)} bytes)")
+            self.redis_client.setex(cache_key, ttl_seconds, serialized_data)
+            return True
+        except Exception as e:
+            logger.warning(f"Redis set error: {e}")
+            self._update_stats('errors')
+            return False
     
     def delete(self, data_type: str, *args, **kwargs) -> bool:
         """Delete data from cache."""
+        if not self.redis_available:
+            logger.warning("Redis not available, cannot delete from cache")
+            return False
+        
         cache_key = self._generate_cache_key(data_type, *args, **kwargs)
-        success = False
         
-        # Delete from Redis
-        if self.redis_available:
-            try:
-                result = self.redis_client.delete(cache_key)
-                success = result > 0
-            except Exception as e:
-                logger.warning(f"Redis delete error: {e}")
-                self._update_stats('errors')
-        
-        # Delete from local cache
-        if self.enable_local_fallback:
-            with self.local_cache_lock:
-                if cache_key in self.local_cache:
-                    del self.local_cache[cache_key]
-                    success = True
-        
-        return success
+        try:
+            result = self.redis_client.delete(cache_key)
+            return result > 0
+        except Exception as e:
+            logger.warning(f"Redis delete error: {e}")
+            self._update_stats('errors')
+            return False
     
     def clear(self, data_type: str = None) -> Dict[str, int]:
-        """Clear cache entries."""
-        deleted_counts = {'redis': 0, 'local': 0}
+        """
+        Clear cache data.
         
-        # Clear from Redis
-        if self.redis_available:
-            try:
-                if data_type:
-                    pattern = f"cache:{data_type}:*"
-                else:
-                    pattern = "cache:*"
-                
+        Args:
+            data_type: Specific data type to clear, or None for all
+            
+        Returns:
+            Dictionary with deletion counts
+        """
+        if not self.redis_available:
+            logger.warning("Redis not available, cannot clear cache")
+            return {'deleted': 0}
+        
+        try:
+            if data_type:
+                # Clear specific data type
+                pattern = f"cache:{data_type}:*"
                 keys = self.redis_client.keys(pattern)
                 if keys:
-                    deleted_counts['redis'] = self.redis_client.delete(*keys)
-            except Exception as e:
-                logger.warning(f"Redis clear error: {e}")
-                self._update_stats('errors')
-        
-        # Clear from local cache
-        if self.enable_local_fallback:
-            with self.local_cache_lock:
-                if data_type:
-                    # Delete specific type
-                    keys_to_delete = [
-                        key for key in self.local_cache.keys()
-                        if key.startswith(f"cache:{data_type}:")
-                    ]
-                    for key in keys_to_delete:
-                        del self.local_cache[key]
-                    deleted_counts['local'] = len(keys_to_delete)
-                else:
-                    # Clear all
-                    deleted_counts['local'] = len(self.local_cache)
-                    self.local_cache.clear()
-        
-        return deleted_counts
+                    deleted = self.redis_client.delete(*keys)
+                    logger.info(f"Cleared {deleted} keys for data type: {data_type}")
+                    return {'deleted': deleted}
+                return {'deleted': 0}
+            else:
+                # Clear all cache
+                pattern = "cache:*"
+                keys = self.redis_client.keys(pattern)
+                if keys:
+                    deleted = self.redis_client.delete(*keys)
+                    logger.info(f"Cleared all cache: {deleted} keys")
+                    return {'deleted': deleted}
+                return {'deleted': 0}
+        except Exception as e:
+            logger.error(f"Error clearing cache: {e}")
+            return {'deleted': 0, 'error': str(e)}
     
     def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics."""
         with self.stats_lock:
             stats = self.stats.copy()
         
-        # Add current cache sizes
+        # Add Redis info if available
+        if self.redis_available:
+            try:
+                info = self.redis_client.info()
+                stats.update({
+                    'redis_version': info.get('redis_version'),
+                    'used_memory_human': info.get('used_memory_human'),
+                    'connected_clients': info.get('connected_clients'),
+                    'total_commands_processed': info.get('total_commands_processed'),
+                    'keyspace_hits': info.get('keyspace_hits'),
+                    'keyspace_misses': info.get('keyspace_misses')
+                })
+            except Exception as e:
+                logger.warning(f"Could not get Redis info: {e}")
+        
         stats['redis_available'] = self.redis_available
-        stats['local_cache_size'] = len(self.local_cache) if self.enable_local_fallback else 0
-        stats['local_cache_max_size'] = self.local_cache_size if self.enable_local_fallback else 0
-        
-        # Calculate hit rates
-        total_redis_requests = stats['redis_hits'] + stats['redis_misses']
-        total_local_requests = stats['local_hits'] + stats['local_misses']
-        
-        stats['redis_hit_rate'] = (stats['redis_hits'] / total_redis_requests * 100) if total_redis_requests > 0 else 0
-        stats['local_hit_rate'] = (stats['local_hits'] / total_local_requests * 100) if total_local_requests > 0 else 0
+        stats['redis_url'] = self.redis_url
+        stats['enable_compression'] = self.enable_compression
         
         return stats
     
-    def _cleanup_expired_local_cache(self):
-        """Remove expired items from local cache."""
-        if not self.enable_local_fallback:
-            return
-        
-        with self.local_cache_lock:
-            expired_keys = [
-                key for key, item in self.local_cache.items()
-                if item['expired']()
-            ]
-            
-            for key in expired_keys:
-                del self.local_cache[key]
-                print(f"🗑️  [REDIS DEBUG] Removed expired from local cache: {key}")
-            
-            if expired_keys:
-                logger.debug(f"Cleaned up {len(expired_keys)} expired local cache items")
-                print(f"🧹 [REDIS DEBUG] Local cache cleanup: {len(expired_keys)} expired items removed")
-            else:
-                print(f"ℹ️  [REDIS DEBUG] Local cache cleanup: no expired items found")
-    
     def _start_cleanup_thread(self):
-        """Start background cleanup thread."""
+        """Start the cleanup thread."""
         def cleanup_worker():
             while True:
                 try:
                     time.sleep(self.cleanup_interval_minutes * 60)
-                    self._cleanup_expired_local_cache()
+                    # Redis handles expiration automatically, so this is mainly for monitoring
+                    logger.debug("Redis cache cleanup check completed")
                 except Exception as e:
-                    logger.error(f"Error in cache cleanup worker: {e}")
+                    logger.error(f"Error in cleanup worker: {e}")
         
         cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
         cleanup_thread.start()
-        logger.info("Cache cleanup thread started")
+        logger.info(f"Started cleanup thread with {self.cleanup_interval_minutes} minute interval")
 
-# Cache decorator for functions
-def redis_cached(data_type: str, ttl_seconds: int = 300):
-    """
-    Decorator for caching function results in Redis.
-    
-    Args:
-        data_type: Type of data being cached
-        ttl_seconds: Time to live in seconds
-    """
-    def decorator(func: Callable) -> Callable:
-        def wrapper(*args, **kwargs):
-            # Get cache manager instance
-            cache_manager = get_redis_cache_manager()
-            
-            # Try to get from cache
-            cached_result = cache_manager.get(data_type, *args, **kwargs)
-            if cached_result is not None:
-                logger.debug(f"Cache hit for {func.__name__}")
-                return cached_result
-            
-            # Calculate result
-            logger.debug(f"Cache miss for {func.__name__}, calculating...")
-            result = func(*args, **kwargs)
-            
-            # Cache the result
-            cache_manager.set(data_type, result, ttl_seconds, *args, **kwargs)
-            return result
-        
-        return wrapper
-    return decorator
-
-# Global cache manager instance
-_redis_cache_manager: Optional[RedisCacheManager] = None
+# Global Redis cache manager instance
+_redis_cache_manager = None
 
 def get_redis_cache_manager() -> RedisCacheManager:
-    """Get or create the global Redis cache manager instance."""
+    """Get the global Redis cache manager instance."""
     global _redis_cache_manager
     if _redis_cache_manager is None:
         _redis_cache_manager = RedisCacheManager()
@@ -475,58 +371,44 @@ def initialize_redis_cache_manager(**kwargs) -> RedisCacheManager:
     _redis_cache_manager = RedisCacheManager(**kwargs)
     return _redis_cache_manager
 
-# Utility functions for common cache operations
+# Convenience functions for common cache operations
 def cache_stock_data(symbol: str, exchange: str, interval: str, period: int, data: pd.DataFrame, ttl_seconds: int = 300) -> bool:
     """Cache stock data."""
-    cache_manager = get_redis_cache_manager()
-    return cache_manager.set('stock_data', data, ttl_seconds, symbol, exchange, interval, period)
+    return get_redis_cache_manager().set('stock_data', data, ttl_seconds, symbol, exchange, interval, period)
 
 def get_cached_stock_data(symbol: str, exchange: str, interval: str, period: int) -> Optional[pd.DataFrame]:
     """Get cached stock data."""
-    cache_manager = get_redis_cache_manager()
-    return cache_manager.get('stock_data', symbol, exchange, interval, period)
+    return get_redis_cache_manager().get('stock_data', symbol, exchange, interval, period)
 
 def cache_indicators(symbol: str, exchange: str, interval: str, indicators: Dict, ttl_seconds: int = 600) -> bool:
     """Cache technical indicators."""
-    cache_manager = get_redis_cache_manager()
-    return cache_manager.set('indicators', indicators, ttl_seconds, symbol, exchange, interval)
+    return get_redis_cache_manager().set('indicators', indicators, ttl_seconds, symbol, exchange, interval)
 
 def get_cached_indicators(symbol: str, exchange: str, interval: str) -> Optional[Dict]:
     """Get cached technical indicators."""
-    cache_manager = get_redis_cache_manager()
-    return cache_manager.get('indicators', symbol, exchange, interval)
+    return get_redis_cache_manager().get('indicators', symbol, exchange, interval)
 
 def cache_patterns(symbol: str, exchange: str, interval: str, patterns: Dict, ttl_seconds: int = 1800) -> bool:
     """Cache pattern recognition results."""
-    cache_manager = get_redis_cache_manager()
-    return cache_manager.set('patterns', patterns, ttl_seconds, symbol, exchange, interval)
+    return get_redis_cache_manager().set('patterns', patterns, ttl_seconds, symbol, exchange, interval)
 
 def get_cached_patterns(symbol: str, exchange: str, interval: str) -> Optional[Dict]:
     """Get cached pattern recognition results."""
-    cache_manager = get_redis_cache_manager()
-    return cache_manager.get('patterns', symbol, exchange, interval)
+    return get_redis_cache_manager().get('patterns', symbol, exchange, interval)
 
 def cache_sector_data(sector: str, period: int, data: Dict, ttl_seconds: int = 3600) -> bool:
     """Cache sector analysis data."""
-    cache_manager = get_redis_cache_manager()
-    return cache_manager.set('sector_data', data, ttl_seconds, sector, period)
+    return get_redis_cache_manager().set('sector_data', data, ttl_seconds, sector, period)
 
 def get_cached_sector_data(sector: str, period: int) -> Optional[Dict]:
     """Get cached sector analysis data."""
-    cache_manager = get_redis_cache_manager()
-    return cache_manager.get('sector_data', sector, period)
+    return get_redis_cache_manager().get('sector_data', sector, period)
 
 def clear_stock_cache(symbol: str = None, exchange: str = None) -> Dict[str, int]:
-    """Clear stock-related cache entries."""
-    cache_manager = get_redis_cache_manager()
-    if symbol:
+    """Clear stock data cache."""
+    if symbol and exchange:
         # Clear specific symbol
-        cache_manager.clear('stock_data')
-        cache_manager.clear('indicators')
-        cache_manager.clear('patterns')
+        return get_redis_cache_manager().clear('stock_data')
     else:
         # Clear all stock data
-        cache_manager.clear('stock_data')
-        cache_manager.clear('indicators')
-        cache_manager.clear('patterns')
-    return cache_manager.get_stats()
+        return get_redis_cache_manager().clear('stock_data')
