@@ -39,9 +39,9 @@ cachetools==5.5.2
 certifi==2025.1.31
 charset-normalizer==3.4.1
 click==8.2.1
-comm==0.2.2
+# comm==0.2.2  # Jupyter-related package, removed to avoid dependencies
 dataclasses-json==0.6.7
-debugpy==1.8.12
+# debugpy==1.8.12  # Jupyter-related package, removed to avoid dependencies
 decorator==5.1.1
 einops==0.8.1
 executing==2.2.0
@@ -70,10 +70,11 @@ joblib==1.4.2
 jsonpatch==1.33
 jsonpointer==3.0.0
 keras==3.9.0
-langchain==0.3.25
-langchain-community==0.3.24
-langchain-text-splitters==0.3.8
-langsmith==0.3.45
+# Temporarily removed langchain packages to avoid JupyterLab dependencies
+# langchain==0.3.25
+# langchain-community==0.3.24
+# langchain-text-splitters==0.3.8
+# langsmith==0.3.45
 libclang==18.1.1
 Markdown==3.7
 markdown-it-py==3.0.0
@@ -120,3 +121,9 @@ catboost==1.2.5
 
 # Note: Removed Jupyter dependencies (ipykernel, ipython, jupyter_client, jupyter_core)
 # to avoid y-py compilation issues in read-only environments
+
+# Note: Some packages below may pull in JupyterLab as a dependency
+# If you encounter y-py compilation issues, consider removing or replacing:
+# - langchain (may pull in JupyterLab for notebook support)
+# - keras (may have Jupyter dependencies)
+# - ipython-related packages
