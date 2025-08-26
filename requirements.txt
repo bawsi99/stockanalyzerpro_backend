@@ -8,7 +8,7 @@ pydantic==2.11.0a2
 python-dotenv==1.0.1
 
 # Database and storage
-supabase==2.16.0
+supabase==2.18.1
 
 # WebSocket and real-time data
 kiteconnect==5.0.1
