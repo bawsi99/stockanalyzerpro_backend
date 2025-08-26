@@ -2222,6 +2222,24 @@ async def get_storage_recommendations():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get storage recommendations: {str(e)}")
 
+# Root route
+@app.get("/")
+async def root():
+    """Root endpoint for the Analysis Service."""
+    return {
+        "service": "Stock Analysis Service",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "health": "/health",
+            "analyze": "/analyze",
+            "sector_list": "/sector/list",
+            "stock_sector": "/stock/{symbol}/sector",
+            "analyses_user": "/analyses/user/{user_id}"
+        },
+        "timestamp": datetime.now().isoformat()
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001) 

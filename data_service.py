@@ -167,6 +167,24 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+# Root route
+@app.get("/")
+async def root():
+    """Root endpoint for the Data Service."""
+    return {
+        "service": "Stock Data Service",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "health": "/health",
+            "stock_data": "/stock/{symbol}/history",
+            "stock_info": "/stock/{symbol}/info",
+            "websocket": "/ws/stream",
+            "market_status": "/market/status"
+        },
+        "timestamp": datetime.now().isoformat()
+    }
+
 # --- Live Data Pub/Sub System ---
 class LiveDataPubSub:
     def __init__(self):
