@@ -64,15 +64,11 @@ httpx==0.28.1
 httpx-sse==0.4.0
 huggingface-hub==0.33.0
 idna==3.10
-ipykernel==6.29.5
-ipython==8.32.0
 jedi==0.19.2
 Jinja2==3.1.6
 joblib==1.4.2
 jsonpatch==1.33
 jsonpointer==3.0.0
-jupyter_client==8.6.3
-jupyter_core==5.7.2
 keras==3.9.0
 langchain==0.3.25
 langchain-community==0.3.24
@@ -122,10 +118,5 @@ PySocks==1.7.1
 # Tabular ML
 catboost==1.2.5
 
-# Fix for y-py compilation issues in read-only environments
-y-py==0.6.2
-
-# Exclude problematic Jupyter dependencies if not needed
-# Uncomment the following lines if you don't need Jupyter functionality:
-# --exclude jupyterlab
-# --exclude jupyter-ydoc
+# Note: Removed Jupyter dependencies (ipykernel, ipython, jupyter_client, jupyter_core)
+# to avoid y-py compilation issues in read-only environments
