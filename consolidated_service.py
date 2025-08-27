@@ -123,8 +123,10 @@ async def health_check():
 @app.get("/stock/{symbol}/history")
 async def redirect_stock_history(symbol: str, request: Request):
     """Redirect stock history requests to data service."""
-    query_params = str(request.query_params)
-    redirect_url = f"/data/stock/{symbol}/history{query_params}"
+    # Properly handle query parameters
+    query_string = str(request.query_params)
+    query_suffix = f"?{query_string}" if query_string else ""
+    redirect_url = f"/data/stock/{symbol}/history{query_suffix}"
     return JSONResponse(
         status_code=307,
         content={"detail": f"Redirecting to {redirect_url}"},
@@ -143,8 +145,10 @@ async def redirect_sector_list():
 @app.get("/analyses/user/{user_id}")
 async def redirect_user_analyses(user_id: str, request: Request):
     """Redirect user analyses requests to analysis service."""
-    query_params = str(request.query_params)
-    redirect_url = f"/analysis/analyses/user/{user_id}{query_params}"
+    # Properly handle query parameters
+    query_string = str(request.query_params)
+    query_suffix = f"?{query_string}" if query_string else ""
+    redirect_url = f"/analysis/analyses/user/{user_id}{query_suffix}"
     return JSONResponse(
         status_code=307,
         content={"detail": f"Redirecting to {redirect_url}"},
@@ -163,8 +167,10 @@ async def redirect_analyze():
 @app.get("/stock/{symbol}/sector")
 async def redirect_stock_sector(symbol: str, request: Request):
     """Redirect stock sector requests to analysis service."""
-    query_params = str(request.query_params)
-    redirect_url = f"/analysis/stock/{symbol}/sector{query_params}"
+    # Properly handle query parameters
+    query_string = str(request.query_params)
+    query_suffix = f"?{query_string}" if query_string else ""
+    redirect_url = f"/analysis/stock/{symbol}/sector{query_suffix}"
     return JSONResponse(
         status_code=307,
         content={"detail": f"Redirecting to {redirect_url}"},
@@ -174,8 +180,10 @@ async def redirect_stock_sector(symbol: str, request: Request):
 @app.get("/auth/verify")
 async def redirect_auth_verify(request: Request):
     """Redirect auth verify requests to data service."""
-    query_params = str(request.query_params)
-    redirect_url = f"/data/auth/verify{query_params}"
+    # Properly handle query parameters
+    query_string = str(request.query_params)
+    query_suffix = f"?{query_string}" if query_string else ""
+    redirect_url = f"/data/auth/verify{query_suffix}"
     return JSONResponse(
         status_code=307,
         content={"detail": f"Redirecting to {redirect_url}"},
@@ -185,8 +193,10 @@ async def redirect_auth_verify(request: Request):
 @app.post("/auth/token")
 async def redirect_auth_token(request: Request):
     """Redirect auth token requests to data service."""
-    query_params = str(request.query_params)
-    redirect_url = f"/data/auth/token{query_params}"
+    # Properly handle query parameters
+    query_string = str(request.query_params)
+    query_suffix = f"?{query_string}" if query_string else ""
+    redirect_url = f"/data/auth/token{query_suffix}"
     return JSONResponse(
         status_code=307,
         content={"detail": f"Redirecting to {redirect_url}"},
@@ -196,8 +206,10 @@ async def redirect_auth_token(request: Request):
 @app.options("/auth/token")
 async def redirect_auth_token_options(request: Request):
     """Redirect auth token OPTIONS requests to data service."""
-    query_params = str(request.query_params)
-    redirect_url = f"/data/auth/token{query_params}"
+    # Properly handle query parameters
+    query_string = str(request.query_params)
+    query_suffix = f"?{query_string}" if query_string else ""
+    redirect_url = f"/data/auth/token{query_suffix}"
     return JSONResponse(
         status_code=307,
         content={"detail": f"Redirecting to {redirect_url}"},
