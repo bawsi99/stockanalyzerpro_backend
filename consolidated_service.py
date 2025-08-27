@@ -49,6 +49,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_websockets=True,  # Explicitly allow WebSocket connections
 )
 
 # Debug CORS configuration
@@ -235,6 +236,18 @@ async def websocket_endpoint(websocket):
     print(f"🔍 WebSocket connection attempt to /ws/stream")
     print(f"🔍 WebSocket headers: {websocket.headers}")
     print(f"🔍 WebSocket query params: {websocket.query_params}")
+    
+    # Check origin for WebSocket connections
+    origin = websocket.headers.get('origin')
+    print(f"🔍 WebSocket origin: {origin}")
+    print(f"🔍 Allowed origins: {CORS_ORIGINS}")
+    
+    if origin and origin not in CORS_ORIGINS:
+        print(f"❌ WebSocket origin rejected: {origin}")
+        await websocket.close(code=1008, reason="Origin not allowed")
+        return
+    
+    print(f"✅ WebSocket origin allowed: {origin}")
     
     try:
         # Import and use the WebSocket handler from data service
