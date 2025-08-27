@@ -68,6 +68,11 @@ except ImportError as e:
     print(f"❌ Error importing services: {e}")
     raise
 
+# Override CORS_ORIGINS in data_service to match consolidated service
+import data_service
+data_service.CORS_ORIGINS = CORS_ORIGINS
+print(f"🔧 Updated data_service CORS_ORIGINS: {data_service.CORS_ORIGINS}")
+
 # Mount the Data Service under /data prefix
 app.mount("/data", data_app)
 
