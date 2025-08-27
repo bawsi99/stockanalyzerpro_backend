@@ -51,6 +51,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Debug CORS configuration
+print(f"🔧 CORS Middleware configured with:")
+print(f"   - allow_origins: {CORS_ORIGINS}")
+print(f"   - allow_credentials: True")
+print(f"   - allow_methods: ['*']")
+print(f"   - allow_headers: ['*']")
+
 # Check and log environment variables
 print("🔧 Environment Check:")
 print(f"   ZERODHA_API_KEY: {'✅ Set' if os.getenv('ZERODHA_API_KEY') else '❌ Not Set'}")
@@ -225,9 +232,18 @@ async def redirect_auth_token_options(request: Request):
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket):
     """WebSocket endpoint for real-time data."""
-    # Import and use the WebSocket handler from data service
-    from data_service import websocket_endpoint as data_websocket
-    await data_websocket(websocket)
+    print(f"🔍 WebSocket connection attempt to /ws/stream")
+    print(f"🔍 WebSocket headers: {websocket.headers}")
+    print(f"🔍 WebSocket query params: {websocket.query_params}")
+    
+    try:
+        # Import and use the WebSocket handler from data service
+        from data_service import websocket_endpoint as data_websocket
+        print(f"✅ WebSocket handler imported successfully")
+        await data_websocket(websocket)
+    except Exception as e:
+        print(f"❌ WebSocket error: {e}")
+        await websocket.close(code=1000, reason=f"Internal error: {e}")
 
 if __name__ == "__main__":
     # Get port from environment or default to 8000
