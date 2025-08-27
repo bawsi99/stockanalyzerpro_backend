@@ -99,28 +99,44 @@ async def authenticate_websocket(websocket: WebSocket) -> Optional[Dict]:
     """Authenticate WebSocket connection using JWT token or API key and validate origin."""
     # First, validate the origin
     origin = websocket.headers.get('origin')
+    print(f"🔍 WebSocket authentication - Origin: {origin}")
+    print(f"🔍 WebSocket authentication - CORS_ORIGINS: {CORS_ORIGINS}")
+    
     if origin and origin not in CORS_ORIGINS:
         print(f"❌ WebSocket connection rejected from unauthorized origin: {origin}")
         print(f"   Allowed origins: {CORS_ORIGINS}")
         return None
     
     if not REQUIRE_AUTH:
+        print(f"✅ WebSocket authentication - No auth required, returning default user")
         return {'user_id': str(uuid.uuid4()), 'auth_type': 'none'}
     
     # Try to get token from query parameters or headers
     token = websocket.query_params.get('token')
     api_key = websocket.headers.get(API_KEY_HEADER)
     
+    print(f"🔍 WebSocket authentication - Token: {'Present' if token else 'None'}")
+    print(f"🔍 WebSocket authentication - API Key: {'Present' if api_key else 'None'}")
+    
     if token:
         # JWT authentication
+        print(f"🔍 WebSocket authentication - Attempting JWT verification...")
         payload = verify_jwt_token(token)
         if payload:
+            print(f"✅ WebSocket authentication - JWT verified for user: {payload['user_id']}")
             return {'user_id': payload['user_id'], 'auth_type': 'jwt'}
+        else:
+            print(f"❌ WebSocket authentication - JWT verification failed")
     elif api_key:
         # API key authentication
+        print(f"🔍 WebSocket authentication - Attempting API key verification...")
         if verify_api_key(api_key):
+            print(f"✅ WebSocket authentication - API key verified")
             return {'user_id': f'api_user_{api_key[:8]}', 'auth_type': 'api_key'}
+        else:
+            print(f"❌ WebSocket authentication - API key verification failed")
     
+    print(f"❌ WebSocket authentication - No valid authentication found")
     return None
 
 def make_json_serializable(obj):
