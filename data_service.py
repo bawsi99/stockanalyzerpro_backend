@@ -61,7 +61,7 @@ from zerodha_client import ZerodhaDataClient
 JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key-change-in-production')
 API_KEY_HEADER = 'X-API-Key'
 API_KEYS = os.getenv('API_KEYS', '').split(',')  # Comma-separated API keys
-REQUIRE_AUTH = os.getenv('REQUIRE_AUTH', 'true').lower() == 'true'
+REQUIRE_AUTH = os.getenv('REQUIRE_AUTH', 'false').lower() == 'true'
 
 # Simple in-memory token store (use Redis in production)
 active_tokens = set()
@@ -97,10 +97,12 @@ def verify_api_key(api_key: str) -> bool:
 
 async def authenticate_websocket(websocket: WebSocket) -> Optional[Dict]:
     """Authenticate WebSocket connection using JWT token or API key and validate origin."""
+    print(f"🔐 WebSocket authentication attempt - REQUIRE_AUTH: {REQUIRE_AUTH}")
+    
     # First, validate the origin
     origin = websocket.headers.get('origin')
-    print(f"🔍 WebSocket authentication - Origin: {origin}")
-    print(f"🔍 WebSocket authentication - CORS_ORIGINS: {CORS_ORIGINS}")
+    print(f"🔐 Origin: {origin}")
+    print(f"🔐 Allowed origins: {CORS_ORIGINS}")
     
     if origin and origin not in CORS_ORIGINS:
         print(f"❌ WebSocket connection rejected from unauthorized origin: {origin}")
@@ -108,35 +110,33 @@ async def authenticate_websocket(websocket: WebSocket) -> Optional[Dict]:
         return None
     
     if not REQUIRE_AUTH:
-        print(f"✅ WebSocket authentication - No auth required, returning default user")
+        print(f"✅ Authentication disabled, allowing connection")
         return {'user_id': str(uuid.uuid4()), 'auth_type': 'none'}
     
     # Try to get token from query parameters or headers
     token = websocket.query_params.get('token')
     api_key = websocket.headers.get(API_KEY_HEADER)
     
-    print(f"🔍 WebSocket authentication - Token: {'Present' if token else 'None'}")
-    print(f"🔍 WebSocket authentication - API Key: {'Present' if api_key else 'None'}")
+    print(f"🔐 Token from query params: {token[:20] if token else 'None'}...")
+    print(f"🔐 API key from headers: {api_key[:10] if api_key else 'None'}...")
     
     if token:
         # JWT authentication
-        print(f"🔍 WebSocket authentication - Attempting JWT verification...")
         payload = verify_jwt_token(token)
         if payload:
-            print(f"✅ WebSocket authentication - JWT verified for user: {payload['user_id']}")
+            print(f"✅ JWT authentication successful for user: {payload['user_id']}")
             return {'user_id': payload['user_id'], 'auth_type': 'jwt'}
         else:
-            print(f"❌ WebSocket authentication - JWT verification failed")
+            print(f"❌ JWT authentication failed")
     elif api_key:
         # API key authentication
-        print(f"🔍 WebSocket authentication - Attempting API key verification...")
         if verify_api_key(api_key):
-            print(f"✅ WebSocket authentication - API key verified")
+            print(f"✅ API key authentication successful")
             return {'user_id': f'api_user_{api_key[:8]}', 'auth_type': 'api_key'}
         else:
-            print(f"❌ WebSocket authentication - API key verification failed")
+            print(f"❌ API key authentication failed")
     
-    print(f"❌ WebSocket authentication - No valid authentication found")
+    print(f"❌ No valid authentication found")
     return None
 
 def make_json_serializable(obj):
@@ -171,7 +171,7 @@ def make_json_serializable(obj):
 app = FastAPI(title="Stock Data Service", version="1.0.0")
 
 # Load CORS origins from environment variable
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:8080,http://127.0.0.1:5173").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:8080,http://127.0.0.1:5173,https://stock-analyzer-pro.vercel.app,https://stock-analyzer-pro-git-prototype-aaryan-manawats-projects.vercel.app,https://stock-analyzer-cl9o3tivx-aaryan-manawats-projects.vercel.app,https://stockanalyzer-pro.vercel.app").split(",")
 CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS if origin.strip()]
 
 # Add CORS middleware

@@ -39,8 +39,21 @@ app = FastAPI(
 )
 
 # Load CORS origins from environment variable
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:8080,http://127.0.0.1:5173,https://stock-analyzer-pro.vercel.app,https://stock-analyzer-pro-git-prototype-aaryan-manawats-projects.vercel.app,https://stock-analyzer-cl9o3tivx-aaryan-manawats-projects.vercel.app").split(",")
-CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS if origin.strip()]
+DEFAULT_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:8080",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:5173",
+    "https://stock-analyzer-pro.vercel.app",
+    "https://stock-analyzer-pro-git-prototype-aaryan-manawats-projects.vercel.app",
+    "https://stock-analyzer-cl9o3tivx-aaryan-manawats-projects.vercel.app",
+    "https://stockanalyzer-pro.vercel.app"
+]
+
+CORS_ORIGINS_STR = os.getenv("CORS_ORIGINS", ",".join(DEFAULT_CORS_ORIGINS))
+CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_STR.split(",") if origin.strip()]
 
 # Add CORS middleware
 app.add_middleware(
@@ -49,15 +62,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_websockets=True,  # Explicitly allow WebSocket connections
 )
-
-# Debug CORS configuration
-print(f"🔧 CORS Middleware configured with:")
-print(f"   - allow_origins: {CORS_ORIGINS}")
-print(f"   - allow_credentials: True")
-print(f"   - allow_methods: ['*']")
-print(f"   - allow_headers: ['*']")
 
 # Check and log environment variables
 print("🔧 Environment Check:")
@@ -229,45 +234,18 @@ async def redirect_auth_token_options(request: Request):
         headers={"Location": redirect_url}
     )
 
-# WebSocket endpoint (needs special handling)
-@app.websocket("/ws/stream")
-async def websocket_endpoint(websocket):
-    """WebSocket endpoint for real-time data."""
-    print(f"🔍 WebSocket connection attempt to /ws/stream")
-    print(f"🔍 WebSocket headers: {websocket.headers}")
-    print(f"🔍 WebSocket query params: {websocket.query_params}")
-    
-    # Check origin for WebSocket connections
-    origin = websocket.headers.get('origin')
-    print(f"🔍 WebSocket origin: {origin}")
-    print(f"🔍 Allowed origins: {CORS_ORIGINS}")
-    
-    if origin and origin not in CORS_ORIGINS:
-        print(f"❌ WebSocket origin rejected: {origin}")
-        await websocket.close(code=1008, reason="Origin not allowed")
-        return
-    
-    print(f"✅ WebSocket origin allowed: {origin}")
-    
-    try:
-        # Import and use the WebSocket handler from data service
-        from data_service import websocket_endpoint as data_websocket
-        print(f"✅ WebSocket handler imported successfully")
-        await data_websocket(websocket)
-    except Exception as e:
-        print(f"❌ WebSocket error: {e}")
-        await websocket.close(code=1000, reason=f"Internal error: {e}")
+# WebSocket endpoint is handled by the mounted data service at /data/ws/stream
 
 if __name__ == "__main__":
     # Get port from environment or default to 8000
     port = int(os.getenv("PORT", 8000))
     host = os.getenv("HOST", "0.0.0.0")
-    
+
     print(f"🚀 Starting Consolidated Service on {host}:{port}")
     print(f"📊 Data Service mounted at /data")
     print(f"🔍 Analysis Service mounted at /analysis")
     print(f"🌐 CORS Origins: {CORS_ORIGINS}")
-    
+
     uvicorn.run(
         "consolidated_service:app",
         host=host,
