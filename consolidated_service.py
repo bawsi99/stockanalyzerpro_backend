@@ -13,7 +13,7 @@ This service mounts both services under different path prefixes:
 
 import os
 import sys
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -235,6 +235,73 @@ async def redirect_auth_token_options(request: Request):
     )
 
 # WebSocket endpoint is handled by the mounted data service at /data/ws/stream
+
+# Add root-level WebSocket endpoint for direct access
+@app.websocket("/ws/stream")
+async def root_websocket_stream(websocket: WebSocket):
+    """Root-level WebSocket endpoint that forwards to the mounted data service."""
+    from data_service import ws_stream
+    await ws_stream(websocket)
+
+# Add root-level endpoints for direct access (same as mounted services)
+@app.get("/stock/{symbol}/history")
+async def root_stock_history(symbol: str, request: Request):
+    """Root-level stock history endpoint that forwards to data service."""
+    query_string = str(request.query_params)
+    query_suffix = f"?{query_string}" if query_string else ""
+    redirect_url = f"/data/stock/{symbol}/history{query_suffix}"
+    return JSONResponse(
+        status_code=307,
+        content={"detail": f"Redirecting to {redirect_url}"},
+        headers={"Location": redirect_url}
+    )
+
+@app.get("/sector/list")
+async def root_sector_list():
+    """Root-level sector list endpoint that forwards to analysis service."""
+    return JSONResponse(
+        status_code=307,
+        content={"detail": "Redirecting to /analysis/sector/list"},
+        headers={"Location": "/analysis/sector/list"}
+    )
+
+@app.get("/auth/verify")
+async def root_auth_verify(request: Request):
+    """Root-level auth verify endpoint that forwards to data service."""
+    query_string = str(request.query_params)
+    query_suffix = f"?{query_string}" if query_string else ""
+    redirect_url = f"/data/auth/verify{query_suffix}"
+    return JSONResponse(
+        status_code=307,
+        content={"detail": f"Redirecting to {redirect_url}"},
+        headers={"Location": redirect_url}
+    )
+
+@app.post("/auth/token")
+async def root_auth_token(request: Request):
+    """Root-level auth token endpoint that forwards to data service."""
+    query_string = str(request.query_params)
+    query_suffix = f"?{query_string}" if query_string else ""
+    redirect_url = f"/data/auth/token{query_suffix}"
+    return JSONResponse(
+        status_code=307,
+        content={"detail": f"Redirecting to {redirect_url}"},
+        headers={"Location": redirect_url}
+    )
+
+# General OPTIONS handler for any other endpoints
+@app.options("/{path:path}")
+async def options_any(path: str):
+    """Handle OPTIONS request for any endpoint."""
+    return JSONResponse(
+        status_code=200,
+        content={"message": "OK"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*"
+        }
+    )
 
 if __name__ == "__main__":
     # Get port from environment or default to 8000

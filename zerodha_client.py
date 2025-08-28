@@ -28,14 +28,22 @@ dotenv.load_dotenv()
 
 # Utility function to always read the latest value from .env
 def get_env_value(key: str, env_path: str = ".env") -> str:
-    """Read a value from the .env file directly."""
-    if not os.path.exists(env_path):
-        return ""
-    with open(env_path, "r") as f:
-        for line in f:
-            if line.strip().startswith(f"{key}="):
-                return line.strip().split("=", 1)[1]
-    return ""
+    """Read a value from the .env file directly, with fallback to system environment."""
+    # First try to read from .env file if it exists
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r") as f:
+                for line in f:
+                    if line.strip().startswith(f"{key}="):
+                        return line.strip().split("=", 1)[1]
+        except Exception as e:
+            logger.warning(f"Error reading from .env file: {e}")
+    
+    # Fallback to system environment variables (for production deployments)
+    system_value = os.getenv(key, "")
+    if system_value:
+        logger.info(f"Using system environment variable for {key}")
+    return system_value
 
 class CacheManager:
     """Manages caching of stock data with expiration and invalidation policies."""
