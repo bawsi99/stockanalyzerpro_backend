@@ -1,0 +1,120 @@
+{
+  "backend_health": {
+    "/health": {
+      "status": "\u2705 HEALTHY",
+      "response": {
+        "status": "healthy",
+        "service": "consolidated",
+        "environment": {
+          "zerodha_configured": true,
+          "gemini_configured": true,
+          "supabase_configured": true
+        },
+        "timestamp": "2025-08-26T20:20:00Z"
+      },
+      "response_time": 0.001616
+    },
+    "/data/health": {
+      "status": "\u2705 HEALTHY",
+      "response": {
+        "status": "healthy",
+        "service": "data_service",
+        "timestamp": "2025-08-28T21:09:24.311915"
+      },
+      "response_time": 0.000775
+    },
+    "/analysis/health": {
+      "status": "\u2705 HEALTHY",
+      "response": {
+        "status": "healthy",
+        "service": "Stock Analysis Service",
+        "timestamp": "2025-08-28T21:09:24.312866",
+        "components": {
+          "zerodha_data_client": "configured",
+          "gemini_ai": "configured",
+          "sector_classifiers": "loaded_16_sectors",
+          "main_event_loop": "not_running"
+        },
+        "version": "1.0.0"
+      },
+      "response_time": 0.000556
+    }
+  },
+  "api_endpoints": {
+    "/sector/list": {
+      "status": "\u2705 WORKING",
+      "method": "GET",
+      "response_time": 0.000509,
+      "response_size": 1332
+    },
+    "/data/market/status": {
+      "status": "\u2705 WORKING",
+      "method": "GET",
+      "response_time": 0.000486,
+      "response_size": 137
+    },
+    "/data/mapping/symbol-to-token": {
+      "status": "\u2705 WORKING",
+      "method": "GET",
+      "response_time": 0.010782,
+      "response_size": 109
+    }
+  },
+  "frontend_connectivity": {
+    "main_page": {
+      "status": "\u2705 ACCESSIBLE",
+      "response_time": 0.007094,
+      "content_type": "text/html"
+    },
+    "backend_from_frontend": {
+      "status": "\u2139\ufe0f  NO_PROXY",
+      "note": "Frontend doesn't proxy to backend (expected behavior)"
+    }
+  },
+  "cors_test": {
+    "preflight_request": {
+      "status": "\u2705 WORKING",
+      "cors_headers": {
+        "access-control-allow-origin": "http://localhost:8080",
+        "access-control-allow-methods": "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT",
+        "access-control-allow-headers": "Content-Type",
+        "access-control-allow-credentials": "true"
+      }
+    },
+    "cross_origin_request": {
+      "status": "\u2705 WORKING",
+      "access_control_allow_origin": "http://localhost:8080"
+    }
+  },
+  "websocket_test": {
+    "websocket_connection": {
+      "status": "\u26a0\ufe0f  NO_RESPONSE",
+      "test_message_sent": {
+        "type": "ping",
+        "data": "test"
+      },
+      "note": "Connected but no response received"
+    }
+  },
+  "database_test": {
+    "market_status": {
+      "status": "\u2705 ACCESSIBLE",
+      "response_time": 0.000699
+    }
+  },
+  "external_services": {
+    "zerodha_connectivity": {
+      "status": "\u2705 WORKING",
+      "test_symbol": "RELIANCE",
+      "response_time": 0.00846
+    }
+  },
+  "summary": {
+    "total_tests": 13,
+    "passed": 11,
+    "failed": 0,
+    "warnings": 1,
+    "success_rate": "84.6%",
+    "overall_status": "\u2705 HEALTHY"
+  }
+}

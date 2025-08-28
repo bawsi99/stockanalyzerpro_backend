@@ -682,10 +682,11 @@ async def ws_stream(websocket: WebSocket):
                             # Token subscription is now handled centrally by live_pubsub
                             # No need to manage individual subscriptions here
                             
+                            # IMPORTANT: keep token type consistent with publisher (use integers)
                             await live_pubsub.update_filter(
-                                queue, 
-                                tokens=[str(token) for token in all_tokens], 
-                                timeframes=timeframes, 
+                                queue,
+                                tokens=all_tokens,
+                                timeframes=timeframes,
                                 throttle_ms=throttle_ms,
                                 batch=batch,
                                 batch_size=batch_size,
@@ -734,11 +735,16 @@ async def ws_stream(websocket: WebSocket):
                             
                             # Token unsubscription is now handled centrally by live_pubsub
                             # Just update the filter to remove tokens/timeframes
-                            await live_pubsub.update_filter(
-                                queue,
-                                tokens=[],  # Clear all tokens
-                                timeframes=[]  # Clear all timeframes
-                            )
+                            # Remove only the specified tokens/timeframes instead of clearing everything
+                            # If none provided, clear all as a fallback
+                            if not symbols and not tokens and not timeframes:
+                                await live_pubsub.update_filter(queue, tokens=[], timeframes=[])
+                            else:
+                                # Compute remaining set by subtracting provided tokens
+                                current = live_pubsub.clients.get(queue, {}).get('tokens', set())
+                                to_remove = set(all_tokens)
+                                remaining = [t for t in current if t not in to_remove]
+                                await live_pubsub.update_filter(queue, tokens=remaining)
                             
                             response = {
                                 'type': 'unsubscribed',

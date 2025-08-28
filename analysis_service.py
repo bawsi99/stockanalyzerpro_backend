@@ -2240,6 +2240,21 @@ async def root():
         "timestamp": datetime.now().isoformat()
     }
 
+
+# General OPTIONS handler to ensure CORS preflight succeeds for all analysis routes
+@app.options("/{path:path}")
+async def options_any(path: str):
+    """Handle OPTIONS preflight for any endpoint under the analysis service."""
+    return JSONResponse(
+        status_code=200,
+        content={"message": "OK"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*"
+        }
+    )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001) 

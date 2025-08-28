@@ -46,6 +46,7 @@ DEFAULT_CORS_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://127.0.0.1:8080",
     "http://127.0.0.1:5173",
+    "http://localhost:8080",  # Current frontend port
     "https://stock-analyzer-pro.vercel.app",
     "https://stock-analyzer-pro-git-prototype-aaryan-manawats-projects.vercel.app",
     "https://stock-analyzer-cl9o3tivx-aaryan-manawats-projects.vercel.app",
@@ -317,7 +318,6 @@ async def options_any(path: str):
         status_code=200,
         content={"message": "OK"},
         headers={
-            "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
             "Access-Control-Allow-Headers": "*"
         }
