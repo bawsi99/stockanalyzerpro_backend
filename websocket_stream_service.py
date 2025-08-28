@@ -263,8 +263,15 @@ class DataStreamManager:
             # Create endpoint-specific data
             endpoint_data = self.create_endpoint_data(endpoint, symbol, data)
             
+            # Determine the correct message type based on the data
+            message_type = "tick"  # Default to tick for real-time updates
+            
+            # If we have OHLCV data, it's a candle
+            if "open" in endpoint_data and "high" in endpoint_data and "low" in endpoint_data and "close" in endpoint_data:
+                message_type = "candle"
+            
             message = {
-                "type": "data",
+                "type": message_type,
                 "symbol": symbol,
                 "endpoint": endpoint,
                 "timestamp": datetime.now().isoformat(),

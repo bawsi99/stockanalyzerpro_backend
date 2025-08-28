@@ -110,6 +110,7 @@ async def authenticate_websocket(websocket: WebSocket) -> Optional[Dict]:
         print(f"   Allowed origins: {CORS_ORIGINS}")
         return None
     
+    # If authentication is disabled, allow connection without token verification
     if not REQUIRE_AUTH:
         print(f"✅ Authentication disabled, allowing connection")
         return {'user_id': str(uuid.uuid4()), 'auth_type': 'none'}
@@ -374,6 +375,46 @@ class LiveDataPubSub:
                 'subscribed_tokens': list(self.global_subscribed_tokens),
                 'token_subscribers': {token: len(subscribers) for token, subscribers in self.token_subscribers.items()}
             }
+    
+    def _format_data_for_frontend(self, data):
+        """Format data for frontend consumption with proper message types."""
+        try:
+            # Check if this is OHLCV candle data
+            if all(key in data for key in ['open', 'high', 'low', 'close']):
+                return {
+                    'type': 'candle',
+                    'data': {
+                        'time': data.get('timestamp', int(time.time())),
+                        'open': float(data.get('open', 0)),
+                        'high': float(data.get('high', 0)),
+                        'low': float(data.get('low', 0)),
+                        'close': float(data.get('close', 0)),
+                        'volume': float(data.get('volume', 0))
+                    }
+                }
+            # Check if this is tick/price data
+            elif 'price' in data or 'close' in data:
+                return {
+                    'type': 'tick',
+                    'data': {
+                        'price': float(data.get('price', data.get('close', 0))),
+                        'timestamp': data.get('timestamp', int(time.time())),
+                        'volume': float(data.get('volume', 0))
+                    }
+                }
+            # Default case - pass through with tick type
+            else:
+                return {
+                    'type': 'tick',
+                    'data': data
+                }
+        except Exception as e:
+            print(f"Error formatting data for frontend: {e}")
+            # Fallback to tick type
+            return {
+                'type': 'tick',
+                'data': data
+            }
 
     async def publish(self, data):
         current_time = time.time() * 1000
@@ -421,9 +462,12 @@ class LiveDataPubSub:
                     if current_time - last_sent < throttle_ms:
                         continue
 
+                # Format data for frontend consumption
+                formatted_data = self._format_data_for_frontend(data)
+                
                 # Handle batching
                 if filter_['batch']:
-                    self.client_batch[queue].append(data)
+                    self.client_batch[queue].append(formatted_data)
                     if len(self.client_batch[queue]) >= filter_['batch_size']:
                         batch_data = {
                             'type': 'batch',
@@ -433,7 +477,7 @@ class LiveDataPubSub:
                         self.client_batch[queue].clear()
                         self.client_throttle[queue] = current_time
                 else:
-                    await queue.put(data)
+                    await queue.put(formatted_data)
                     self.client_throttle[queue] = current_time
 
 live_pubsub = LiveDataPubSub()
