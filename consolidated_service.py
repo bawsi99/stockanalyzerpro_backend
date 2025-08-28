@@ -53,7 +53,27 @@ DEFAULT_CORS_ORIGINS = [
 ]
 
 CORS_ORIGINS_STR = os.getenv("CORS_ORIGINS", ",".join(DEFAULT_CORS_ORIGINS))
-CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_STR.split(",") if origin.strip()]
+
+# Clean and parse CORS origins, filtering out malformed entries
+def clean_cors_origins(cors_str: str) -> list:
+    """Clean and parse CORS origins, filtering out malformed entries."""
+    origins = []
+    for origin in cors_str.split(","):
+        origin = origin.strip()
+        # Skip empty or malformed entries
+        if not origin or origin.startswith("CORS_ORIGINS=") or "=" in origin:
+            continue
+        # Only add valid URL-like origins
+        if origin.startswith(("http://", "https://")):
+            origins.append(origin)
+    return origins
+
+CORS_ORIGINS = clean_cors_origins(CORS_ORIGINS_STR)
+
+# Fallback to defaults if no valid origins found
+if not CORS_ORIGINS:
+    print("⚠️  No valid CORS origins found, using defaults")
+    CORS_ORIGINS = DEFAULT_CORS_ORIGINS
 
 # Add CORS middleware
 app.add_middleware(
