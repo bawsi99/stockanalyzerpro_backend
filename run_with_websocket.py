@@ -86,6 +86,14 @@ def main():
         print("⏳ Waiting for WebSocket client to initialize...")
         time.sleep(5)  # Give WebSocket client time to connect
         
+        # Start subscription monitor
+        print("🚀 Starting subscription monitor...")
+        monitor_cmd = [sys.executable, "monitor_subscriptions.py"]
+        monitor_process = subprocess.Popen(monitor_cmd)
+        processes.append(monitor_process)
+        
+        print(f"✅ Subscription monitor started (PID: {monitor_process.pid})")
+        
         # Start consolidated service
         print("🚀 Starting consolidated service...")
         consolidated_cmd = [sys.executable, "consolidated_service.py"]

@@ -15,6 +15,7 @@ import time
 import json
 import asyncio
 import traceback
+import uuid
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 
@@ -120,14 +121,14 @@ async def authenticate_websocket(websocket: WebSocket) -> Optional[Dict]:
     print(f"🔐 Token from query params: {token[:20] if token else 'None'}...")
     print(f"🔐 API key from headers: {api_key[:10] if api_key else 'None'}...")
     
-    if token:
+    if token and token != "undefined":
         # JWT authentication
         payload = verify_jwt_token(token)
-        if payload:
+        if payload and token in active_tokens:
             print(f"✅ JWT authentication successful for user: {payload['user_id']}")
             return {'user_id': payload['user_id'], 'auth_type': 'jwt'}
         else:
-            print(f"❌ JWT authentication failed")
+            print(f"❌ JWT authentication failed - token invalid or not in active tokens")
     elif api_key:
         # API key authentication
         if verify_api_key(api_key):
@@ -320,6 +321,8 @@ class LiveDataPubSub:
                 if not hasattr(zerodha_ws_client, 'running') or not zerodha_ws_client.running:
                     print(f"⚠️  Zerodha WebSocket client not running. Cannot subscribe to tokens: {new_tokens}")
                     print("📊 Historical data is still available via REST API endpoints")
+                    # Add to global subscribed tokens anyway - they will be picked up when client reconnects
+                    self.global_subscribed_tokens.update(new_tokens)
                     return
                 
                 # Convert string tokens to integers for Zerodha
@@ -1349,20 +1352,47 @@ async def clear_interval_cache(symbol: str, interval: str):
 @app.post("/auth/token")
 async def create_token(user_id: str):
     """Create a JWT token for WebSocket authentication."""
-    if REQUIRE_AUTH:
+    try:
+        if not JWT_AVAILABLE:
+            raise HTTPException(status_code=500, detail="JWT library not available")
+        
+        # Always create a token when this endpoint is called
+        # The REQUIRE_AUTH setting controls whether WebSocket connections require authentication
         token = create_jwt_token(user_id)
+        
+        # Store the token in active tokens set
+        active_tokens.add(token)
+        
+        print(f"🔐 Created JWT token for user: {user_id}")
         return {"token": token, "user_id": user_id}
-    else:
-        return {"message": "Authentication disabled"}
+        
+    except Exception as e:
+        print(f"❌ Error creating JWT token: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create token: {str(e)}")
 
 @app.get("/auth/verify")
 async def verify_token(token: str):
     """Verify a JWT token."""
-    payload = verify_jwt_token(token)
-    if payload:
-        return {"valid": True, "user_id": payload['user_id']}
-    else:
-        return {"valid": False}
+    try:
+        if not token or token == "undefined":
+            return {"valid": False, "error": "No token provided"}
+        
+        if not JWT_AVAILABLE:
+            return {"valid": False, "error": "JWT library not available"}
+        
+        payload = verify_jwt_token(token)
+        if payload:
+            # Check if token is in active tokens set
+            if token in active_tokens:
+                return {"valid": True, "user_id": payload['user_id']}
+            else:
+                return {"valid": False, "error": "Token not found in active tokens"}
+        else:
+            return {"valid": False, "error": "Invalid or expired token"}
+            
+    except Exception as e:
+        print(f"❌ Error verifying token: {e}")
+        return {"valid": False, "error": f"Verification failed: {str(e)}"}
 
 if __name__ == "__main__":
     import uvicorn
