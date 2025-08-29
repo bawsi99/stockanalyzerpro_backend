@@ -424,6 +424,24 @@ def convert_charts_to_base64(charts_dict: dict) -> dict:
                     'error': f"Failed to load chart: {str(e)}",
                     'filename': os.path.basename(chart_path) if isinstance(chart_path, str) else 'unknown'
                 }
+        elif isinstance(chart_path, dict) and chart_path.get('type') == 'image_bytes' and 'data' in chart_path:
+            try:
+                # Handle in-memory image data
+                img_data = chart_path['data']
+                img_base64 = base64.b64encode(img_data).decode('utf-8')
+                converted_charts[chart_name] = {
+                    'data': f"data:image/png;base64,{img_base64}",
+                    'format': chart_path.get('format', 'png'),
+                    'type': 'image/png'
+                }
+                # Clear large variables immediately after use
+                del img_data
+                del img_base64
+            except Exception as e:
+                print(f"Error converting in-memory chart {chart_name}: {e}")
+                converted_charts[chart_name] = {
+                    'error': f"Failed to convert in-memory chart: {str(e)}"
+                }
         else:
             # Handle invalid chart paths
             if isinstance(chart_path, str):
@@ -432,9 +450,10 @@ def convert_charts_to_base64(charts_dict: dict) -> dict:
                     'path': chart_path
                 }
             else:
+                # Don't print the actual chart_path object which might contain binary data
                 converted_charts[chart_name] = {
                     'error': 'Invalid chart path format',
-                    'path': chart_path
+                    'path_type': str(type(chart_path))
                 }
     
     return converted_charts
@@ -1817,6 +1836,10 @@ async def get_charts(
         
         # Convert charts to base64
         print(f"🔄 Converting charts to base64 for {symbol}")
+        # Print only chart metadata, not the binary data
+        chart_metadata = {name: (path if isinstance(path, str) else "image_data_object") for name, path in chart_paths.items()}
+        print(f"Chart paths before conversion: {chart_metadata}")
+        
         charts_base64 = convert_charts_to_base64(chart_paths)
         
         # Clear original chart paths dictionary after conversion

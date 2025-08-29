@@ -611,7 +611,19 @@ JSON:
         
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Starting enhanced optimized analysis for {symbol}...")
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Chart paths received: {list(chart_paths.keys()) if chart_paths else 'None'}")
-        print(f"[ASYNC-OPTIMIZED-ENHANCED] Chart paths content: {chart_paths}")
+        # Print chart metadata without binary data
+        chart_metadata = {}
+        for chart_name, chart_info in chart_paths.items():
+            if isinstance(chart_info, dict):
+                chart_metadata[chart_name] = {
+                    'type': chart_info.get('type'),
+                    'format': chart_info.get('format'),
+                    'size_bytes': chart_info.get('size_bytes'),
+                    'chart_type': chart_info.get('chart_type'),
+                    'symbol': chart_info.get('symbol'),
+                    'interval': chart_info.get('interval')
+                }
+        print(f"[ASYNC-OPTIMIZED-ENHANCED] Chart metadata: {chart_metadata}")
         
         # START ALL INDEPENDENT LLM CALLS IMMEDIATELY
         # 1. Enhanced indicator summary with mathematical validation (no dependencies)
