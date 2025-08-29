@@ -42,36 +42,7 @@ class DeploymentConfig:
         }
     }
     
-    # Redis image manager configurations for different environments
-    REDIS_IMAGE_CONFIGS = {
-        "development": {
-            "max_age_hours": 24,
-            "max_total_size_mb": 1000,
-            "cleanup_interval_minutes": 60,
-            "enable_cleanup": True,
-            "image_quality": 85,
-            "image_format": "PNG",
-            "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        },
-        "staging": {
-            "max_age_hours": 12,
-            "max_total_size_mb": 500,
-            "cleanup_interval_minutes": 30,
-            "enable_cleanup": True,
-            "image_quality": 85,
-            "image_format": "PNG",
-            "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        },
-        "production": {
-            "max_age_hours": 6,
-            "max_total_size_mb": 200,
-            "cleanup_interval_minutes": 15,
-            "enable_cleanup": True,
-            "image_quality": 80,
-            "image_format": "JPEG",
-            "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        }
-    }
+    # Redis image manager configurations removed - charts are now generated in-memory
     
     # Redis cache manager configurations for different environments
     REDIS_CACHE_CONFIGS = {
@@ -135,22 +106,16 @@ class DeploymentConfig:
     
     @classmethod
     def get_redis_image_config(cls) -> Dict[str, Any]:
-        """Get Redis image manager configuration for current environment."""
-        environment = cls.get_environment()
-        config = cls.REDIS_IMAGE_CONFIGS.get(environment, cls.REDIS_IMAGE_CONFIGS["development"]).copy()
+        """
+        Redis image manager configuration (deprecated).
         
-        # Override with environment variables if present
-        config.update({
-            "max_age_hours": int(os.getenv("REDIS_IMAGE_MAX_AGE_HOURS", config["max_age_hours"])),
-            "max_total_size_mb": int(os.getenv("REDIS_IMAGE_MAX_SIZE_MB", config["max_total_size_mb"])),
-            "cleanup_interval_minutes": int(os.getenv("REDIS_IMAGE_CLEANUP_INTERVAL_MINUTES", config["cleanup_interval_minutes"])),
-            "enable_cleanup": os.getenv("REDIS_IMAGE_ENABLE_CLEANUP", "true").lower() == "true",
-            "image_quality": int(os.getenv("REDIS_IMAGE_QUALITY", config["image_quality"])),
-            "image_format": os.getenv("REDIS_IMAGE_FORMAT", config["image_format"]),
-            "redis_url": os.getenv("REDIS_URL", config["redis_url"])
-        })
-        
-        return config
+        This method is kept for backward compatibility but returns a message
+        indicating that Redis image storage has been removed.
+        """
+        return {
+            "status": "removed",
+            "message": "Redis image storage has been removed - charts are now generated in-memory"
+        }
     
     @classmethod
     def get_redis_cache_config(cls) -> Dict[str, Any]:
@@ -173,7 +138,7 @@ class DeploymentConfig:
         return {
             "environment": cls.get_environment(),
             "chart_config": cls.get_chart_config(),
-            "redis_image_config": cls.get_redis_image_config(),
+            "redis_image_config": {"status": "removed", "message": "Charts are now generated in-memory"},
             "redis_cache_config": cls.get_redis_cache_config(),
             "environment_variables": {
                 "CHART_MAX_AGE_HOURS": os.getenv("CHART_MAX_AGE_HOURS"),
@@ -181,12 +146,6 @@ class DeploymentConfig:
                 "CHART_CLEANUP_INTERVAL_MINUTES": os.getenv("CHART_CLEANUP_INTERVAL_MINUTES"),
                 "CHART_OUTPUT_DIR": os.getenv("CHART_OUTPUT_DIR"),
                 "CHART_ENABLE_CLEANUP": os.getenv("CHART_ENABLE_CLEANUP"),
-                "REDIS_IMAGE_MAX_AGE_HOURS": os.getenv("REDIS_IMAGE_MAX_AGE_HOURS"),
-                "REDIS_IMAGE_MAX_SIZE_MB": os.getenv("REDIS_IMAGE_MAX_SIZE_MB"),
-                "REDIS_IMAGE_CLEANUP_INTERVAL_MINUTES": os.getenv("REDIS_IMAGE_CLEANUP_INTERVAL_MINUTES"),
-                "REDIS_IMAGE_ENABLE_CLEANUP": os.getenv("REDIS_IMAGE_ENABLE_CLEANUP"),
-                "REDIS_IMAGE_QUALITY": os.getenv("REDIS_IMAGE_QUALITY"),
-                "REDIS_IMAGE_FORMAT": os.getenv("REDIS_IMAGE_FORMAT"),
                 "REDIS_CACHE_ENABLE_COMPRESSION": os.getenv("REDIS_CACHE_ENABLE_COMPRESSION"),
                 "REDIS_CACHE_CLEANUP_INTERVAL_MINUTES": os.getenv("REDIS_CACHE_CLEANUP_INTERVAL_MINUTES"),
                 "REDIS_URL": os.getenv("REDIS_URL")
@@ -236,5 +195,5 @@ def get_deployment_recommendations() -> Dict[str, Any]:
         "current_environment": env,
         "recommendations": DEPLOYMENT_RECOMMENDATIONS.get(env, DEPLOYMENT_RECOMMENDATIONS["development"]),
         "chart_config": DeploymentConfig.get_chart_config(),
-        "redis_image_config": DeploymentConfig.get_redis_image_config()
+        "charts_status": "Charts are now generated in-memory - no Redis image storage needed"
     } 

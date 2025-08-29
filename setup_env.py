@@ -78,7 +78,7 @@ ENABLE_SCHEDULED_CALIBRATION=0
         print("\n📝 Next steps:")
         print("1. Update the .env file with your actual API keys and credentials")
         print("2. Install Redis if not already installed")
-        print("3. Run: python test_redis_image_manager.py")
+        print("3. Redis image manager removed - charts are now generated in-memory")
         print("4. Run: python test_redis_cache_manager.py")
         return True
     except Exception as e:
@@ -134,13 +134,13 @@ def main():
     
     if not redis_ok:
         print("\n⚠️  Please install and start Redis before proceeding")
-        print("   See REDIS_IMAGE_STORAGE_SETUP.md for detailed instructions")
+        print("   Redis image storage has been removed - charts are now generated in-memory")
     
     print("\n🎉 Setup completed!")
     print("\n📖 Next steps:")
     print("1. Edit .env file with your API keys")
     print("2. Install Redis if needed")
-    print("3. Test image storage: python test_redis_image_manager.py")
+    print("3. Redis image manager removed - charts are now generated in-memory")
     print("4. Test cache system: python test_redis_cache_manager.py")
     print("5. Start services: python start_all_services.py")
     

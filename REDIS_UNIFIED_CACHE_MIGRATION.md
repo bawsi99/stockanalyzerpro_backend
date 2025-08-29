@@ -121,13 +121,7 @@ REDIS_CACHE_ENABLE_COMPRESSION=true
 REDIS_CACHE_CLEANUP_INTERVAL_MINUTES=60
 REDIS_CACHE_LRU_CAPACITY=128
 
-# Redis Image Manager Configuration
-REDIS_IMAGE_MAX_AGE_HOURS=24
-REDIS_IMAGE_MAX_SIZE_MB=1000
-REDIS_IMAGE_CLEANUP_INTERVAL_MINUTES=60
-REDIS_IMAGE_ENABLE_CLEANUP=true
-REDIS_IMAGE_QUALITY=85
-REDIS_IMAGE_FORMAT=PNG
+# Redis Image Manager Configuration removed - charts are now generated in-memory
 ```
 
 ### **Deployment Configuration**
@@ -334,7 +328,7 @@ cp config_backup_YYYYMMDD_HHMMSS/.env .
 ```python
 # Import old cache managers
 from redis_cache_manager import get_redis_cache_manager
-from redis_image_manager import get_redis_image_manager
+# Redis image manager removed - charts are now generated in-memory
 ```
 
 ### **3. Restart Services**

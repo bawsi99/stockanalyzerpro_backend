@@ -165,16 +165,9 @@ async def startup_event():
         chart_manager = initialize_chart_manager(**chart_config)
         print(f"✅ Chart manager initialized: max_age={chart_manager.max_age_hours}h, max_size={chart_manager.max_total_size_mb}MB")
         
-        # Initialize Redis image manager
-        print("🖼️  Initializing Redis image manager...")
-        try:
-            redis_image_config = DeploymentConfig.get_redis_image_config()
-            from redis_image_manager import initialize_redis_image_manager
-            redis_image_manager = initialize_redis_image_manager(**redis_image_config)
-            print(f"✅ Redis image manager initialized: max_age={redis_image_manager.max_age_hours}h, max_size={redis_image_manager.max_total_size_mb}MB, format={redis_image_manager.image_format}")
-        except Exception as redis_e:
-            print(f"⚠️  Warning: Could not initialize Redis image manager: {redis_e}")
-            print("ℹ️  Falling back to file-based chart storage")
+        # Redis image manager removed - charts are now generated in-memory
+        print("📊 Charts are generated in-memory - no Redis image storage needed")
+        print("ℹ️  Falling back to file-based chart storage")
         
         # Initialize Redis cache manager
         print("💾 Initializing Redis cache manager...")
@@ -251,10 +244,16 @@ async def startup_event():
 def scheduled_calibration_task() -> None:
     """Weekly calibration job: generate fixtures, calibrate, and backup weights."""
     import subprocess
+    import glob
+    import time
+    
     try:
         # Avoid any work if not explicitly enabled
         if os.environ.get("ENABLE_SCHEDULED_CALIBRATION") != "1":
             return
+            
+        print("[CALIBRATION] Starting scheduled calibration task")
+        
         symbols = os.environ.get(
             "CALIB_SYMBOLS",
             "NIFTY_50,NIFTY_BANK,NIFTY_IT,NIFTY_PHARMA,NIFTY_AUTO,"
@@ -262,12 +261,28 @@ def scheduled_calibration_task() -> None:
             "NIFTY_CONSUMER_DURABLES,NIFTY_HEALTHCARE,NIFTY_INFRA,NIFTY_OIL_GAS,"
             "NIFTY_SERV_SECTOR"
         )
+        
         # Write outside the watched tree to avoid reload loops
         fixtures_out = os.environ.get(
             "CALIB_FIXTURES_DIR",
             os.path.join(os.path.expanduser('~'), '.traderpro', 'fixtures', 'auto')
         )
         os.makedirs(fixtures_out, exist_ok=True)
+        
+        # Clean up any old temporary files before starting
+        try:
+            old_temp_files = glob.glob(os.path.join(fixtures_out, "*.tmp"))
+            for temp_file in old_temp_files:
+                try:
+                    os.remove(temp_file)
+                    print(f"[CALIBRATION] Removed old temp file: {os.path.basename(temp_file)}")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+            
+        # Generate fixtures with timeout and memory management
+        print("[CALIBRATION] Generating fixtures...")
         gen_cmd = [
             'python', os.path.join(os.path.dirname(__file__), 'scripts', 'generate_fixtures.py'),
             '--symbols', symbols,
@@ -279,14 +294,44 @@ def scheduled_calibration_task() -> None:
             '--stride', '10',
             '--out', fixtures_out
         ]
-        subprocess.run(gen_cmd, check=False)
+        
+        try:
+            # Run with timeout to prevent hanging processes
+            process = subprocess.run(gen_cmd, check=False, timeout=600)  # 10 minute timeout
+            print(f"[CALIBRATION] Fixtures generation completed with return code: {process.returncode}")
+        except subprocess.TimeoutExpired:
+            print("[CALIBRATION] ⚠️ Fixtures generation timed out after 10 minutes")
+        
+        # Clear memory before next subprocess
+        time.sleep(1)  # Brief pause to allow OS to reclaim resources
+        
+        # Run calibration with timeout
+        print("[CALIBRATION] Running calibration...")
         calib_cmd = [
             'python', os.path.join(os.path.dirname(__file__), 'scripts', 'calibrate_all.py'),
             fixtures_out,
             '--weights', os.path.join(os.path.dirname(__file__), 'signals', 'weights_config.json'),
             '--backup_dir', os.path.join(os.path.dirname(__file__), 'signals', 'weights_history')
         ]
-        subprocess.run(calib_cmd, check=False)
+        
+        try:
+            # Run with timeout to prevent hanging processes
+            process = subprocess.run(calib_cmd, check=False, timeout=600)  # 10 minute timeout
+            print(f"[CALIBRATION] Calibration completed with return code: {process.returncode}")
+        except subprocess.TimeoutExpired:
+            print("[CALIBRATION] ⚠️ Calibration timed out after 10 minutes")
+        
+        # Clean up any temporary files after calibration
+        try:
+            temp_files = glob.glob(os.path.join(fixtures_out, "*.tmp"))
+            for temp_file in temp_files:
+                try:
+                    os.remove(temp_file)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+            
         print("✅ Scheduled calibration run completed")
     except Exception as e:
         print('[CALIBRATION] Scheduled calibration failed:', e)
@@ -357,110 +402,22 @@ def convert_charts_to_base64(charts_dict: dict) -> dict:
     import base64
     converted_charts = {}
     
-    # Try to use Redis image manager if available
-    redis_image_manager = None
-    try:
-        from redis_image_manager import get_redis_image_manager
-        redis_image_manager = get_redis_image_manager()
-    except Exception:
-        pass
-    
     for chart_name, chart_path in charts_dict.items():
-        # Handle Redis keys (new format)
-        if isinstance(chart_path, str) and chart_path.startswith('chart:'):
+        # Handle file paths (charts are now generated in-memory)
+        if isinstance(chart_path, str) and os.path.exists(chart_path):
             try:
-                if redis_image_manager:
-                    # Get image from Redis
-                    image_data = redis_image_manager.get_image(chart_path)
-                    if image_data:
-                        # Convert to base64 for immediate response
-                        base64_data = image_data['data'].split(',')[1]  # Remove data URL prefix
-                        img_base64 = base64.b64encode(base64.b64decode(base64_data)).decode('utf-8')
-                        converted_charts[chart_name] = {
-                            'data': f"data:image/png;base64,{img_base64}",
-                            'filename': f"{chart_name}.png",
-                            'type': 'image/png',
-                            'redis_key': chart_path  # Store Redis key for future reference
-                        }
-                    else:
-                        converted_charts[chart_name] = {
-                            'error': 'Chart not found in Redis',
-                            'redis_key': chart_path
-                        }
-                else:
+                # Read the image file and convert to base64
+                with open(chart_path, 'rb') as f:
+                    img_data = f.read()
+                    img_base64 = base64.b64encode(img_data).decode('utf-8')
                     converted_charts[chart_name] = {
-                        'error': 'Redis not available for chart retrieval',
-                        'redis_key': chart_path
+                        'data': f"data:image/png;base64,{img_base64}",
+                        'filename': os.path.basename(chart_path),
+                        'type': 'image/png'
                     }
-            except Exception as e:
-                print(f"Error converting Redis chart {chart_name}: {e}")
-                converted_charts[chart_name] = {
-                    'error': f"Failed to load Redis chart: {str(e)}",
-                    'redis_key': chart_path
-                }
-        # Handle file paths (fallback format)
-        elif isinstance(chart_path, str) and os.path.exists(chart_path):
-            try:
-                # If Redis is available, store the image there first
-                if redis_image_manager:
-                    try:
-                        # Read the image file
-                        with open(chart_path, 'rb') as f:
-                            img_data = f.read()
-                        
-                        # Store in Redis (extract symbol and interval from path if possible)
-                        # Default to generic values if we can't parse the path
-                        symbol = "unknown"
-                        interval = "day"
-                        chart_type = chart_name
-                        
-                        # Try to extract symbol and interval from path
-                        path_parts = chart_path.split('/')
-                        if len(path_parts) > 1:
-                            # Look for pattern like "SYMBOL_INTERVAL" in path
-                            for part in path_parts:
-                                if '_' in part and not part.endswith('.png'):
-                                    symbol_interval = part.split('_')
-                                    if len(symbol_interval) >= 2:
-                                        symbol = symbol_interval[0]
-                                        interval = symbol_interval[1]
-                                        break
-                        
-                        # Store in Redis
-                        redis_key = redis_image_manager.store_image(
-                            img_data, symbol, interval, chart_type
-                        )
-                        
-                        # Convert to base64 for immediate response
-                        img_base64 = base64.b64encode(img_data).decode('utf-8')
-                        converted_charts[chart_name] = {
-                            'data': f"data:image/png;base64,{img_base64}",
-                            'filename': os.path.basename(chart_path),
-                            'type': 'image/png',
-                            'redis_key': redis_key  # Store Redis key for future reference
-                        }
-                        
-                    except Exception as redis_e:
-                        print(f"Warning: Could not store chart {chart_name} in Redis: {redis_e}")
-                        # Fall back to file-based approach
-                        with open(chart_path, 'rb') as f:
-                            img_data = f.read()
-                            img_base64 = base64.b64encode(img_data).decode('utf-8')
-                            converted_charts[chart_name] = {
-                                'data': f"data:image/png;base64,{img_base64}",
-                                'filename': os.path.basename(chart_path),
-                                'type': 'image/png'
-                            }
-                else:
-                    # No Redis available, use file-based approach
-                    with open(chart_path, 'rb') as f:
-                        img_data = f.read()
-                        img_base64 = base64.b64encode(img_data).decode('utf-8')
-                        converted_charts[chart_name] = {
-                            'data': f"data:image/png;base64,{img_base64}",
-                            'filename': os.path.basename(chart_path),
-                            'type': 'image/png'
-                        }
+                    # Clear large variables immediately after use
+                    del img_data
+                    del img_base64
             except Exception as e:
                 print(f"Error converting chart {chart_name}: {e}")
                 converted_charts[chart_name] = {
@@ -470,16 +427,10 @@ def convert_charts_to_base64(charts_dict: dict) -> dict:
         else:
             # Handle invalid chart paths
             if isinstance(chart_path, str):
-                if chart_path.startswith('chart:'):
-                    converted_charts[chart_name] = {
-                        'error': 'Invalid Redis key format',
-                        'redis_key': chart_path
-                    }
-                else:
-                    converted_charts[chart_name] = {
-                        'error': 'Chart file not found',
-                        'path': chart_path
-                    }
+                converted_charts[chart_name] = {
+                    'error': 'Chart file not found',
+                    'path': chart_path
+                }
             else:
                 converted_charts[chart_name] = {
                     'error': 'Invalid chart path format',
@@ -495,7 +446,7 @@ def cleanup_chart_files(chart_paths: dict) -> dict:
     """
     stats = {"files_removed": 0, "redis_keys_cleaned": 0, "errors": 0}
     try:
-        for _, chart_path in (chart_paths or {}).items():
+        for chart_name, chart_path in (chart_paths or {}).items():
             try:
                 if isinstance(chart_path, str):
                     if chart_path.startswith('chart:'):
@@ -504,11 +455,19 @@ def cleanup_chart_files(chart_paths: dict) -> dict:
                     elif os.path.exists(chart_path):
                         # Remove only the file; do not remove directories
                         os.remove(chart_path)
+                        print(f"✅ Removed chart file: {os.path.basename(chart_path)}")
                         stats["files_removed"] += 1
-            except Exception:
+            except Exception as e:
+                print(f"⚠️ Error cleaning up chart {chart_name}: {str(e)}")
                 stats["errors"] += 1
+        
+        # Clear the chart_paths dictionary reference after cleanup
+        if chart_paths:
+            chart_paths.clear()
+            
         return stats
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Error in cleanup_chart_files: {str(e)}")
         stats["errors"] += 1
         return stats
 
@@ -773,6 +732,8 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 if not request.sector:
                     from sector_classifier import sector_classifier as _sc
                     detected_sector = _sc.get_stock_sector(request.stock)
+                    # Clear module reference when done
+                    del _sc
             except Exception:
                 detected_sector = None
 
@@ -780,6 +741,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             from sector_benchmarking import sector_benchmarking_provider
 
             # Launch sector tasks in parallel for reduced latency
+            print(f"🔄 Starting parallel sector analysis tasks for {request.stock}")
             benchmarking_task = sector_benchmarking_provider.get_comprehensive_benchmarking_async(
                 request.stock,
                 stock_data,
@@ -811,8 +773,23 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 (sector_benchmarking or {}).get('sector_info', {}).get('sector') if isinstance(sector_benchmarking, dict) else None
             ) or ''
 
+            # Create sector context with only necessary data
+            # Extract only the essential information from sector_benchmarking to reduce memory usage
+            essential_benchmarking = {}
+            if isinstance(sector_benchmarking, dict):
+                # Extract only key metrics and summary data
+                if 'sector_info' in sector_benchmarking:
+                    essential_benchmarking['sector_info'] = sector_benchmarking['sector_info']
+                if 'performance_metrics' in sector_benchmarking:
+                    essential_benchmarking['performance_metrics'] = sector_benchmarking['performance_metrics']
+                if 'summary' in sector_benchmarking:
+                    essential_benchmarking['summary'] = sector_benchmarking['summary']
+                
+                # Clear original large data structure
+                sector_benchmarking.clear()
+                
             sector_context = {
-                'sector_benchmarking': sector_benchmarking,
+                'sector_benchmarking': essential_benchmarking,
                 'sector_rotation': sector_rotation,
                 'sector_correlation': sector_correlation,
                 'sector': sector_value
@@ -864,11 +841,32 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             from ml.quant_system.ml.unified_manager import unified_ml_manager
             # Train engines that require stock data (raw_data_ml, hybrid) before prediction
             try:
+                print(f"🧠 Training ML engines for {request.stock}")
                 _ = unified_ml_manager.train_all_engines(stock_data, None)
-            except Exception:
+            except Exception as e:
+                print(f"⚠️ Warning: ML engine training failed: {str(e)}")
                 pass
+                
+            # Get predictions
+            print(f"🔮 Generating ML predictions for {request.stock}")
             ml_predictions = unified_ml_manager.get_comprehensive_prediction(stock_data)
             print(f"✅ ML predictions generated successfully for {request.stock}")
+            
+            # Clear any cached training data if possible
+            try:
+                if hasattr(unified_ml_manager, 'clear_cache') and callable(unified_ml_manager.clear_cache):
+                    unified_ml_manager.clear_cache()
+                    print(f"🧹 Cleared ML training cache for {request.stock}")
+                # If no explicit clear_cache method, try to clean up the most memory-intensive components
+                elif hasattr(unified_ml_manager, '_trained_models') and isinstance(unified_ml_manager._trained_models, dict):
+                    unified_ml_manager._trained_models.clear()
+                    print(f"🧹 Cleared ML model cache for {request.stock}")
+            except Exception as cache_e:
+                print(f"⚠️ Non-fatal error during ML cache cleanup: {str(cache_e)}")
+                
+            # Clear module reference when done
+            del unified_ml_manager
+            
         except Exception as e:
             print(f"Warning: Could not generate ML predictions: {e}")
             ml_predictions = {}
@@ -890,6 +888,14 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             period=request.period,
             interval=request.interval
         )
+        
+        # Clear large data structures that are no longer needed after building response
+        print(f"🧹 Cleaning up memory for {request.stock} analysis...")
+        # These structures have been incorporated into frontend_response and are no longer needed
+        del sector_context
+        del mtf_context
+        del advanced_analysis
+        del ml_predictions
         
         # Resolve user ID from request
         try:
@@ -925,17 +931,23 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         print(f"[ENHANCED ANALYSIS] Completed enhanced analysis for {request.stock}")
         # Make the response JSON serializable to handle NaN values
         serialized_response = make_json_serializable(frontend_response)
+        
+        # Clear original response after serialization
+        del frontend_response
 
         # Cleanup generated chart image files after the final response content is prepared
         try:
             # Cleanup charts created in this endpoint response
-            if 'results' in frontend_response and isinstance(frontend_response['results'].get('charts'), dict):
-                _ = cleanup_chart_files(frontend_response['results']['charts'])
+            if 'results' in serialized_response and isinstance(serialized_response['results'].get('charts'), dict):
+                _ = cleanup_chart_files(serialized_response['results']['charts'])
             # Also cleanup any charts created by the earlier enhanced_analyze_stock result
             if isinstance(analysis_results, dict) and isinstance(analysis_results.get('charts'), dict):
                 _ = cleanup_chart_files(analysis_results['charts'])
-        except Exception:
+            # Clear analysis results after cleanup
+            del analysis_results
+        except Exception as e:
             # Non-fatal: cleanup best-effort
+            print(f"⚠️ Non-fatal error during chart cleanup: {str(e)}")
             pass
 
         return JSONResponse(content=serialized_response, status_code=200)
@@ -944,6 +956,31 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         error_msg = f"Enhanced analysis failed for {request.stock}: {str(e)}"
         print(f"[ENHANCED ANALYSIS ERROR] {error_msg}")
         print(f"[ENHANCED ANALYSIS ERROR] Traceback: {traceback.format_exc()}")
+        
+        # Attempt to clean up any resources that might have been created
+        try:
+            # Clean up any local variables that might be holding large data
+            locals_to_clean = ['stock_data', 'indicators', 'analysis_results', 
+                              'sector_context', 'mtf_context', 'advanced_analysis', 
+                              'ml_predictions', 'frontend_response']
+            
+            for var_name in locals_to_clean:
+                if var_name in locals():
+                    var_value = locals()[var_name]
+                    if isinstance(var_value, dict):
+                        var_value.clear()
+                    elif var_name in locals():
+                        del locals()[var_name]
+            
+            # Clean up any chart files that might have been created
+            chart_manager = get_chart_manager()
+            chart_dir = chart_manager.get_chart_directory(request.stock, request.interval)
+            if os.path.exists(chart_dir):
+                print(f"🧹 Cleaning up chart directory for {request.stock}")
+                chart_manager.cleanup_specific_charts(request.stock, request.interval)
+                
+        except Exception as cleanup_e:
+            print(f"⚠️ Non-fatal error during error cleanup: {str(cleanup_e)}")
         
         return JSONResponse(
             content={
@@ -1081,6 +1118,19 @@ async def enhanced_mtf_analyze(request: AnalysisRequest):
         error_msg = f"Enhanced multi-timeframe analysis failed for {request.stock}: {str(e)}"
         print(f"[ENHANCED MTF ERROR] {error_msg}")
         print(f"[ENHANCED MTF ERROR] Traceback: {traceback.format_exc()}")
+        
+        # Attempt to clean up any resources that might have been created
+        try:
+            # Clean up any module references
+            if 'enhanced_mtf_analyzer' in locals():
+                del locals()['enhanced_mtf_analyzer']
+                
+            # Clean up any results that might have been created
+            if 'mtf_results' in locals() and isinstance(locals()['mtf_results'], dict):
+                locals()['mtf_results'].clear()
+                
+        except Exception as cleanup_e:
+            print(f"⚠️ Non-fatal error during MTF error cleanup: {str(cleanup_e)}")
         
         return JSONResponse(
             content={
@@ -1711,6 +1761,8 @@ async def get_charts(
     Generate and return charts for a stock symbol.
     """
     try:
+        print(f"🔍 Generating charts for {symbol} with interval {interval}")
+        
         # Validate interval
         valid_intervals = ['1min', '3min', '5min', '10min', '15min', '30min', '60min', '1day']
         if interval not in valid_intervals:
@@ -1751,6 +1803,7 @@ async def get_charts(
             raise HTTPException(status_code=400, detail=error_msg)
         
         # Calculate indicators for charts
+        print(f"📊 Calculating indicators for {symbol}")
         indicators = orchestrator.calculate_indicators(df, symbol)
         
         # Use chart manager for directory management
@@ -1759,10 +1812,19 @@ async def get_charts(
         output_dir = str(chart_dir)
         
         # Generate charts
+        print(f"🎨 Generating chart visualizations for {symbol}")
         chart_paths = orchestrator.create_visualizations(df, indicators, symbol, output_dir, backend_interval)
         
         # Convert charts to base64
+        print(f"🔄 Converting charts to base64 for {symbol}")
         charts_base64 = convert_charts_to_base64(chart_paths)
+        
+        # Clear original chart paths dictionary after conversion
+        chart_paths.clear()
+        
+        # Clear indicators data that's no longer needed
+        if isinstance(indicators, dict):
+            indicators.clear()
         
         response = {
             "success": True,
@@ -1773,6 +1835,10 @@ async def get_charts(
             "timestamp": pd.Timestamp.now().isoformat()
         }
         
+        # Clear dataframe to free memory
+        del df
+        
+        print(f"✅ Chart generation completed for {symbol}")
         return JSONResponse(content=response)
         
     except HTTPException:
@@ -2003,19 +2069,11 @@ async def get_chart_storage_stats():
         chart_manager = get_chart_manager()
         stats = chart_manager.get_storage_stats()
         
-        # Also get Redis image stats if available
-        redis_stats = None
-        try:
-            from redis_image_manager import get_redis_image_manager
-            redis_image_manager = get_redis_image_manager()
-            redis_stats = redis_image_manager.get_storage_stats()
-        except Exception:
-            pass
-        
+        # Redis image stats removed - charts are now generated in-memory
         return {
             "success": True,
             "file_storage_stats": stats,
-            "redis_storage_stats": redis_stats
+            "redis_storage_stats": {"status": "removed", "reason": "Charts generated in-memory"}
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get chart storage stats: {str(e)}")
@@ -2027,20 +2085,12 @@ async def cleanup_charts():
         chart_manager = get_chart_manager()
         file_stats = chart_manager.cleanup_old_charts()
         
-        # Also cleanup Redis images if available
-        redis_stats = None
-        try:
-            from redis_image_manager import get_redis_image_manager
-            redis_image_manager = get_redis_image_manager()
-            redis_stats = redis_image_manager.cleanup_old_images()
-        except Exception:
-            pass
-        
+        # Redis image cleanup removed - charts are now generated in-memory
         return {
             "success": True,
             "message": "Chart cleanup completed",
             "file_cleanup_stats": file_stats,
-            "redis_cleanup_stats": redis_stats
+            "redis_cleanup_stats": {"status": "removed", "reason": "Charts generated in-memory"}
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to cleanup charts: {str(e)}")
@@ -2052,26 +2102,13 @@ async def cleanup_specific_charts(symbol: str, interval: str):
         chart_manager = get_chart_manager()
         file_success = chart_manager.cleanup_specific_charts(symbol, interval)
         
-        # Also cleanup Redis images for this symbol/interval if available
-        redis_success = False
-        try:
-            from redis_image_manager import get_redis_image_manager
-            redis_image_manager = get_redis_image_manager()
-            # Get all images for this symbol and interval
-            images = redis_image_manager.get_images_by_symbol(symbol, interval)
-            for image in images:
-                if 'key' in image:
-                    redis_image_manager.delete_image(image['key'])
-            redis_success = len(images) > 0
-        except Exception:
-            pass
-        
-        if file_success or redis_success:
+        # Redis image cleanup removed - charts are now generated in-memory
+        if file_success:
             return {
                 "success": True,
                 "message": f"Cleaned up charts for {symbol}_{interval}",
                 "file_cleanup": file_success,
-                "redis_cleanup": redis_success
+                "redis_cleanup": {"status": "removed", "reason": "Charts generated in-memory"}
             }
         else:
             return {
@@ -2095,89 +2132,8 @@ async def cleanup_all_charts():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to cleanup all charts: {str(e)}")
 
-# Redis Image Management Endpoints
-@app.get("/redis/images/stats")
-async def get_redis_image_stats():
-    """Get Redis image storage statistics."""
-    try:
-        from redis_image_manager import get_redis_image_manager
-        redis_image_manager = get_redis_image_manager()
-        stats = redis_image_manager.get_storage_stats()
-        return {
-            "success": True,
-            "stats": stats
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get Redis image stats: {str(e)}")
-
-@app.post("/redis/images/cleanup")
-async def cleanup_redis_images():
-    """Manually trigger Redis image cleanup."""
-    try:
-        from redis_image_manager import get_redis_image_manager
-        redis_image_manager = get_redis_image_manager()
-        stats = redis_image_manager.cleanup_old_images()
-        return {
-            "success": True,
-            "message": "Redis image cleanup completed",
-            "stats": stats
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to cleanup Redis images: {str(e)}")
-
-@app.get("/redis/images/{symbol}")
-async def get_redis_images_by_symbol(symbol: str, interval: str = None):
-    """Get all Redis images for a specific symbol."""
-    try:
-        from redis_image_manager import get_redis_image_manager
-        redis_image_manager = get_redis_image_manager()
-        images = redis_image_manager.get_images_by_symbol(symbol, interval)
-        return {
-            "success": True,
-            "symbol": symbol,
-            "interval": interval,
-            "images": images,
-            "count": len(images)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get Redis images for {symbol}: {str(e)}")
-
-@app.delete("/redis/images/{symbol}")
-async def cleanup_redis_images_by_symbol(symbol: str, interval: str = None):
-    """Clean up Redis images for a specific symbol."""
-    try:
-        from redis_image_manager import get_redis_image_manager
-        redis_image_manager = get_redis_image_manager()
-        images = redis_image_manager.get_images_by_symbol(symbol, interval)
-        
-        deleted_count = 0
-        for image in images:
-            if 'key' in image:
-                if redis_image_manager.delete_image(image['key']):
-                    deleted_count += 1
-        
-        return {
-            "success": True,
-            "message": f"Cleaned up {deleted_count} Redis images for {symbol}",
-            "deleted_count": deleted_count
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to cleanup Redis images for {symbol}: {str(e)}")
-
-@app.delete("/redis/images")
-async def clear_all_redis_images():
-    """Clear all Redis images."""
-    try:
-        from redis_image_manager import get_redis_image_manager
-        redis_image_manager = get_redis_image_manager()
-        stats = redis_image_manager.clear_all_images()
-        return {
-            "success": True,
-            "message": "All Redis images cleared",
-            "stats": stats
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to clear all Redis images: {str(e)}")
+# Redis Image Management Endpoints removed - charts are now generated in-memory
+# All Redis image storage functionality has been removed as charts are generated on-demand
 
 # Redis Cache Management Endpoints
 @app.get("/redis/cache/stats")

@@ -31,7 +31,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
     from redis_unified_cache_manager import get_unified_redis_cache_manager
-    from redis_image_manager import get_redis_image_manager
+    # Redis image manager removed - charts are now generated in-memory
 except ImportError as e:
     print(f"Warning: Could not import cache managers: {e}")
 
@@ -64,18 +64,12 @@ class SystemHealthChecker:
         
         # Initialize components
         self.redis_cache = None
-        self.redis_image_manager = None
         self.deployment_config = None
         
         try:
             self.redis_cache = get_unified_redis_cache_manager()
         except Exception as e:
             logger.warning(f"Could not initialize Redis cache manager: {e}")
-        
-        try:
-            self.redis_image_manager = get_redis_image_manager()
-        except Exception as e:
-            logger.warning(f"Could not initialize Redis image manager: {e}")
         
         try:
             self.deployment_config = DeploymentConfig
@@ -487,11 +481,8 @@ class SystemHealthChecker:
             except ImportError:
                 integration_checks.append(('legacy_cache_manager', 'Not available'))
             
-            try:
-                from redis_image_manager import get_redis_image_manager
-                integration_checks.append(('redis_image_manager', 'Available'))
-            except ImportError:
-                integration_checks.append(('redis_image_manager', 'Not available'))
+            # Redis image manager removed - charts are now generated in-memory
+            integration_checks.append(('redis_image_manager', 'Removed - charts are generated in-memory'))
             
             # Check if enhanced data service can use cache
             try:

@@ -7,6 +7,7 @@ import pandas as pd
 
 from .schema import SignalReason, TimeframeScore, SignalsSummary
 from .config import load_timeframe_weights
+from .regimes import detect_market_regime
 
 
 def _safe_last(series_like) -> float:
