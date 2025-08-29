@@ -630,15 +630,10 @@ JSON:
         
         # GROUP 1: Technical Overview (comprehensive technical analysis)
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for technical_overview: {chart_paths.get('technical_overview')}")
-        if chart_paths.get('technical_overview'):
+        if chart_paths.get('technical_overview') and chart_paths['technical_overview'].get('type') == 'image_bytes':
             try:
-                # Try to load from Redis first, fallback to file
-                technical_chart = self.image_utils.load_image_from_redis_or_file(
-                    chart_paths['technical_overview'], 
-                    symbol=symbol, 
-                    interval=interval, 
-                    chart_type='technical_overview'
-                )
+                # Load image bytes directly from chart data
+                technical_chart = chart_paths['technical_overview']['data']
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read technical_overview: {len(technical_chart)} bytes")
                 task = self.analyze_technical_overview(technical_chart)
                 chart_analysis_tasks.append(("technical_overview_enhanced", task))
@@ -646,19 +641,14 @@ JSON:
             except Exception as e:
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading technical_overview: {e}")
         else:
-            print("[ASYNC-OPTIMIZED-ENHANCED] technical_overview not found in chart_paths")
+            print("[ASYNC-OPTIMIZED-ENHANCED] technical_overview not found or not in image_bytes format")
         
         # GROUP 2: Pattern Analysis (all pattern recognition)
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for pattern_analysis: {chart_paths.get('pattern_analysis')}")
-        if chart_paths.get('pattern_analysis'):
+        if chart_paths.get('pattern_analysis') and chart_paths['pattern_analysis'].get('type') == 'image_bytes':
             try:
-                # Try to load from Redis first, fallback to file
-                pattern_chart = self.image_utils.load_image_from_redis_or_file(
-                    chart_paths['pattern_analysis'], 
-                    symbol=symbol, 
-                    interval=interval, 
-                    chart_type='pattern_analysis'
-                )
+                # Load image bytes directly from chart data
+                pattern_chart = chart_paths['pattern_analysis']['data']
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read pattern_analysis: {len(pattern_chart)} bytes")
                 task = self.analyze_pattern_analysis(pattern_chart, indicators)
                 chart_analysis_tasks.append(("pattern_analysis_enhanced", task))
@@ -666,19 +656,14 @@ JSON:
             except Exception as e:
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading pattern_analysis: {e}")
         else:
-            print("[ASYNC-OPTIMIZED-ENHANCED] pattern_analysis not found in chart_paths")
+            print("[ASYNC-OPTIMIZED-ENHANCED] pattern_analysis not found or not in image_bytes format")
         
         # GROUP 3: Volume Analysis (complete volume story)
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for volume_analysis: {chart_paths.get('volume_analysis')}")
-        if chart_paths.get('volume_analysis'):
+        if chart_paths.get('volume_analysis') and chart_paths['volume_analysis'].get('type') == 'image_bytes':
             try:
-                # Try to load from Redis first, fallback to file
-                volume_chart = self.image_utils.load_image_from_redis_or_file(
-                    chart_paths['volume_analysis'], 
-                    symbol=symbol, 
-                    interval=interval, 
-                    chart_type='volume_analysis'
-                )
+                # Load image bytes directly from chart data
+                volume_chart = chart_paths['volume_analysis']['data']
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read volume_analysis: {len(volume_chart)} bytes")
                 task = self.analyze_volume_analysis(volume_chart, indicators)
                 chart_analysis_tasks.append(("volume_analysis_enhanced", task))
@@ -686,19 +671,14 @@ JSON:
             except Exception as e:
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading volume_analysis: {e}")
         else:
-            print("[ASYNC-OPTIMIZED-ENHANCED] volume_analysis not found in chart_paths")
+            print("[ASYNC-OPTIMIZED-ENHANCED] volume_analysis not found or not in image_bytes format")
         
         # GROUP 4: Multi-Timeframe Comparison (MTF validation)
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for mtf_comparison: {chart_paths.get('mtf_comparison')}")
-        if chart_paths.get('mtf_comparison'):
+        if chart_paths.get('mtf_comparison') and chart_paths['mtf_comparison'].get('type') == 'image_bytes':
             try:
-                # Try to load from Redis first, fallback to file
-                mtf_chart = self.image_utils.load_image_from_redis_or_file(
-                    chart_paths['mtf_comparison'], 
-                    symbol=symbol, 
-                    interval=interval, 
-                    chart_type='mtf_comparison'
-                )
+                # Load image bytes directly from chart data
+                mtf_chart = chart_paths['mtf_comparison']['data']
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read mtf_comparison: {len(mtf_chart)} bytes")
                 task = self.analyze_mtf_comparison(mtf_chart, indicators)
                 chart_analysis_tasks.append(("mtf_comparison_enhanced", task))
@@ -706,7 +686,7 @@ JSON:
             except Exception as e:
                 print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading mtf_comparison: {e}")
         else:
-            print("[ASYNC-OPTIMIZED-ENHANCED] mtf_comparison not found in chart_paths")
+            print("[ASYNC-OPTIMIZED-ENHANCED] mtf_comparison not found or not in image_bytes format")
         
         # 3. AUXILIARY SYNTHESIS TASKS (rules: chunk and label sources; keep tasks single-purpose)
         aux_tasks = []

@@ -1,0 +1,44 @@
+# Render deployment configuration for Data + WebSocket Service
+# This will run on Render Free Tier (512 MB RAM)
+
+services:
+  - type: web
+    name: stock-analyzer-data-websocket
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python data_service.py
+    envVars:
+      - key: SERVICE_NAME
+        value: data_websocket_service
+      - key: SERVICE_PORT
+        value: 8001
+      - key: SERVICE_HOST
+        value: 0.0.0.0
+      - key: CORS_ORIGINS
+        value: "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:8080,http://127.0.0.1:5173,https://stock-analyzer-pro.vercel.app,https://stock-analyzer-pro-git-prototype-aaryan-manawats-projects.vercel.app,https://stock-analyzer-cl9o3tivx-aaryan-manawats-projects.vercel.app,https://stockanalyzer-pro.vercel.app"
+      - key: ZERODHA_API_KEY
+        sync: false
+      - key: ZERODHA_ACCESS_TOKEN
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: API_KEYS
+        value: "default_api_key"
+      - key: REQUIRE_AUTH
+        value: "false"
+      - key: MAX_CONCURRENT_CONNECTIONS
+        value: "50"
+      - key: MAX_WEBSOCKET_CONNECTIONS
+        value: "30"
+      - key: DATA_CACHE_SIZE_MB
+        value: "100"
+      - key: WEBSOCKET_HEARTBEAT_INTERVAL
+        value: "30"
+      - key: LOG_LEVEL
+        value: "INFO"
+      - key: ENABLE_DEBUG
+        value: "false"
+    healthCheckPath: /health
+    autoDeploy: true
+    region: oregon

@@ -70,9 +70,10 @@ class RedisImageManager:
             self.redis_client.ping()
             logger.info(f"✅ Redis connection established: {self.redis_url}")
         except (redis.exceptions.AuthenticationError, redis.exceptions.ConnectionError, Exception) as e:
-            logger.warning(f"⚠️  Redis connection failed: {e}. Using file-based fallback.")
+            logger.error(f"❌ Redis connection failed: {e}. Redis is required for chart storage.")
             self.redis_client = None
             self.redis_available = False
+            raise RuntimeError(f"Redis connection failed: {e}. Redis is required for chart storage.")
     
     def _generate_image_key(self, symbol: str, interval: str, chart_type: str) -> str:
         """Generate a unique Redis key for an image."""

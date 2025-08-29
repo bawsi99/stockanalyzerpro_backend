@@ -1233,9 +1233,10 @@ class ChartVisualizer:
         plt.show() 
 
     @staticmethod
-    def plot_comprehensive_technical_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str, stock_symbol: str = 'Stock'):
+    def plot_comprehensive_technical_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str = None, stock_symbol: str = 'Stock'):
         """
         Create comprehensive technical overview chart combining price, indicators, and support/resistance.
+        Returns matplotlib figure object. Optionally saves to file if save_path is provided.
         """
         fig, axes = plt.subplots(4, 1, figsize=(16, 12), gridspec_kw={'height_ratios': [3, 1, 1, 1]})
         
@@ -1305,13 +1306,19 @@ class ChartVisualizer:
             ax4.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close()
+        
+        # Save to file only if save_path is provided
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        # Return the figure object instead of closing it
+        return fig
 
     @staticmethod
-    def plot_comprehensive_pattern_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str, stock_symbol: str = 'Stock'):
+    def plot_comprehensive_pattern_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str = None, stock_symbol: str = 'Stock'):
         """
         Create comprehensive pattern analysis chart showing all reversal and continuation patterns.
+        Returns matplotlib figure object. Optionally saves to file if save_path is provided.
         """
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10), gridspec_kw={'height_ratios': [2, 1]})
         
@@ -1394,13 +1401,19 @@ class ChartVisualizer:
         ax2.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close()
+        
+        # Save to file only if save_path is provided
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        # Return the figure object instead of closing it
+        return fig
 
     @staticmethod
-    def plot_comprehensive_volume_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str, stock_symbol: str = 'Stock'):
+    def plot_comprehensive_volume_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str = None, stock_symbol: str = 'Stock'):
         """
         Create comprehensive volume analysis chart showing all volume patterns and correlations.
+        Returns matplotlib figure object. Optionally saves to file if save_path is provided.
         """
         fig, axes = plt.subplots(3, 1, figsize=(16, 12), gridspec_kw={'height_ratios': [2, 1, 1]})
         
@@ -1451,13 +1464,19 @@ class ChartVisualizer:
         ax3.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close()
+        
+        # Save to file only if save_path is provided
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        # Return the figure object instead of closing it
+        return fig
 
     @staticmethod
-    def plot_mtf_comparison_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str, stock_symbol: str = 'Stock'):
+    def plot_mtf_comparison_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str = None, stock_symbol: str = 'Stock'):
         """
         Create multi-timeframe comparison chart for cross-timeframe validation.
+        Returns matplotlib figure object. Optionally saves to file if save_path is provided.
         """
         fig, axes = plt.subplots(3, 1, figsize=(16, 12), gridspec_kw={'height_ratios': [2, 1, 1]})
         
@@ -1533,5 +1552,10 @@ class ChartVisualizer:
         ax3.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close() 
+        
+        # Save to file only if save_path is provided
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        # Return the figure object instead of closing it
+        return fig 

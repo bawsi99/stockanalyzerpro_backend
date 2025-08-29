@@ -366,7 +366,40 @@ def convert_charts_to_base64(charts_dict: dict) -> dict:
         pass
     
     for chart_name, chart_path in charts_dict.items():
-        if isinstance(chart_path, str) and os.path.exists(chart_path):
+        # Handle Redis keys (new format)
+        if isinstance(chart_path, str) and chart_path.startswith('chart:'):
+            try:
+                if redis_image_manager:
+                    # Get image from Redis
+                    image_data = redis_image_manager.get_image(chart_path)
+                    if image_data:
+                        # Convert to base64 for immediate response
+                        base64_data = image_data['data'].split(',')[1]  # Remove data URL prefix
+                        img_base64 = base64.b64encode(base64.b64decode(base64_data)).decode('utf-8')
+                        converted_charts[chart_name] = {
+                            'data': f"data:image/png;base64,{img_base64}",
+                            'filename': f"{chart_name}.png",
+                            'type': 'image/png',
+                            'redis_key': chart_path  # Store Redis key for future reference
+                        }
+                    else:
+                        converted_charts[chart_name] = {
+                            'error': 'Chart not found in Redis',
+                            'redis_key': chart_path
+                        }
+                else:
+                    converted_charts[chart_name] = {
+                        'error': 'Redis not available for chart retrieval',
+                        'redis_key': chart_path
+                    }
+            except Exception as e:
+                print(f"Error converting Redis chart {chart_name}: {e}")
+                converted_charts[chart_name] = {
+                    'error': f"Failed to load Redis chart: {str(e)}",
+                    'redis_key': chart_path
+                }
+        # Handle file paths (fallback format)
+        elif isinstance(chart_path, str) and os.path.exists(chart_path):
             try:
                 # If Redis is available, store the image there first
                 if redis_image_manager:
@@ -435,26 +468,43 @@ def convert_charts_to_base64(charts_dict: dict) -> dict:
                     'filename': os.path.basename(chart_path) if isinstance(chart_path, str) else 'unknown'
                 }
         else:
-            converted_charts[chart_name] = {
-                'error': 'Chart file not found',
-                'path': chart_path
-            }
+            # Handle invalid chart paths
+            if isinstance(chart_path, str):
+                if chart_path.startswith('chart:'):
+                    converted_charts[chart_name] = {
+                        'error': 'Invalid Redis key format',
+                        'redis_key': chart_path
+                    }
+                else:
+                    converted_charts[chart_name] = {
+                        'error': 'Chart file not found',
+                        'path': chart_path
+                    }
+            else:
+                converted_charts[chart_name] = {
+                    'error': 'Invalid chart path format',
+                    'path': chart_path
+                }
     
     return converted_charts
 
 def cleanup_chart_files(chart_paths: dict) -> dict:
-    """Delete chart image files referenced in chart_paths.
+    """Clean up chart files or Redis keys referenced in chart_paths.
 
     Returns basic stats about cleanup operations performed.
     """
-    stats = {"files_removed": 0, "errors": 0}
+    stats = {"files_removed": 0, "redis_keys_cleaned": 0, "errors": 0}
     try:
         for _, chart_path in (chart_paths or {}).items():
             try:
-                if isinstance(chart_path, str) and os.path.exists(chart_path):
-                    # Remove only the file; do not remove directories
-                    os.remove(chart_path)
-                    stats["files_removed"] += 1
+                if isinstance(chart_path, str):
+                    if chart_path.startswith('chart:'):
+                        # This is a Redis key - no cleanup needed as Redis handles expiration
+                        stats["redis_keys_cleaned"] += 1
+                    elif os.path.exists(chart_path):
+                        # Remove only the file; do not remove directories
+                        os.remove(chart_path)
+                        stats["files_removed"] += 1
             except Exception:
                 stats["errors"] += 1
         return stats
@@ -711,10 +761,8 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 status_code=500
             )
         
-        # Create visualizations
-        chart_paths = {}
-        if request.output:
-            chart_paths = orchestrator.create_visualizations(stock_data, indicators, request.stock, request.output, request.interval)
+        # Create visualizations (store in Redis)
+        chart_paths = orchestrator.create_visualizations(stock_data, indicators, request.stock, request.output, request.interval)
         
         # Get sector context (auto-detect sector if not provided)
         sector_context = None
@@ -2257,4 +2305,15 @@ async def options_any(path: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001) 
+    
+    # Load environment variables
+    port = int(os.getenv("SERVICE_PORT", 8002))
+    host = os.getenv("SERVICE_HOST", "0.0.0.0")
+    
+    print(f"🚀 Starting {os.getenv('SERVICE_NAME', 'Analysis Service')} on {host}:{port}")
+    print(f"🔍 Analysis endpoints available at /analyze/*")
+    print(f"📊 Technical indicators available at /stock/*/indicators")
+    print(f"🏭 Sector analysis available at /sector/*")
+    print(f"📈 Pattern recognition available at /patterns/*")
+    
+    uvicorn.run(app, host=host, port=port) 

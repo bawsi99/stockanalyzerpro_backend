@@ -1,19 +1,24 @@
 """
-Redis Cache Manager for Stock Data and Analysis
+Unified Redis Cache Manager
 
-This module provides a comprehensive Redis-based caching system for:
+This module provides a comprehensive Redis-based caching system that replaces all local caching:
 - Stock data (historical prices, indicators)
 - Technical analysis results
 - Pattern recognition results
 - Sector analysis data
 - ML model predictions
 - API responses
+- Historical data with market-aware TTL
+- In-memory LRU cache replacement
+- File-based cache replacement
 
 Features:
 - Automatic expiration and cleanup
 - Configurable TTL for different data types
 - Compression for large datasets
 - Performance monitoring and statistics
+- Market-aware caching (different TTL for market open/closed)
+- LRU-like behavior using Redis sorted sets
 """
 
 import os
@@ -32,29 +37,34 @@ import redis
 
 logger = logging.getLogger(__name__)
 
-class RedisCacheManager:
+class RedisUnifiedCacheManager:
     """
-    Redis-based cache manager for stock data and analysis results.
+    Unified Redis-based cache manager that replaces all local caching systems.
     
     Provides intelligent caching with:
     - Automatic compression for large datasets
     - Configurable TTL for different data types
     - Performance monitoring
     - Automatic cleanup
+    - Market-aware TTL (longer TTL when market is closed)
+    - LRU-like behavior for historical data
     """
     
     def __init__(self, 
                  redis_url: str = None,
                  enable_compression: bool = True,
                  cleanup_interval_minutes: int = 60,
-                 ttl_settings: Dict[str, int] = None):
+                 ttl_settings: Dict[str, int] = None,
+                 lru_capacity: int = 128):
         """
-        Initialize Redis cache manager.
+        Initialize unified Redis cache manager.
         
         Args:
             redis_url: Redis connection URL
             enable_compression: Whether to compress large datasets
             cleanup_interval_minutes: How often to run cleanup
+            ttl_settings: TTL settings for different data types
+            lru_capacity: Maximum number of items in LRU-like cache
         """
         # Prioritize cloud Redis, only fallback to localhost if explicitly configured
         self.redis_url = redis_url or os.getenv('REDIS_URL')
@@ -63,6 +73,7 @@ class RedisCacheManager:
             raise ValueError("REDIS_URL environment variable is required")
         self.enable_compression = enable_compression
         self.cleanup_interval_minutes = cleanup_interval_minutes
+        self.lru_capacity = lru_capacity
         
         # TTL settings for different data types
         self.ttl_settings = ttl_settings or {
@@ -71,7 +82,11 @@ class RedisCacheManager:
             "patterns": 1800,       # 30 minutes
             "sector_data": 3600,    # 1 hour
             "ml_predictions": 1800, # 30 minutes
-            "api_responses": 300    # 5 minutes
+            "api_responses": 300,   # 5 minutes
+            "historical_data": 3600, # 1 hour (market-aware)
+            "instruments": 86400,   # 24 hours
+            "live_data": 60,        # 1 minute
+            "enhanced_data": 300    # 5 minutes
         }
         
         # Initialize Redis connection
@@ -82,14 +97,15 @@ class RedisCacheManager:
             'redis_hits': 0,
             'redis_misses': 0,
             'compression_savings': 0,
-            'errors': 0
+            'errors': 0,
+            'lru_evictions': 0
         }
         self.stats_lock = threading.RLock()
         
         # Start cleanup thread
         self._start_cleanup_thread()
         
-        logger.info(f"RedisCacheManager initialized: {self.redis_url}")
+        logger.info(f"RedisUnifiedCacheManager initialized: {self.redis_url}")
     
     def _init_redis_connection(self):
         """Initialize Redis connection with error handling."""
@@ -104,6 +120,26 @@ class RedisCacheManager:
             self.redis_available = False
             self.redis_client = None
             raise RuntimeError(f"Redis connection failed: {e}. Redis is required for caching.")
+    
+    def _is_market_closed(self) -> bool:
+        """Check if the market is currently closed (after 3:30 PM IST or before 9:15 AM IST)."""
+        now = datetime.now()
+        ist_time = now + timedelta(hours=5, minutes=30)  # Convert to IST
+        market_open = datetime.strptime("09:15", "%H:%M").time()
+        market_close = datetime.strptime("15:30", "%H:%M").time()
+        
+        return ist_time.time() < market_open or ist_time.time() > market_close
+    
+    def _get_market_aware_ttl(self, data_type: str, base_ttl: int = None) -> int:
+        """Get TTL considering market status - longer TTL when market is closed."""
+        if base_ttl is None:
+            base_ttl = self.ttl_settings.get(data_type, 300)
+        
+        # For historical data, extend TTL when market is closed
+        if data_type == "historical_data" and self._is_market_closed():
+            return base_ttl * 4  # 4x longer TTL when market is closed
+        
+        return base_ttl
     
     def _generate_cache_key(self, data_type: str, *args, **kwargs) -> str:
         """Generate a unique cache key."""
@@ -201,6 +237,8 @@ class RedisCacheManager:
             if stat_name in self.stats:
                 self.stats[stat_name] += increment
     
+    # ==================== UNIFIED CACHE METHODS ====================
+    
     def get(self, data_type: str, *args, **kwargs) -> Optional[Any]:
         """
         Retrieve data from cache.
@@ -223,6 +261,11 @@ class RedisCacheManager:
             if cached_data is not None:
                 print(f"✅ [REDIS DEBUG] Cache HIT in Redis: {cache_key}")
                 self._update_stats('redis_hits')
+                
+                # Update access time for LRU-like behavior
+                if data_type == "historical_data":
+                    self._update_lru_access(cache_key)
+                
                 return self._deserialize_data(cached_data)
             else:
                 print(f"❌ [REDIS DEBUG] Cache MISS in Redis: {cache_key}")
@@ -240,7 +283,7 @@ class RedisCacheManager:
         Args:
             data_type: Type of data
             data: Data to cache
-            ttl_seconds: Time to live in seconds (uses default from ttl_settings if None)
+            ttl_seconds: Time to live in seconds (uses market-aware TTL if None)
             *args, **kwargs: Arguments to generate cache key
             
         Returns:
@@ -250,21 +293,146 @@ class RedisCacheManager:
             logger.warning("Redis not available, cannot store in cache")
             return False
         
-        # Use TTL from settings if not provided
+        # Reject None data
+        if data is None:
+            logger.warning("Cannot cache None data")
+            return False
+        
+        # Use market-aware TTL if not provided
         if ttl_seconds is None:
-            ttl_seconds = self.ttl_settings.get(data_type, 300)
+            ttl_seconds = self._get_market_aware_ttl(data_type)
         
         cache_key = self._generate_cache_key(data_type, *args, **kwargs)
         serialized_data = self._serialize_data(data)
         
         try:
             print(f"💾 [REDIS DEBUG] Storing cache: {cache_key} (TTL: {ttl_seconds}s, size: {len(serialized_data)} bytes)")
+            
+            # Store the data
             self.redis_client.setex(cache_key, ttl_seconds, serialized_data)
+            
+            # For historical data, maintain LRU-like behavior
+            if data_type == "historical_data":
+                self._add_to_lru(cache_key, ttl_seconds)
+            
             return True
         except Exception as e:
             logger.warning(f"Redis set error: {e}")
             self._update_stats('errors')
             return False
+    
+    # ==================== LRU-LIKE BEHAVIOR FOR HISTORICAL DATA ====================
+    
+    def _add_to_lru(self, cache_key: str, ttl_seconds: int):
+        """Add key to LRU-like tracking using Redis sorted set."""
+        try:
+            # Use sorted set with timestamp as score for LRU behavior
+            lru_key = "lru:historical_data"
+            timestamp = time.time()
+            
+            # Add to sorted set
+            self.redis_client.zadd(lru_key, {cache_key: timestamp})
+            
+            # Maintain capacity limit
+            current_count = self.redis_client.zcard(lru_key)
+            if current_count > self.lru_capacity:
+                # Remove oldest entries
+                removed = self.redis_client.zremrangebyrank(lru_key, 0, current_count - self.lru_capacity - 1)
+                self._update_stats('lru_evictions', removed)
+                logger.debug(f"LRU evicted {removed} old entries")
+                
+        except Exception as e:
+            logger.warning(f"Error updating LRU: {e}")
+    
+    def _update_lru_access(self, cache_key: str):
+        """Update access time for LRU-like behavior."""
+        try:
+            lru_key = "lru:historical_data"
+            timestamp = time.time()
+            
+            # Update timestamp (this moves it to the end of the sorted set)
+            self.redis_client.zadd(lru_key, {cache_key: timestamp})
+            
+        except Exception as e:
+            logger.warning(f"Error updating LRU access: {e}")
+    
+    # ==================== SPECIALIZED CACHE METHODS ====================
+    
+    def cache_historical_data(self, symbol: str, exchange: str, interval: str, 
+                            from_date: datetime, to_date: datetime, data: pd.DataFrame,
+                            ttl_seconds: int = None) -> bool:
+        """Cache historical data with market-aware TTL."""
+        if data is None or data.empty:
+            return False
+        
+        # Store with metadata
+        metadata = {
+            'symbol': symbol,
+            'exchange': exchange,
+            'interval': interval,
+            'from_date': from_date.isoformat(),
+            'to_date': to_date.isoformat(),
+            'cached_at': datetime.now().isoformat(),
+            'market_closed': self._is_market_closed()
+        }
+        
+        # Store data and metadata separately using consistent key generation
+        data_success = self.set('historical_data', data, ttl_seconds, symbol, exchange, interval, from_date, to_date)
+        metadata_success = self.set('historical_metadata', metadata, ttl_seconds, symbol, exchange, interval, from_date, to_date)
+        
+        return data_success and metadata_success
+    
+    def get_cached_historical_data(self, symbol: str, exchange: str, interval: str,
+                                 from_date: datetime, to_date: datetime) -> Optional[pd.DataFrame]:
+        """Get cached historical data if available."""
+        return self.get('historical_data', symbol, exchange, interval, from_date, to_date)
+    
+    def cache_instruments(self, instruments: List[Dict], ttl_seconds: int = None) -> bool:
+        """Cache instruments list."""
+        if ttl_seconds is None:
+            ttl_seconds = self.ttl_settings.get('instruments', 86400)
+        
+        return self.set('instruments', instruments, ttl_seconds)
+    
+    def get_cached_instruments(self) -> Optional[List[Dict]]:
+        """Get cached instruments list."""
+        return self.get('instruments')
+    
+    def cache_live_data(self, symbol: str, exchange: str, data: Any, ttl_seconds: int = None) -> bool:
+        """Cache live data with short TTL."""
+        if ttl_seconds is None:
+            ttl_seconds = self.ttl_settings.get('live_data', 60)
+        
+        return self.set('live_data', data, ttl_seconds, symbol, exchange)
+    
+    def get_cached_live_data(self, symbol: str, exchange: str) -> Optional[Any]:
+        """Get cached live data."""
+        return self.get('live_data', symbol, exchange)
+    
+    # ==================== ENHANCED DATA SERVICE CACHE METHODS ====================
+    
+    def cache_enhanced_data(self, symbol: str, exchange: str, interval: str, period: int,
+                           data: pd.DataFrame, metadata: Dict, ttl_seconds: int = None) -> bool:
+        """Cache enhanced data service data."""
+        if ttl_seconds is None:
+            ttl_seconds = self.ttl_settings.get('enhanced_data', 300)
+        
+        # Store data and metadata
+        data_success = self.set('enhanced_data', data, ttl_seconds, symbol, exchange, interval, period)
+        metadata_success = self.set('enhanced_metadata', metadata, ttl_seconds, symbol, exchange, interval, period)
+        
+        return data_success and metadata_success
+    
+    def get_cached_enhanced_data(self, symbol: str, exchange: str, interval: str, period: int) -> Optional[tuple]:
+        """Get cached enhanced data and metadata."""
+        data = self.get('enhanced_data', symbol, exchange, interval, period)
+        metadata = self.get('enhanced_metadata', symbol, exchange, interval, period)
+        
+        if data is not None and metadata is not None:
+            return data, metadata
+        return None
+    
+    # ==================== UTILITY METHODS ====================
     
     def delete(self, data_type: str, *args, **kwargs) -> bool:
         """Delete data from cache."""
@@ -336,12 +504,19 @@ class RedisCacheManager:
                     'keyspace_hits': info.get('keyspace_hits'),
                     'keyspace_misses': info.get('keyspace_misses')
                 })
+                
+                # Add LRU stats
+                lru_key = "lru:historical_data"
+                stats['lru_count'] = self.redis_client.zcard(lru_key)
+                stats['lru_capacity'] = self.lru_capacity
+                
             except Exception as e:
                 logger.warning(f"Could not get Redis info: {e}")
         
         stats['redis_available'] = self.redis_available
         stats['redis_url'] = self.redis_url
         stats['enable_compression'] = self.enable_compression
+        stats['market_closed'] = self._is_market_closed()
         
         return stats
     
@@ -360,60 +535,60 @@ class RedisCacheManager:
         cleanup_thread.start()
         logger.info(f"Started cleanup thread with {self.cleanup_interval_minutes} minute interval")
 
-# Global Redis cache manager instance
-_redis_cache_manager = None
+# Global unified Redis cache manager instance
+_unified_redis_cache_manager = None
 
-def get_redis_cache_manager() -> RedisCacheManager:
-    """Get the global Redis cache manager instance."""
-    global _redis_cache_manager
-    if _redis_cache_manager is None:
-        _redis_cache_manager = RedisCacheManager()
-    return _redis_cache_manager
+def get_unified_redis_cache_manager() -> RedisUnifiedCacheManager:
+    """Get the global unified Redis cache manager instance."""
+    global _unified_redis_cache_manager
+    if _unified_redis_cache_manager is None:
+        _unified_redis_cache_manager = RedisUnifiedCacheManager()
+    return _unified_redis_cache_manager
 
-def initialize_redis_cache_manager(**kwargs) -> RedisCacheManager:
-    """Initialize the global Redis cache manager with custom settings."""
-    global _redis_cache_manager
-    _redis_cache_manager = RedisCacheManager(**kwargs)
-    return _redis_cache_manager
+def initialize_unified_redis_cache_manager(**kwargs) -> RedisUnifiedCacheManager:
+    """Initialize the global unified Redis cache manager with custom settings."""
+    global _unified_redis_cache_manager
+    _unified_redis_cache_manager = RedisUnifiedCacheManager(**kwargs)
+    return _unified_redis_cache_manager
 
 # Convenience functions for common cache operations
 def cache_stock_data(symbol: str, exchange: str, interval: str, period: int, data: pd.DataFrame, ttl_seconds: int = 300) -> bool:
     """Cache stock data."""
-    return get_redis_cache_manager().set('stock_data', data, ttl_seconds, symbol, exchange, interval, period)
+    return get_unified_redis_cache_manager().set('stock_data', data, ttl_seconds, symbol, exchange, interval, period)
 
 def get_cached_stock_data(symbol: str, exchange: str, interval: str, period: int) -> Optional[pd.DataFrame]:
     """Get cached stock data."""
-    return get_redis_cache_manager().get('stock_data', symbol, exchange, interval, period)
+    return get_unified_redis_cache_manager().get('stock_data', symbol, exchange, interval, period)
 
 def cache_indicators(symbol: str, exchange: str, interval: str, indicators: Dict, ttl_seconds: int = 600) -> bool:
     """Cache technical indicators."""
-    return get_redis_cache_manager().set('indicators', indicators, ttl_seconds, symbol, exchange, interval)
+    return get_unified_redis_cache_manager().set('indicators', indicators, ttl_seconds, symbol, exchange, interval)
 
 def get_cached_indicators(symbol: str, exchange: str, interval: str) -> Optional[Dict]:
     """Get cached technical indicators."""
-    return get_redis_cache_manager().get('indicators', symbol, exchange, interval)
+    return get_unified_redis_cache_manager().get('indicators', symbol, exchange, interval)
 
 def cache_patterns(symbol: str, exchange: str, interval: str, patterns: Dict, ttl_seconds: int = 1800) -> bool:
     """Cache pattern recognition results."""
-    return get_redis_cache_manager().set('patterns', patterns, ttl_seconds, symbol, exchange, interval)
+    return get_unified_redis_cache_manager().set('patterns', patterns, ttl_seconds, symbol, exchange, interval)
 
 def get_cached_patterns(symbol: str, exchange: str, interval: str) -> Optional[Dict]:
     """Get cached pattern recognition results."""
-    return get_redis_cache_manager().get('patterns', symbol, exchange, interval)
+    return get_unified_redis_cache_manager().get('patterns', symbol, exchange, interval)
 
 def cache_sector_data(sector: str, period: int, data: Dict, ttl_seconds: int = 3600) -> bool:
     """Cache sector analysis data."""
-    return get_redis_cache_manager().set('sector_data', data, ttl_seconds, sector, period)
+    return get_unified_redis_cache_manager().set('sector_data', data, ttl_seconds, sector, period)
 
 def get_cached_sector_data(sector: str, period: int) -> Optional[Dict]:
     """Get cached sector analysis data."""
-    return get_redis_cache_manager().get('sector_data', sector, period)
+    return get_unified_redis_cache_manager().get('sector_data', sector, period)
 
 def clear_stock_cache(symbol: str = None, exchange: str = None) -> Dict[str, int]:
     """Clear stock data cache."""
     if symbol and exchange:
         # Clear specific symbol
-        return get_redis_cache_manager().clear('stock_data')
+        return get_unified_redis_cache_manager().clear('stock_data')
     else:
         # Clear all stock data
-        return get_redis_cache_manager().clear('stock_data')
+        return get_unified_redis_cache_manager().clear('stock_data')

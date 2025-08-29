@@ -1446,4 +1446,14 @@ async def verify_token(token: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    
+    # Load environment variables
+    port = int(os.getenv("SERVICE_PORT", 8001))
+    host = os.getenv("SERVICE_HOST", "0.0.0.0")
+    
+    print(f"🚀 Starting {os.getenv('SERVICE_NAME', 'Data + WebSocket Service')} on {host}:{port}")
+    print(f"📊 Data endpoints available at /stock/*")
+    print(f"🔌 WebSocket streaming available at /ws/stream")
+    print(f"🔐 Authentication endpoints available at /auth/*")
+    
+    uvicorn.run(app, host=host, port=port) 

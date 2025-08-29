@@ -25,11 +25,9 @@ def main():
         help='Data interval (default: day). Supported: minute, 3minute, 5minute, 10minute, 15minute, 30minute, 60minute, day, week, month.'
     )
     args = parser.parse_args()
-    output = f'./output/{args.stock}'
-    os.makedirs(output, exist_ok=True)
     print(f"Starting analysis for {args.stock} ({args.exchange})")
     print(f"Analysis period: {args.period} days")
-    print(f"Output directory: {output}")
+    print(f"Charts will be stored in Redis")
     try:
         orchestrator = StockAnalysisOrchestrator()
         orchestrator.authenticate()
@@ -38,8 +36,7 @@ def main():
                 symbol=args.stock,
                 exchange=args.exchange,
                 period=args.period,
-                interval=args.interval,
-                output_dir=output
+                interval=args.interval
             ))
             if error_message:
                 print(f"Error during analysis: {error_message}")

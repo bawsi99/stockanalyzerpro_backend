@@ -17,15 +17,34 @@ class ImageUtils:
         Load image bytes from Redis if available, otherwise from file.
         
         Args:
-            image_path: Local file path (fallback)
-            symbol: Stock symbol for Redis lookup
-            interval: Time interval for Redis lookup
-            chart_type: Chart type for Redis lookup
+            image_path: Redis key or local file path
+            symbol: Stock symbol for Redis lookup (used if image_path is not a Redis key)
+            interval: Time interval for Redis lookup (used if image_path is not a Redis key)
+            chart_type: Chart type for Redis lookup (used if image_path is not a Redis key)
             
         Returns:
             Image bytes
         """
-        # Try Redis first if we have the required parameters
+        # Check if image_path is a Redis key
+        if isinstance(image_path, str) and image_path.startswith('chart:'):
+            try:
+                from redis_image_manager import get_redis_image_manager
+                redis_manager = get_redis_image_manager()
+                
+                # Load image directly from Redis key
+                image_data = redis_manager.get_image(image_path)
+                if image_data:
+                    # Convert base64 data back to bytes
+                    base64_data = image_data['data'].split(',')[1]  # Remove data URL prefix
+                    return base64.b64decode(base64_data)
+                else:
+                    print(f"Image not found in Redis with key: {image_path}")
+                    raise ValueError(f"Image not found in Redis with key: {image_path}")
+            except Exception as e:
+                print(f"Redis lookup failed for key {image_path}: {e}")
+                raise ValueError(f"Failed to load image from Redis: {e}")
+        
+        # Try Redis lookup by symbol/interval/chart_type if we have the required parameters
         if symbol and interval and chart_type:
             try:
                 from redis_image_manager import get_redis_image_manager

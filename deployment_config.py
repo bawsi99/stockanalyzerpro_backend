@@ -51,7 +51,7 @@ class DeploymentConfig:
             "enable_cleanup": True,
             "image_quality": 85,
             "image_format": "PNG",
-            "redis_url": "redis://localhost:6379/0"
+            "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0")
         },
         "staging": {
             "max_age_hours": 12,
@@ -60,7 +60,7 @@ class DeploymentConfig:
             "enable_cleanup": True,
             "image_quality": 85,
             "image_format": "PNG",
-            "redis_url": "redis://localhost:6379/0"
+            "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0")
         },
         "production": {
             "max_age_hours": 6,
@@ -69,7 +69,7 @@ class DeploymentConfig:
             "enable_cleanup": True,
             "image_quality": 80,
             "image_format": "JPEG",
-            "redis_url": "redis://localhost:6379/0"
+            "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0")
         }
     }
     
@@ -78,7 +78,7 @@ class DeploymentConfig:
         "development": {
             "enable_compression": True,
             "cleanup_interval_minutes": 60,
-            "redis_url": "redis://localhost:6379/0",
+            "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0"),
             "ttl_settings": {
                 "stock_data": 300,      # 5 minutes
                 "indicators": 600,      # 10 minutes
@@ -91,20 +91,20 @@ class DeploymentConfig:
         "staging": {
             "enable_compression": True,
             "cleanup_interval_minutes": 30,
-            "redis_url": "redis://localhost:6379/0",
+            "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0"),
             "ttl_settings": {
                 "stock_data": 300,      # 5 minutes
                 "indicators": 600,      # 10 minutes
                 "patterns": 1800,       # 30 minutes
                 "sector_data": 3600,    # 1 hour
-                "ml_predictions": 1800, # 30 minutes
+                "ml_predictions": 1800, # 5 minutes
                 "api_responses": 300    # 5 minutes
             }
         },
         "production": {
             "enable_compression": True,
             "cleanup_interval_minutes": 15,
-            "redis_url": "redis://localhost:6379/0",
+            "redis_url": os.getenv("REDIS_URL", "redis://localhost:6379/0"),
             "ttl_settings": {
                 "stock_data": 180,      # 3 minutes
                 "indicators": 300,      # 5 minutes
