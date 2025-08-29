@@ -200,7 +200,12 @@ def _classify_trend_regime(trend_metrics: Dict[str, float], momentum_metrics: Di
     """Classify trend regime using multiple validated indicators."""
     try:
         # Extract key metrics
-        adx = trend_metrics.get("adx", 0)
+        adx_value = trend_metrics.get("adx", 0)
+        if isinstance(adx_value, pd.Series):
+            adx = float(adx_value.iloc[-1]) if not pd.isna(adx_value.iloc[-1]) else 0
+        else:
+            adx = float(adx_value)
+            
         r_squared = trend_metrics.get("r_squared", 0)
         slope = trend_metrics.get("slope", 0)
         ma_alignment = trend_metrics.get("ma_alignment", 0)
@@ -243,22 +248,29 @@ def _classify_trend_regime(trend_metrics: Dict[str, float], momentum_metrics: Di
             trend_strength += 10
         
         # RSI momentum contribution (0-10 points)
-        if (rsi < 30 and slope > 0) or (rsi > 70 and slope < 0):
-            trend_strength += 10
+        if isinstance(rsi, (int, float)) and isinstance(slope, (int, float)):
+            if (rsi < 30 and slope > 0) or (rsi > 70 and slope < 0):
+                trend_strength += 10
         
         # Determine trend regime
         if trend_strength >= 70:
-            if slope > 0 and ma_alignment >= 0:
-                regime = "bullish"
-            elif slope < 0 and ma_alignment <= 0:
-                regime = "bearish"
+            if isinstance(slope, (int, float)) and isinstance(ma_alignment, (int, float)):
+                if slope > 0 and ma_alignment >= 0:
+                    regime = "bullish"
+                elif slope < 0 and ma_alignment <= 0:
+                    regime = "bearish"
+                else:
+                    regime = "sideways"
             else:
                 regime = "sideways"
         elif trend_strength >= 40:
-            if slope > 0:
-                regime = "bullish"
-            elif slope < 0:
-                regime = "bearish"
+            if isinstance(slope, (int, float)):
+                if slope > 0:
+                    regime = "bullish"
+                elif slope < 0:
+                    regime = "bearish"
+                else:
+                    regime = "sideways"
             else:
                 regime = "sideways"
         else:
@@ -278,12 +290,36 @@ def _classify_trend_regime(trend_metrics: Dict[str, float], momentum_metrics: Di
 def _classify_volatility_regime(volatility_metrics: Dict[str, float]) -> Dict[str, str]:
     """Classify volatility regime using statistical percentiles."""
     try:
-        # Extract key metrics
+        # Extract key metrics and ensure they're scalar values
         atr_percent = volatility_metrics.get("atr_percent", 0)
+        if isinstance(atr_percent, pd.Series):
+            atr_percent = float(atr_percent.iloc[-1]) if not pd.isna(atr_percent.iloc[-1]) else 0
+        else:
+            atr_percent = float(atr_percent)
+            
         rolling_std_20 = volatility_metrics.get("rolling_std_20", 0)
+        if isinstance(rolling_std_20, pd.Series):
+            rolling_std_20 = float(rolling_std_20.iloc[-1]) if not pd.isna(rolling_std_20.iloc[-1]) else 0
+        else:
+            rolling_std_20 = float(rolling_std_20)
+            
         vol_20_percentile = volatility_metrics.get("vol_20_percentile", 0)
+        if isinstance(vol_20_percentile, pd.Series):
+            vol_20_percentile = float(vol_20_percentile.iloc[-1]) if not pd.isna(vol_20_percentile.iloc[-1]) else 0
+        else:
+            vol_20_percentile = float(vol_20_percentile)
+            
         vol_80_percentile = volatility_metrics.get("vol_80_percentile", 0)
+        if isinstance(vol_80_percentile, pd.Series):
+            vol_80_percentile = float(vol_80_percentile.iloc[-1]) if not pd.isna(vol_80_percentile.iloc[-1]) else 0
+        else:
+            vol_80_percentile = float(vol_80_percentile)
+            
         bb_volatility = volatility_metrics.get("bb_volatility", 0)
+        if isinstance(bb_volatility, pd.Series):
+            bb_volatility = float(bb_volatility.iloc[-1]) if not pd.isna(bb_volatility.iloc[-1]) else 0
+        else:
+            bb_volatility = float(bb_volatility)
         
         # Calculate volatility score (0-100)
         volatility_score = 0

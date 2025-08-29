@@ -307,15 +307,108 @@ def compute_timeframe_score(indicators: Dict, timeframe: str, regime: Dict[str, 
 
 
 def compute_signals_summary(
-    per_timeframe_indicators: Dict[str, Dict]
+    per_timeframe_indicators: Dict[str, Dict],
+    price_data: pd.DataFrame = None
 ) -> SignalsSummary:
     # Derive a simple regime from the base timeframe if available
     base_tf = next(iter(per_timeframe_indicators.keys())) if per_timeframe_indicators else "day"
     regime = {"trend": "unknown", "volatility": "normal"}
 
-    # Allow passing of 'data' or meta if at hand; else compute regime from indicators if possible
-    # Here we infer from indicators only
-    regime = {**regime}
+    # Set up logging
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Enhanced regime detection using price data if available
+    if per_timeframe_indicators and base_tf in per_timeframe_indicators:
+        base_indicators = per_timeframe_indicators[base_tf] or {}
+        
+        # Use price data for comprehensive regime detection if available
+        if price_data is not None and not price_data.empty and len(price_data) >= 50:
+            try:
+                detected_regime = detect_market_regime(price_data, base_indicators)
+                logger.info(f"Price-based regime detection result: {detected_regime}")
+                
+                # Update regime with detected values, but only if confidence is sufficient
+                if detected_regime and detected_regime.get("trend") != "unknown":
+                    # Only override if the detected regime has higher confidence
+                    if detected_regime.get("confidence") in ["high", "medium"]:
+                        regime["trend"] = detected_regime["trend"]
+                        logger.info(f"Updated trend to: {detected_regime['trend']} (confidence: {detected_regime.get('confidence')})")
+                
+                if detected_regime and detected_regime.get("volatility") != "unknown":
+                    # Only override if the detected regime has higher confidence
+                    if detected_regime.get("confidence") in ["high", "medium"]:
+                        regime["volatility"] = detected_regime["volatility"]
+                        logger.info(f"Updated volatility to: {detected_regime['volatility']} (confidence: {detected_regime.get('confidence')})")
+                
+            except Exception as e:
+                # Log the error for debugging but continue with indicator-based detection
+                logger.debug(f"Price-based regime detection failed: {e}")
+                pass
+        
+        # Fallback: indicator-based regime detection if price-based failed
+        if regime["trend"] == "unknown":
+            # Try to detect trend from ADX
+            adx_val = None
+            adx_block = base_indicators.get("adx") or {}
+            try:
+                if isinstance(adx_block, dict) and adx_block.get("adx"):
+                    adx_val = float(adx_block["adx"])
+                elif isinstance(adx_block, (list, tuple)) and len(adx_block):
+                    adx_val = float(adx_block[-1])
+                elif isinstance(adx_block, (int, float)):
+                    adx_val = float(adx_block)
+            except Exception:
+                pass
+            
+            if adx_val is not None and not np.isnan(adx_val):
+                if adx_val >= 25:
+                    regime["trend"] = "trending"
+                else:
+                    regime["trend"] = "ranging"
+        
+        if regime["volatility"] == "normal":
+            # Try to detect volatility from ATR
+            atr_val = None
+            atr_block = base_indicators.get("atr") or base_indicators.get("ATR") or {}
+            try:
+                if isinstance(atr_block, dict):
+                    atr_val = atr_block.get("atr") or atr_block.get("atr_percent")
+                elif isinstance(atr_block, (list, tuple)) and len(atr_block):
+                    atr_val = atr_block[-1]
+                elif isinstance(atr_block, (int, float)):
+                    atr_val = float(atr_block)
+            except Exception:
+                pass
+            
+            if atr_val is not None:
+                try:
+                    atr_val = float(atr_val)
+                    if atr_val >= 3.0:
+                        regime["volatility"] = "high"
+                    elif atr_val <= 1.0:
+                        regime["volatility"] = "low"
+                    else:
+                        regime["volatility"] = "normal"
+                except Exception:
+                    pass
+            
+            # Additional volatility detection from Bollinger Bands
+            if regime["volatility"] == "normal":
+                bb_block = base_indicators.get("bollinger_bands") or {}
+                try:
+                    bandwidth = bb_block.get("bandwidth")
+                    if bandwidth is not None:
+                        bandwidth = float(bandwidth)
+                        if bandwidth > 0.15:  # Wide bands indicate high volatility
+                            regime["volatility"] = "high"
+                        elif bandwidth < 0.05:  # Narrow bands indicate low volatility
+                            regime["volatility"] = "low"
+                except Exception:
+                    pass
+    
+    # Log final regime result
+    logger.info(f"Final regime detection result: {regime}")
 
     scores: List[TimeframeScore] = []
     for tf, inds in per_timeframe_indicators.items():

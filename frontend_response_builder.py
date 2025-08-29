@@ -1223,7 +1223,12 @@ class FrontendResponseBuilder:
                 flattened_indicators = FrontendResponseBuilder._flatten_indicators_for_scoring(indicators)
                 per_timeframe_indicators['day'] = flattened_indicators
 
-            summary = compute_signals_summary(per_timeframe_indicators)
+            # Try to get price data for better regime detection
+            price_data = None
+            if data is not None and not data.empty and len(data) >= 50:
+                price_data = data
+            
+            summary = compute_signals_summary(per_timeframe_indicators, price_data)
 
             c = float(summary.consensus_score)
             bullish_percentage = max(0.0, c) * 100.0
