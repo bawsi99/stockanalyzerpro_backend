@@ -271,6 +271,11 @@ class RawDataMLEngine(BaseMLEngine):
             return False
         
         try:
+            # Check if data is empty or too small
+            if data is None or data.empty or len(data) < 50:
+                logger.warning(f"Insufficient data for training: {0 if data is None or data.empty else len(data)} rows (minimum 50 required)")
+                return False
+                
             # Prepare features
             features_df = self.feature_engineer.create_technical_features(data)
             # Clean NaNs and infinities conservatively to retain early samples
@@ -299,6 +304,11 @@ class RawDataMLEngine(BaseMLEngine):
             y_direction = features_df['future_direction'].values[:-target_horizon]
             y_magnitude = features_df['future_return'].values[:-target_horizon]
             
+            # Check if we have enough data after processing
+            if len(X) < 10:
+                logger.warning(f"Insufficient processed data for training: {len(X)} samples (minimum 10 required)")
+                return False
+                
             logger.info(f"X shape: {X.shape}, y_direction shape: {y_direction.shape}")
             
             # Scale features
@@ -316,7 +326,7 @@ class RawDataMLEngine(BaseMLEngine):
             # Calibrate the classifier for better probability estimates
             self.direction_model = CalibratedClassifierCV(
                 self.direction_model, 
-                cv=3, 
+                cv=min(3, max(2, len(X) // 10)),  # Ensure CV is appropriate for data size
                 method='isotonic'
             )
             self.direction_model.fit(X_scaled, y_direction.astype(int))
@@ -364,10 +374,38 @@ class RawDataMLEngine(BaseMLEngine):
             return PricePrediction("sideways", 0.0, 0.5, f"{horizon}period")
         
         try:
+            # Check if data is empty
+            if data is None or data.empty:
+                logger.warning("Empty data provided for prediction")
+                return PricePrediction("sideways", 0.0, 0.5, f"{horizon}period")
+                
             # Prepare features
             features_df = self.feature_engineer.create_technical_features(data)
             features_df = features_df.replace([np.inf, -np.inf], np.nan).ffill().fillna(0)
+            
+            # Verify we have the necessary feature columns
+            missing_columns = [col for col in self.feature_columns if col not in features_df.columns]
+            if missing_columns:
+                logger.warning(f"Missing feature columns for prediction: {missing_columns}")
+                # Create missing columns with zeros
+                for col in missing_columns:
+                    features_df[col] = 0
+            
+            # Ensure we have all required columns in the right order
+            features_df = features_df.reindex(columns=self.feature_columns, fill_value=0)
+            
+            # Get latest features
+            if len(features_df) == 0:
+                logger.warning("No features available after processing")
+                return PricePrediction("sideways", 0.0, 0.5, f"{horizon}period")
+                
             latest_features = features_df[self.feature_columns].iloc[-1:].values
+            
+            # Check if scaler is fitted
+            if not hasattr(self.scaler, 'mean_'):
+                logger.warning("Scaler not fitted, using default prediction")
+                return PricePrediction("sideways", 0.0, 0.5, f"{horizon}period")
+                
             latest_features_scaled = self.scaler.transform(latest_features)
             
             # Predict direction and magnitude
@@ -407,13 +445,35 @@ class RawDataMLEngine(BaseMLEngine):
     def predict_volatility(self, data: pd.DataFrame) -> VolatilityPrediction:
         """Predict future volatility."""
         try:
+            # Check if data is empty
+            if data is None or data.empty:
+                logger.warning("Empty data provided for volatility prediction")
+                return VolatilityPrediction(0.02, 0.02, "stable", 0.5)
+                
+            # Verify we have close prices
+            if 'close' not in data.columns:
+                logger.warning("No close price data available for volatility prediction")
+                return VolatilityPrediction(0.02, 0.02, "stable", 0.5)
+                
             # Calculate current volatility
             returns = data['close'].pct_change().dropna()
+            
+            # Check if we have enough data
+            if len(returns) < 20:
+                logger.warning(f"Insufficient data for volatility calculation: {len(returns)} points (need 20)")
+                return VolatilityPrediction(0.02, 0.02, "stable", 0.5)
+                
             current_vol = returns.rolling(20).std().iloc[-1]
             
             # Simple volatility prediction (can be enhanced with ML)
             # Predict based on recent volatility trend
-            vol_trend = returns.rolling(10).std().diff().iloc[-1]
+            if len(returns) < 10:
+                vol_trend = 0
+            else:
+                vol_trend = returns.rolling(10).std().diff().iloc[-1]
+                # Handle NaN case
+                if pd.isna(vol_trend):
+                    vol_trend = 0
             
             if vol_trend > 0:
                 predicted_vol = current_vol * 1.1
@@ -439,10 +499,31 @@ class RawDataMLEngine(BaseMLEngine):
     def classify_market_regime(self, data: pd.DataFrame) -> MarketRegime:
         """Classify current market regime."""
         try:
+            # Check if data is empty
+            if data is None or data.empty:
+                logger.warning("Empty data provided for market regime classification")
+                return MarketRegime("sideways", 0.5, 20, 0.5)
+                
+            # Verify we have close prices
+            if 'close' not in data.columns:
+                logger.warning("No close price data available for market regime classification")
+                return MarketRegime("sideways", 0.5, 20, 0.5)
+                
             # Calculate regime indicators
             returns = data['close'].pct_change().dropna()
+            
+            # Check if we have enough data
+            if len(returns) < 50:
+                logger.warning(f"Insufficient data for market regime classification: {len(returns)} points (need 50)")
+                return MarketRegime("sideways", 0.5, 20, 0.5)
+                
             volatility = returns.rolling(20).std().iloc[-1]
             trend = returns.rolling(50).mean().iloc[-1]
+            
+            # Handle NaN cases
+            if pd.isna(volatility) or pd.isna(trend):
+                logger.warning("Missing volatility or trend data for market regime classification")
+                return MarketRegime("sideways", 0.5, 20, 0.5)
             
             # Determine regime
             if abs(trend) > 0.001 and volatility < 0.02:

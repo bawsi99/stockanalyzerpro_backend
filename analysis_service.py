@@ -166,10 +166,11 @@ async def startup_event():
         print(f"✅ Chart manager initialized: max_age={chart_manager.max_age_hours}h, max_size={chart_manager.max_total_size_mb}MB")
         
         # Redis image manager removed - charts are now generated in-memory
-        print("📊 Charts are generated in-memory - no Redis image storage needed")
-        print("ℹ️  Falling back to file-based chart storage")
+        # Note: Redis is still used for data caching, just not for image storage
+        print("📊 Charts are generated in-memory - Redis not used for image storage")
+        print("ℹ️  Using file-based chart storage and Redis for data caching")
         
-        # Initialize Redis cache manager
+        # Initialize Redis cache manager (still needed for data caching, just not image storage)
         print("💾 Initializing Redis cache manager...")
         try:
             redis_cache_config = DeploymentConfig.get_redis_cache_config()
@@ -214,31 +215,33 @@ async def startup_event():
     else:
         print("ℹ️  Scheduled calibration disabled (set ENABLE_SCHEDULED_CALIBRATION=1 to enable)")
 
-    # Start background weekly scheduler
+    # Start background weekly scheduler only if enabled
     async def _weekly_scheduler():
         try:
             await asyncio.sleep(5)
             week_seconds = 7 * 24 * 60 * 60
             while True:
                 try:
-                    if os.environ.get("ENABLE_SCHEDULED_CALIBRATION") == "1":
-                        result = scheduled_calibration_task()
-                        if asyncio.iscoroutine(result):
-                            await result
-                    else:
-                        print("ℹ️  Scheduled calibration disabled (set ENABLE_SCHEDULED_CALIBRATION=1 to enable)")
+                    # No need to check again since we only start this task when enabled
+                    result = scheduled_calibration_task()
+                    if asyncio.iscoroutine(result):
+                        await result
                 except Exception as inner_e:
                     print("[CALIBRATION] Background weekly scheduler error:", inner_e)
                 await asyncio.sleep(week_seconds)
         except asyncio.CancelledError:
             return
 
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(_weekly_scheduler())
-        print("🔁 Background weekly calibration scheduler started")
-    except Exception as e:
-        print("⚠️  Warning: Failed to start background weekly scheduler:", e)
+    # Only create the scheduler task if calibration is enabled
+    if os.environ.get("ENABLE_SCHEDULED_CALIBRATION") == "1":
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_weekly_scheduler())
+            print("🔁 Background weekly calibration scheduler started")
+        except Exception as e:
+            print("⚠️  Warning: Failed to start background weekly scheduler:", e)
+    else:
+        print("ℹ️  Scheduled calibration disabled - no background task created")
 
 
 def scheduled_calibration_task() -> None:
@@ -335,8 +338,6 @@ def scheduled_calibration_task() -> None:
         print("✅ Scheduled calibration run completed")
     except Exception as e:
         print('[CALIBRATION] Scheduled calibration failed:', e)
-    except Exception as e:
-        print(f"⚠️  Warning: Could not initialize sector classifiers: {e}")
     
 
 @app.on_event("shutdown")
@@ -398,50 +399,64 @@ def make_json_serializable(obj):
         return str(obj)
 
 def convert_charts_to_base64(charts_dict: dict) -> dict:
-    """Convert chart file paths to base64 encoded images."""
+    """Convert chart file paths to base64 encoded images with improved memory management."""
     import base64
+    import gc
     converted_charts = {}
     
+    # Process charts one by one to minimize memory usage
     for chart_name, chart_path in charts_dict.items():
         # Handle file paths (charts are now generated in-memory)
         if isinstance(chart_path, str) and os.path.exists(chart_path):
             try:
-                # Read the image file and convert to base64
-                with open(chart_path, 'rb') as f:
-                    img_data = f.read()
-                    img_base64 = base64.b64encode(img_data).decode('utf-8')
-                    converted_charts[chart_name] = {
-                        'data': f"data:image/png;base64,{img_base64}",
-                        'filename': os.path.basename(chart_path),
-                        'type': 'image/png'
-                    }
-                    # Clear large variables immediately after use
-                    del img_data
-                    del img_base64
+                # Use a separate function to scope the memory usage
+                def process_file_chart():
+                    with open(chart_path, 'rb') as f:
+                        img_data = f.read()
+                        img_base64 = base64.b64encode(img_data).decode('utf-8')
+                        return {
+                            'data': f"data:image/png;base64,{img_base64}",
+                            'filename': os.path.basename(chart_path),
+                            'type': 'image/png'
+                        }
+                
+                # Process the chart and immediately assign the result
+                converted_charts[chart_name] = process_file_chart()
+                
+                # Explicitly suggest garbage collection
+                gc.collect()
+                
             except Exception as e:
                 print(f"Error converting chart {chart_name}: {e}")
                 converted_charts[chart_name] = {
                     'error': f"Failed to load chart: {str(e)}",
                     'filename': os.path.basename(chart_path) if isinstance(chart_path, str) else 'unknown'
                 }
+                
         elif isinstance(chart_path, dict) and chart_path.get('type') == 'image_bytes' and 'data' in chart_path:
             try:
-                # Handle in-memory image data
-                img_data = chart_path['data']
-                img_base64 = base64.b64encode(img_data).decode('utf-8')
-                converted_charts[chart_name] = {
-                    'data': f"data:image/png;base64,{img_base64}",
-                    'format': chart_path.get('format', 'png'),
-                    'type': 'image/png'
-                }
-                # Clear large variables immediately after use
-                del img_data
-                del img_base64
+                # Use a separate function to scope the memory usage
+                def process_memory_chart():
+                    img_data = chart_path['data']
+                    img_base64 = base64.b64encode(img_data).decode('utf-8')
+                    return {
+                        'data': f"data:image/png;base64,{img_base64}",
+                        'format': chart_path.get('format', 'png'),
+                        'type': 'image/png'
+                    }
+                
+                # Process the chart and immediately assign the result
+                converted_charts[chart_name] = process_memory_chart()
+                
+                # Explicitly suggest garbage collection
+                gc.collect()
+                
             except Exception as e:
                 print(f"Error converting in-memory chart {chart_name}: {e}")
                 converted_charts[chart_name] = {
                     'error': f"Failed to convert in-memory chart: {str(e)}"
                 }
+                
         else:
             # Handle invalid chart paths
             if isinstance(chart_path, str):
@@ -456,38 +471,80 @@ def convert_charts_to_base64(charts_dict: dict) -> dict:
                     'path_type': str(type(chart_path))
                 }
     
+    # Clear the input dictionary to help with garbage collection
+    if charts_dict:
+        charts_dict.clear()
+        
+    # Final garbage collection
+    gc.collect()
+    
     return converted_charts
 
 def cleanup_chart_files(chart_paths: dict) -> dict:
-    """Clean up chart files or Redis keys referenced in chart_paths.
+    """Clean up chart files or Redis keys referenced in chart_paths with improved error handling.
 
     Returns basic stats about cleanup operations performed.
     """
+    import gc
     stats = {"files_removed": 0, "redis_keys_cleaned": 0, "errors": 0}
+    
+    # Guard against None input
+    if chart_paths is None:
+        return stats
+        
     try:
-        for chart_name, chart_path in (chart_paths or {}).items():
+        # Make a copy of the keys to avoid modification during iteration
+        chart_keys = list(chart_paths.keys())
+        
+        for chart_name in chart_keys:
             try:
+                chart_path = chart_paths.get(chart_name)
+                
+                # Skip if the path is None or already removed
+                if chart_path is None:
+                    continue
+                    
                 if isinstance(chart_path, str):
                     if chart_path.startswith('chart:'):
-                        # This is a Redis key - no cleanup needed as Redis handles expiration
+                        # Redis is still used for data caching but no longer for image storage
+                        # We'll count these for backward compatibility but no action needed
                         stats["redis_keys_cleaned"] += 1
                     elif os.path.exists(chart_path):
                         # Remove only the file; do not remove directories
                         os.remove(chart_path)
                         print(f"✅ Removed chart file: {os.path.basename(chart_path)}")
                         stats["files_removed"] += 1
+                        
+                # Remove the reference from the dictionary
+                chart_paths[chart_name] = None
+                
             except Exception as e:
                 print(f"⚠️ Error cleaning up chart {chart_name}: {str(e)}")
                 stats["errors"] += 1
+                # Continue with other charts even if one fails
+                continue
         
         # Clear the chart_paths dictionary reference after cleanup
-        if chart_paths:
-            chart_paths.clear()
+        chart_paths.clear()
+        
+        # Suggest garbage collection
+        gc.collect()
             
         return stats
     except Exception as e:
         print(f"⚠️ Error in cleanup_chart_files: {str(e)}")
         stats["errors"] += 1
+        
+        # Try to clear the dictionary even in case of error
+        try:
+            if chart_paths:
+                chart_paths.clear()
+        except:
+            pass
+            
+        # Suggest garbage collection
+        gc.collect()
+        
         return stats
 
 def validate_analysis_results(results: dict) -> dict:
@@ -739,8 +796,9 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 status_code=500
             )
         
-        # Create visualizations (store in Redis)
-        chart_paths = orchestrator.create_visualizations(stock_data, indicators, request.stock, request.output, request.interval)
+        # Skip chart generation - frontend doesn't use these charts
+        # Charts are only needed for AI analysis which is already done in enhanced_analyze_stock
+        chart_paths = {}
         
         # Get sector context (auto-detect sector if not provided)
         sector_context = None
@@ -954,20 +1012,20 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         # Clear original response after serialization
         del frontend_response
 
-        # Cleanup generated chart image files after the final response content is prepared
+        # No chart cleanup needed - we're not generating charts anymore
+        import gc
+        
+        # Clear analysis results to free memory
         try:
-            # Cleanup charts created in this endpoint response
-            if 'results' in serialized_response and isinstance(serialized_response['results'].get('charts'), dict):
-                _ = cleanup_chart_files(serialized_response['results']['charts'])
-            # Also cleanup any charts created by the earlier enhanced_analyze_stock result
-            if isinstance(analysis_results, dict) and isinstance(analysis_results.get('charts'), dict):
-                _ = cleanup_chart_files(analysis_results['charts'])
-            # Clear analysis results after cleanup
-            del analysis_results
+            if 'analysis_results' in locals():
+                if isinstance(analysis_results, dict):
+                    analysis_results.clear()
+                del analysis_results
         except Exception as e:
-            # Non-fatal: cleanup best-effort
-            print(f"⚠️ Non-fatal error during chart cleanup: {str(e)}")
-            pass
+            print(f"⚠️ Non-fatal error clearing analysis results: {str(e)}")
+        
+        # Force garbage collection
+        gc.collect()
 
         return JSONResponse(content=serialized_response, status_code=200)
         
@@ -2156,9 +2214,12 @@ async def cleanup_all_charts():
         raise HTTPException(status_code=500, detail=f"Failed to cleanup all charts: {str(e)}")
 
 # Redis Image Management Endpoints removed - charts are now generated in-memory
-# All Redis image storage functionality has been removed as charts are generated on-demand
+# Only Redis image storage functionality has been removed, Redis is still used for data caching
+# Redis cache is important for sector analysis, stock data caching, and other performance optimizations
 
 # Redis Cache Management Endpoints
+# Note: Redis is still used for data caching, but not for image storage
+
 @app.get("/redis/cache/stats")
 async def get_redis_cache_stats():
     """Get Redis cache statistics."""
@@ -2168,7 +2229,8 @@ async def get_redis_cache_stats():
         stats = cache_manager.get_stats()
         return {
             "success": True,
-            "stats": stats
+            "stats": stats,
+            "note": "Redis is used for data caching, but not for image storage"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get Redis cache stats: {str(e)}")

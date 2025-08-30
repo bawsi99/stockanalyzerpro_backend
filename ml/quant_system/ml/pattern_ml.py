@@ -158,8 +158,14 @@ class PatternMLEngine(BaseMLEngine):
         else:
             X, y, meta = data
         
-        if X.empty or y.size == 0:
+        # Check for empty dataset
+        if X is None or X.empty or y is None or y.size == 0:
             logger.warning("No training data available")
+            return False
+            
+        # Check if we have enough samples for training
+        if len(y) < 10:
+            logger.warning(f"Insufficient data for pattern ML training: {len(y)} samples (minimum 10 required)")
             return False
         
         try:
@@ -167,8 +173,12 @@ class PatternMLEngine(BaseMLEngine):
             columns = list(X.columns)
             cat_idx = self._get_categorical_indices(columns)
             
-            # Time series cross-validation
-            tscv = TimeSeriesSplit(n_splits=min(n_splits, max(2, len(y) // 20)))
+            # Time series cross-validation - ensure we have enough data for splits
+            min_samples_per_split = 5
+            max_possible_splits = max(2, len(y) // min_samples_per_split)
+            actual_splits = min(n_splits, max_possible_splits)
+            
+            tscv = TimeSeriesSplit(n_splits=actual_splits)
             
             # Base CatBoost model
             clf = CatBoostClassifier(
@@ -186,33 +196,57 @@ class PatternMLEngine(BaseMLEngine):
             class_weights = self.dataset.compute_class_weights(y)
             sample_weights = np.where(y == 1, class_weights[1], class_weights[0]).astype(float)
             
+            # Check for class imbalance
+            pos_count = np.sum(y == 1)
+            neg_count = np.sum(y == 0)
+            
+            if pos_count == 0 or neg_count == 0:
+                logger.warning(f"Imbalanced dataset: {pos_count} positive samples, {neg_count} negative samples. Need both classes for training.")
+                return False
+                
             # Fit model
             clf.fit(X, y, sample_weight=sample_weights, cat_features=cat_idx, verbose=False)
             
             # Generate out-of-fold probabilities for calibration
             oof_pred = np.zeros_like(y, dtype=float)
-            for train_idx, test_idx in tscv.split(X):
-                X_tr, X_te = X.iloc[train_idx], X.iloc[test_idx]
-                y_tr = y[train_idx]
-                sw_tr = sample_weights[train_idx]
-                
-                m = CatBoostClassifier(
-                    loss_function="Logloss",
-                    depth=self.config.catboost_depth,
-                    iterations=int(self.config.catboost_iterations * 0.8),
-                    learning_rate=self.config.catboost_learning_rate,
-                    l2_leaf_reg=3.0,
-                    early_stopping_rounds=100,
-                    eval_metric="Logloss",
-                    verbose=False,
-                )
-                m.fit(X_tr, y_tr, sample_weight=sw_tr, cat_features=cat_idx, verbose=False)
-                p = m.predict_proba(X_te)[:, 1]
-                oof_pred[test_idx] = p
             
-            # Calibration
-            cal = CalibratedClassifierCV(clf, method="isotonic", cv="prefit")
-            cal.fit(X, y)
+            # Only do cross-validation if we have enough data
+            if len(y) >= 20:
+                for train_idx, test_idx in tscv.split(X):
+                    X_tr, X_te = X.iloc[train_idx], X.iloc[test_idx]
+                    y_tr = y[train_idx]
+                    sw_tr = sample_weights[train_idx]
+                    
+                    # Check if we have both classes in the training set
+                    if len(np.unique(y_tr)) < 2:
+                        logger.warning(f"Skipping CV fold - only one class present in fold")
+                        oof_pred[test_idx] = 0.5  # Default prediction
+                        continue
+                    
+                    m = CatBoostClassifier(
+                        loss_function="Logloss",
+                        depth=self.config.catboost_depth,
+                        iterations=int(self.config.catboost_iterations * 0.8),
+                        learning_rate=self.config.catboost_learning_rate,
+                        l2_leaf_reg=3.0,
+                        early_stopping_rounds=100,
+                        eval_metric="Logloss",
+                        verbose=False,
+                    )
+                    m.fit(X_tr, y_tr, sample_weight=sw_tr, cat_features=cat_idx, verbose=False)
+                    p = m.predict_proba(X_te)[:, 1]
+                    oof_pred[test_idx] = p
+            else:
+                # For small datasets, use the same predictions
+                oof_pred = clf.predict_proba(X)[:, 1]
+            
+            # Calibration - only if we have enough data
+            if len(y) >= 10:
+                cal = CalibratedClassifierCV(clf, method="isotonic", cv="prefit")
+                cal.fit(X, y)
+            else:
+                # For very small datasets, skip calibration
+                cal = clf
             
             # Calculate metrics
             eps = 1e-12
@@ -268,6 +302,11 @@ class PatternMLEngine(BaseMLEngine):
             return 0.5
         
         try:
+            # Check if features is empty
+            if not features:
+                logger.warning("Empty features provided for prediction")
+                return 0.5
+                
             # Prepare features
             row = {k: float(features.get(k, 0.0)) for k in self.dataset.CORE_SCHEMA}
             if pattern_type is not None:
@@ -276,7 +315,21 @@ class PatternMLEngine(BaseMLEngine):
                 row["pattern_type"] = "unknown"
             
             X = pd.DataFrame([row])
-            proba = self.model.predict_proba(X)[:, 1][0]
+            
+            # Check if model has predict_proba method (CatBoost or calibrated classifier)
+            if hasattr(self.model, 'predict_proba'):
+                # Check if model has classes_ attribute (sklearn models)
+                if hasattr(self.model, 'classes_') and len(self.model.classes_) > 1:
+                    proba = self.model.predict_proba(X)[:, 1][0]
+                else:
+                    # Default to raw prediction if classes not available
+                    raw_pred = self.model.predict(X)[0]
+                    proba = float(raw_pred)
+            else:
+                # Fallback for models without predict_proba
+                raw_pred = self.model.predict(X)[0]
+                proba = 1.0 if raw_pred > 0.5 else 0.0
+                
             return float(max(0.0, min(1.0, float(proba))))
             
         except Exception as e:

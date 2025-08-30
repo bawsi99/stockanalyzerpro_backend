@@ -56,6 +56,38 @@ class UnifiedMLManager:
         
         results = {}
         
+        # Validate stock data
+        if stock_data is None or stock_data.empty:
+            logger.warning("Empty stock data provided for training")
+            return {
+                'pattern_ml': False,
+                'raw_data_ml': False,
+                'hybrid_ml': False,
+                'error': 'No stock data available for training'
+            }
+            
+        # Check minimum required columns for stock data
+        required_cols = ['open', 'high', 'low', 'close', 'volume']
+        missing_cols = [col for col in required_cols if col not in stock_data.columns]
+        if missing_cols:
+            logger.warning(f"Missing required columns for training: {missing_cols}")
+            return {
+                'pattern_ml': False,
+                'raw_data_ml': False,
+                'hybrid_ml': False,
+                'error': f"Missing required columns: {missing_cols}"
+            }
+            
+        # Check minimum data points
+        if len(stock_data) < 50:
+            logger.warning(f"Insufficient data points for training: {len(stock_data)} (minimum 50 required)")
+            return {
+                'pattern_ml': False,
+                'raw_data_ml': False,
+                'hybrid_ml': False,
+                'error': f"Insufficient data points: {len(stock_data)} (minimum 50 required)"
+            }
+        
         # Train pattern-based ML
         if self.config.pattern_ml_enabled:
             try:
@@ -130,6 +162,19 @@ class UnifiedMLManager:
         
         predictions = {}
         
+        # Validate input data
+        if stock_data is None or stock_data.empty:
+            logger.warning("Empty stock data provided for prediction")
+            return {
+                'error': 'No stock data available for prediction',
+                'consensus': {
+                    'overall_signal': 'hold',
+                    'confidence': 0.5,
+                    'risk_level': 'high',
+                    'recommendation': 'Insufficient data for analysis'
+                }
+            }
+        
         # Pattern-based prediction
         if self.engine_status['pattern_ml'] and pattern_features:
             try:
@@ -146,27 +191,40 @@ class UnifiedMLManager:
         # Raw data prediction
         if self.engine_status['raw_data_ml']:
             try:
-                price_pred = self.raw_data_engine.predict(stock_data)
-                volatility_pred = self.raw_data_engine.predict_volatility(stock_data)
-                market_regime = self.raw_data_engine.classify_market_regime(stock_data)
+                # Check if we have the minimum required columns
+                required_cols = ['open', 'high', 'low', 'close', 'volume']
+                missing_cols = [col for col in required_cols if col not in stock_data.columns]
                 
-                predictions['raw_data_ml'] = {
-                    'price_prediction': {
-                        'direction': price_pred.direction,
-                        'magnitude': price_pred.magnitude,
-                        'confidence': price_pred.confidence
-                    },
-                    'volatility_prediction': {
-                        'current': volatility_pred.current_volatility,
-                        'predicted': volatility_pred.predicted_volatility,
-                        'regime': volatility_pred.volatility_regime
-                    },
-                    'market_regime': {
-                        'regime': market_regime.regime,
-                        'strength': market_regime.strength,
-                        'confidence': market_regime.confidence
-                    }
-                }
+                if missing_cols:
+                    logger.warning(f"Missing required columns for prediction: {missing_cols}")
+                    predictions['raw_data_ml'] = {'error': f"Missing required columns: {missing_cols}"}
+                else:
+                    # Check if we have enough data points
+                    if len(stock_data) < 50:
+                        logger.warning(f"Insufficient data points for prediction: {len(stock_data)} (minimum 50 required)")
+                        predictions['raw_data_ml'] = {'error': f"Insufficient data points: {len(stock_data)} (minimum 50 required)"}
+                    else:
+                        price_pred = self.raw_data_engine.predict(stock_data)
+                        volatility_pred = self.raw_data_engine.predict_volatility(stock_data)
+                        market_regime = self.raw_data_engine.classify_market_regime(stock_data)
+                        
+                        predictions['raw_data_ml'] = {
+                            'price_prediction': {
+                                'direction': price_pred.direction,
+                                'magnitude': price_pred.magnitude,
+                                'confidence': price_pred.confidence
+                            },
+                            'volatility_prediction': {
+                                'current': volatility_pred.current_volatility,
+                                'predicted': volatility_pred.predicted_volatility,
+                                'regime': volatility_pred.volatility_regime
+                            },
+                            'market_regime': {
+                                'regime': market_regime.regime,
+                                'strength': market_regime.strength,
+                                'confidence': market_regime.confidence
+                            }
+                        }
             except Exception as e:
                 logger.error(f"Raw Data ML prediction failed: {e}")
                 predictions['raw_data_ml'] = {'error': str(e)}

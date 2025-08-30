@@ -83,7 +83,7 @@ class FrontendResponseBuilder:
                         "stress_testing_metrics": advanced_analysis.get("stress_testing", {}),
                         "scenario_analysis_metrics": advanced_analysis.get("scenario_analysis", {})
                     },
-                    "charts": chart_paths,
+                    "charts": {}, # Empty charts - frontend uses dedicated /charts endpoint
                     # Unified ML predictions surfaced for frontend (if available)
                     "ml_predictions": ml_predictions or {},
                     "overlays": FrontendResponseBuilder._build_overlays(
