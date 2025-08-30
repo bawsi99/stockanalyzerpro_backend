@@ -91,9 +91,18 @@ def predict_probability(features: Dict[str, float], pattern_type: str) -> float:
         
         # Check if pattern ML is trained
         if not ml_manager.engine_status.get('pattern_ml', False):
-            logger.info("Pattern ML not trained, attempting to train...")
-            # Try to train with available data
-            ml_manager.train_all_engines(pd.DataFrame(), {})
+            logger.info("Pattern ML not trained, attempting to load model...")
+            # The SimpleMLManager doesn't have train_all_engines method
+            # Instead, we should try to load the model if available
+            pattern_engine = ml_manager.pattern_engine
+            if pattern_engine:
+                model_path = os.path.join(os.path.dirname(__file__), 'quant_system', 'models', 'pattern_catboost.joblib')
+                if os.path.exists(model_path):
+                    pattern_engine.load_model(model_path)
+                    ml_manager.engine_status['pattern_ml'] = pattern_engine.is_trained
+                    logger.info(f"✅ Pattern ML model loaded: {pattern_engine.is_trained}")
+                else:
+                    logger.warning("No trained model found, will use fallback")
         
         # Get pattern ML engine
         pattern_engine = ml_manager.pattern_engine

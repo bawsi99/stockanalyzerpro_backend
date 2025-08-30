@@ -21,6 +21,35 @@ try:
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
+    # Create a simple placeholder for nn to avoid 'name nn is not defined' errors
+    class PlaceholderModule:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __call__(self, *args, **kwargs):
+            return self
+    
+    class PlaceholderNN:
+        def __init__(self):
+            self.Module = PlaceholderModule
+            self.Linear = PlaceholderModule
+            self.LSTM = PlaceholderModule
+            self.Dropout = PlaceholderModule
+            self.Sequential = PlaceholderModule
+            self.ReLU = PlaceholderModule
+            self.GELU = PlaceholderModule
+            self.SiLU = PlaceholderModule
+            self.LeakyReLU = PlaceholderModule
+            self.BatchNorm1d = PlaceholderModule
+            self.LayerNorm = PlaceholderModule
+            self.MultiheadAttention = PlaceholderModule
+            self.Sigmoid = PlaceholderModule
+            self.ELU = PlaceholderModule
+            self.L1Loss = PlaceholderModule
+            self.MSELoss = PlaceholderModule
+            self.HuberLoss = PlaceholderModule
+            self.utils = type('', (), {'rnn': type('', (), {'pack_padded_sequence': lambda *args, **kwargs: None, 'pad_packed_sequence': lambda *args, **kwargs: (None, None)})()})
+    
+    nn = PlaceholderNN()
     logging.warning("PyTorch not available. LSTM models will not work.")
 
 try:

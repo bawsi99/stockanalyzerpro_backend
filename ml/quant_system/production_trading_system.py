@@ -171,6 +171,24 @@ class ProductionTradingSystem:
         try:
             import torch
             import torch.nn as nn
+        except ImportError:
+            # Create a simple placeholder for nn to avoid 'name nn is not defined' errors
+            class PlaceholderModule:
+                def __init__(self, *args, **kwargs):
+                    pass
+                def __call__(self, *args, **kwargs):
+                    return self
+            
+            class PlaceholderNN:
+                def __init__(self):
+                    self.Module = PlaceholderModule
+                    self.Linear = PlaceholderModule
+                    self.Sequential = PlaceholderModule
+                    self.ReLU = PlaceholderModule
+                    self.Dropout = PlaceholderModule
+            
+            nn = PlaceholderNN()
+            logger.warning("PyTorch not available. Using placeholder nn module.")
             
             # Simple linear model
             linear_model = nn.Sequential(
