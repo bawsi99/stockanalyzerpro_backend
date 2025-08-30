@@ -2286,7 +2286,8 @@ if __name__ == "__main__":
     import uvicorn
     
     # Load environment variables
-    port = int(os.getenv("SERVICE_PORT", 8002))
+    # Use PORT env var (provided by Render) if available, otherwise fall back to SERVICE_PORT
+    port = int(os.getenv("PORT") or os.getenv("SERVICE_PORT", 8002))
     host = os.getenv("SERVICE_HOST", "0.0.0.0")
     
     print(f"🚀 Starting {os.getenv('SERVICE_NAME', 'Analysis Service')} on {host}:{port}")
