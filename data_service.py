@@ -1449,7 +1449,7 @@ if __name__ == "__main__":
     
     # Load environment variables
     # Use PORT env var (provided by Render) if available, otherwise fall back to SERVICE_PORT
-    port = int(os.getenv("PORT") or os.getenv("SERVICE_PORT", 8001))
+    port = int(os.getenv("DATA_PORT", 8001))
     host = os.getenv("SERVICE_HOST", "0.0.0.0")
     
     print(f"🚀 Starting {os.getenv('SERVICE_NAME', 'Data + WebSocket Service')} on {host}:{port}")
