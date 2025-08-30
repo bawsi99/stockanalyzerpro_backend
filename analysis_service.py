@@ -63,8 +63,11 @@ logger = logging.getLogger(__name__)
 simple_db_manager = DatabaseManager()
 
 # Load CORS origins from environment variable
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:8080,http://127.0.0.1:5173,https://stock-analyzer-pro.vercel.app,https://stock-analyzer-pro-git-prototype-aaryan-manawats-projects.vercel.app,https://stock-analyzer-cl9o3tivx-aaryan-manawats-projects.vercel.app,https://stockanalyzer-pro.vercel.app").split(",")
+#CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:8080,http://127.0.0.1:5173,https://www.stockanalyzerpro.com,https://stock-analyzer-pro.vercel.app,https://stock-analyzer-pro-git-prototype-aaryan-manawats-projects.vercel.app,https://stock-analyzer-cl9o3tivx-aaryan-manawats-projects.vercel.app,https://stockanalyzer-pro.vercel.app").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "")
+CORS_ORIGINS = CORS_ORIGINS.split(",") if CORS_ORIGINS else []
 CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS if origin.strip()]
+print(f"🔧 CORS_ORIGINS: {CORS_ORIGINS}")
 
 # --- ML endpoints for CatBoost training and prediction ---
 from pydantic import BaseModel
