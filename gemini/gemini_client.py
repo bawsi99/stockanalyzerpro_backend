@@ -641,7 +641,7 @@ JSON:
         chart_analysis_tasks = []
         
         # GROUP 1: Technical Overview (comprehensive technical analysis)
-        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for technical_overview: {chart_paths.get('technical_overview')}")
+        # print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for technical_overview: {chart_paths.get('technical_overview')}")
         if chart_paths.get('technical_overview') and chart_paths['technical_overview'].get('type') == 'image_bytes':
             try:
                 # Load image bytes directly from chart data
@@ -656,7 +656,7 @@ JSON:
             print("[ASYNC-OPTIMIZED-ENHANCED] technical_overview not found or not in image_bytes format")
         
         # GROUP 2: Pattern Analysis (all pattern recognition)
-        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for pattern_analysis: {chart_paths.get('pattern_analysis')}")
+        # print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for pattern_analysis: {chart_paths.get('pattern_analysis')}")
         if chart_paths.get('pattern_analysis') and chart_paths['pattern_analysis'].get('type') == 'image_bytes':
             try:
                 # Load image bytes directly from chart data
@@ -671,7 +671,7 @@ JSON:
             print("[ASYNC-OPTIMIZED-ENHANCED] pattern_analysis not found or not in image_bytes format")
         
         # GROUP 3: Volume Analysis (complete volume story)
-        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for volume_analysis: {chart_paths.get('volume_analysis')}")
+        # print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for volume_analysis: {chart_paths.get('volume_analysis')}")
         if chart_paths.get('volume_analysis') and chart_paths['volume_analysis'].get('type') == 'image_bytes':
             try:
                 # Load image bytes directly from chart data
@@ -686,7 +686,7 @@ JSON:
             print("[ASYNC-OPTIMIZED-ENHANCED] volume_analysis not found or not in image_bytes format")
         
         # GROUP 4: Multi-Timeframe Comparison (MTF validation)
-        print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for mtf_comparison: {chart_paths.get('mtf_comparison')}")
+        # print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for mtf_comparison: {chart_paths.get('mtf_comparison')}")
         if chart_paths.get('mtf_comparison') and chart_paths['mtf_comparison'].get('type') == 'image_bytes':
             try:
                 # Load image bytes directly from chart data
