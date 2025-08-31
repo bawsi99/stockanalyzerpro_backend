@@ -124,7 +124,7 @@ Pygments==2.19.1
 PySocks==1.7.1
 
 # Tabular ML
-catboost==1.2.5 --no-deps
+catboost==1.2.5
 
 # Note: Removed Jupyter dependencies (ipykernel, ipython, jupyter_client, jupyter_core)
 # to avoid y-py compilation issues in read-only environments
@@ -136,4 +136,4 @@ catboost==1.2.5 --no-deps
 # - ipython-related packages
 
 # Deep Learning - CPU only version to avoid compilation issues
-torch==2.2.1+cpu -f https://download.pytorch.org/whl/torch_stable.html
+torch==2.2.1
