@@ -124,7 +124,7 @@ Pygments==2.19.1
 PySocks==1.7.1
 
 # Tabular ML
-# catboost==1.2.5  # Temporarily removed - may pull in conan/JupyterLab
+catboost==1.2.5
 
 # Note: Removed Jupyter dependencies (ipykernel, ipython, jupyter_client, jupyter_core)
 # to avoid y-py compilation issues in read-only environments
@@ -134,3 +134,6 @@ PySocks==1.7.1
 # - langchain (may pull in JupyterLab for notebook support)
 # - keras (may have Jupyter dependencies)
 # - ipython-related packages
+
+# Deep Learning
+torch==2.2.1
