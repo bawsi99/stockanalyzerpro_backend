@@ -123,17 +123,17 @@ pydantic_core>=2.29.0,<3.0.0
 Pygments==2.19.1
 PySocks==1.7.1
 
-# Tabular ML
-catboost==1.2.5
+# Tabular ML - Uncomment and install separately with --no-deps
+# catboost==1.2.5
 
-# Note: Removed Jupyter dependencies (ipykernel, ipython, jupyter_client, jupyter_core)
-# to avoid y-py compilation issues in read-only environments
-
-# Note: Some packages below may pull in JupyterLab as a dependency
-# If you encounter y-py compilation issues, consider removing or replacing:
-# - langchain (may pull in JupyterLab for notebook support)
-# - keras (may have Jupyter dependencies)
-# - ipython-related packages
-
-# Deep Learning - CPU only version to avoid compilation issues
+# Deep Learning - CPU only version
 torch==2.2.1
+
+# Explicitly exclude problematic packages
+jupyterlab<0
+jupyter<0
+ipykernel<0
+jupyter_client<0
+jupyter_core<0
+ipython<0
+y-py<0
