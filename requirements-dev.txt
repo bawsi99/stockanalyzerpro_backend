@@ -1,0 +1,37 @@
+# Development dependencies - NOT for production
+# Install with: pip install -r requirements-dev.txt
+
+# Jupyter ecosystem
+jupyter==1.0.0
+jupyterlab==4.2.0
+ipykernel==6.29.5
+jupyter_client==9.0.1
+jupyter_core==5.7.2
+ipython==8.21.0
+
+# Jupyter-related packages
+jedi==0.19.2
+prompt_toolkit==3.0.50
+parso==0.8.4
+pure_eval==0.2.3
+Pygments==2.19.1
+matplotlib-inline==0.1.7
+
+# Development tools
+debugpy==1.8.12
+comm==0.2.2
+pexpect==4.9.0
+ptyprocess==0.7.0
+
+# Additional ML packages for development
+huggingface-hub==0.33.0
+langchain==0.3.25
+langchain-community==0.3.24
+langchain-text-splitters==0.3.8
+langsmith==0.3.45
+peft==0.15.2
+accelerate==1.7.0
+keras==3.9.0
+
+# Include production requirements
+-r requirements.txt
