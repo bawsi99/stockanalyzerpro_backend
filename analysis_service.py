@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 
 import httpx # New import for HTTP requests
 import math # New import for checking NaN values
-from backend.database_service import make_json_serializable # Importing the serialization utility
+from database_service import make_json_serializable # Importing the serialization utility
 
 # Try to import optional dependencies
 try:

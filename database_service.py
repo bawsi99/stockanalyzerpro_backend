@@ -21,8 +21,10 @@ app = FastAPI(title="Database Service", version="1.0.0")
 
 # Load CORS origins from environment variable
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",")
+print(CORS_ORIGINS)
 CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS if origin.strip()]
-print(f"🔧 Database Service CORS_ORIGINS: {CORS_ORIGINS}")
+# print(f"🔧 Database Service CORS_ORIGINS (raw from env): {os.getenv("CORS_ORIGINS", "")}")
+print(f"🔧 Database Service CORS_ORIGINS (processed for middleware): {CORS_ORIGINS}")
 
 # Add CORS middleware
 app.add_middleware(
