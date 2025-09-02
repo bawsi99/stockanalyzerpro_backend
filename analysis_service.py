@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 
 import httpx # New import for HTTP requests
+import math # New import for checking NaN values
 
 # Try to import optional dependencies
 try:
@@ -684,6 +685,8 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
     try:
         print(f"[ENHANCED ANALYSIS] Starting enhanced analysis for {request.stock}")
         
+        serialized_frontend_response = None # Initialize to None
+
         # Create orchestrator instance
         orchestrator = StockAnalysisOrchestrator()
         
