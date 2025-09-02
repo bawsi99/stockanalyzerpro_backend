@@ -141,35 +141,6 @@ async def authenticate_websocket(websocket: WebSocket) -> Optional[Dict]:
     print(f"❌ No valid authentication found")
     return None
 
-def make_json_serializable(obj):
-    """Recursively convert objects to JSON serializable format."""
-    if isinstance(obj, (str, int, type(None))):
-        return obj
-    elif isinstance(obj, bool):
-        return bool(obj)  # Ensure it's a Python bool
-    elif isinstance(obj, float):
-        if np.isnan(obj) or np.isinf(obj):
-            return None
-        return obj
-    elif isinstance(obj, dict):
-        return {k: make_json_serializable(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [make_json_serializable(item) for item in obj]
-    elif isinstance(obj, np.integer):
-        return int(obj)
-    elif isinstance(obj, np.floating):
-        if np.isinf(obj) or np.isnan(obj):
-            return None
-        return float(obj)
-    elif isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, np.bool_):
-        return bool(obj)  # Convert NumPy boolean to Python boolean
-    elif isinstance(obj, Timestamp):
-        return obj.isoformat()
-    else:
-        return str(obj)
-
 app = FastAPI(title="Stock Data Service", version="1.0.0")
 
 # Load CORS origins from environment variable
