@@ -439,6 +439,9 @@ class FilteredAnalysesRequest(BaseModel):
     user_id: Optional[str] = Field(None, description="Optional user ID to filter by")
     limit: int = 20
 
+class UserEmailRequest(BaseModel):
+    email: str = Field(..., description="User email address")
+
 # API Endpoints
 @app.get("/health")
 async def health_check():
@@ -466,6 +469,17 @@ async def store_analysis_endpoint(request: AnalysisStoreRequest):
         raise HTTPException(status_code=500, detail="Failed to store analysis.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error storing analysis: {str(e)}")
+
+@app.post("/users/resolve-id")
+async def resolve_user_id_endpoint(request: UserEmailRequest):
+    """Resolve user ID from email address."""
+    try:
+        user_id = db_manager.get_user_id_by_email(request.email)
+        if user_id:
+            return JSONResponse(content={"success": True, "user_id": user_id})
+        raise HTTPException(status_code=404, detail="User not found for provided email.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error resolving user ID: {str(e)}")
 
 @app.get("/analyses/user/{user_id}")
 async def get_user_analyses_endpoint(user_id: str, offset: int = 0, limit: int = 10):

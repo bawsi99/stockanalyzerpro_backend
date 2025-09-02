@@ -688,6 +688,29 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         
         serialized_frontend_response = None # Initialize to None
 
+        # Resolve user ID based on provided user_id or email
+        resolved_user_id = "default_user_id"
+        if request.user_id:
+            resolved_user_id = request.user_id
+        elif request.email:
+            try:
+                # Call the database service to resolve user ID from email
+                async with httpx.AsyncClient() as client:
+                    user_id_response = await client.post(
+                        f"{DATABASE_SERVICE_URL}/users/resolve-id",
+                        json={"email": request.email},
+                        timeout=10.0
+                    )
+                    user_id_response.raise_for_status()
+                    resolved_user_id = user_id_response.json().get("user_id")
+                    print(f"✅ Resolved user ID from email {request.email}: {resolved_user_id}")
+            except Exception as e:
+                print(f"❌ Error resolving user ID for email {request.email}: {e}. Using default user ID.")
+                resolved_user_id = str(uuid.uuid4())
+        else:
+            resolved_user_id = str(uuid.uuid4()) # Generate a new UUID if no user_id or email is provided
+            print(f"⚠️ No user ID or email provided. Generated new user ID: {resolved_user_id}")
+
         # Create orchestrator instance
         orchestrator = StockAnalysisOrchestrator()
         
@@ -934,7 +957,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                     f"{DATABASE_SERVICE_URL}/analyses/store",
                     json={
                         "analysis": serialized_frontend_response,
-                        "user_id": request.user_id,
+                        "user_id": resolved_user_id,
                         "symbol": request.stock,
                         "exchange": request.exchange,
                         "period": request.period,
