@@ -164,14 +164,15 @@ class DatabaseManager:
             print(f"❌ Error storing analysis: {e}")
             return None
     
-    def get_user_analyses(self, user_id: str, limit: int = 50) -> List[Dict]:
+    def get_user_analyses(self, user_id: str, offset: int = 0, limit: int = 10) -> List[Dict]:
         """
-        Get analysis history for a user.
-        
+        Get analysis history for a user with pagination.
+
         Args:
             user_id: User ID
-            limit: Maximum number of analyses to return
-            
+            offset: Number of records to skip
+            limit: Maximum number of analyses to return per request
+
         Returns:
             List of analysis records
         """
@@ -180,11 +181,11 @@ class DatabaseManager:
                 .select("*")\
                 .eq("user_id", user_id)\
                 .order("created_at", desc=True)\
-                .limit(limit)\
+                .range(offset, offset + limit - 1)\
                 .execute()
-            
+
             return result.data if result.data else []
-            
+
         except Exception as e:
             print(f"Error getting user analyses: {e}")
             return []
@@ -425,7 +426,8 @@ class AnalysisStoreRequest(BaseModel):
 
 class UserAnalysisRequest(BaseModel):
     user_id: str
-    limit: int = 50
+    offset: int = 0
+    limit: int = 10
 
 class AnalysisByIdRequest(BaseModel):
     analysis_id: str
@@ -464,15 +466,15 @@ async def store_analysis_endpoint(request: AnalysisStoreRequest):
         raise HTTPException(status_code=500, detail=f"Error storing analysis: {str(e)}")
 
 @app.get("/analyses/user/{user_id}")
-async def get_user_analyses_endpoint(user_id: str, limit: int = 50):
-    """Get analysis history for a user."""
+async def get_user_analyses_endpoint(user_id: str, offset: int = 0, limit: int = 10):
+    """Get analysis history for a user with pagination."""
     try:
         if not user_id or not user_id.strip():
             raise HTTPException(status_code=400, detail="user_id cannot be empty.")
         
         actual_user_id = resolve_user_id(user_id=user_id) # Using the resolve_user_id helper
         
-        analyses = db_manager.get_user_analyses(actual_user_id, limit)
+        analyses = db_manager.get_user_analyses(actual_user_id, offset, limit)
         return {
             "success": True,
             "analyses": analyses,
