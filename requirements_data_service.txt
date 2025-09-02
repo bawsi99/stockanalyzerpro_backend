@@ -1,0 +1,8 @@
+
+python-dotenv
+msgpack
+PyJWT
+pandas
+numpy
+fastapi
+uvicorn
