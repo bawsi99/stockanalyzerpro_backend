@@ -6,3 +6,15 @@ pandas
 numpy
 fastapi
 uvicorn
+
+# Realtime APIs
+kiteconnect==5.0.1
+websockets==14.2
+msgpack==1.0.8
+
+# Utils
+orjson==3.10.18
+aiohttp==3.12.9
+aiofiles==24.1.0
+httpx==0.28.1
+httpx-sse==0.4.0

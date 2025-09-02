@@ -604,7 +604,7 @@ async def root():
 if __name__ == "__main__":
     import uvicorn
     
-    port = int(os.getenv("DATABASE_SERVICE_PORT", 8003))
+    port = int(os.getenv("DATABASE_PORT", 8003))
     host = os.getenv("SERVICE_HOST", "0.0.0.0")
     
     print(f"🚀 Starting Database Service on {host}:{port}")
