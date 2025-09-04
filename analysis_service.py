@@ -65,6 +65,44 @@ logger = logging.getLogger(__name__)
 DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://localhost:8003")
 print(f"🔗 Database Service URL: {DATABASE_SERVICE_URL}")
 
+async def _make_database_request_with_retry(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    json_data: Optional[Dict[str, Any]] = None,
+    max_retries: int = 5,
+    initial_delay: float = 1.0 # seconds
+) -> httpx.Response:
+    """Makes an HTTP request to the database service with exponential backoff retry logic."""
+    for attempt in range(max_retries):
+        try:
+            if method == "POST":
+                response = await client.post(url, json=json_data, timeout=10.0)
+            elif method == "GET":
+                response = await client.get(url, timeout=10.0)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+            response.raise_for_status() # Raise an exception for bad status codes
+            return response
+        except httpx.HTTPStatusError as e:
+            # For HTTP 5xx errors, retry. For 4xx, don't retry as it's likely a client error.
+            if 500 <= e.response.status_code < 600 and attempt < max_retries - 1:
+                delay = initial_delay * (2 ** attempt)
+                print(f"[DB_RETRY] Attempt {attempt + 1}/{max_retries}: HTTP error {e.response.status_code}. Retrying in {delay:.2f}s...")
+                await asyncio.sleep(delay)
+            else:
+                print(f"[DB_RETRY] HTTP error {e.response.status_code}. Not retrying or max retries reached.")
+                raise
+        except httpx.RequestError as e:
+            if attempt < max_retries - 1:
+                delay = initial_delay * (2 ** attempt)
+                print(f"[DB_RETRY] Attempt {attempt + 1}/{max_retries}: Request error {e}. Retrying in {delay:.2f}s...")
+                await asyncio.sleep(delay)
+            else:
+                print(f"[DB_RETRY] Request error {e}. Max retries reached.")
+                raise
+    raise Exception("Max retries reached for database request.")
+
 # Load CORS origins from environment variable
 # CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:8080,http://127.0.0.1:5173,https://www.stockanalyzerpro.com,https://stock-analyzer-pro.vercel.app,https://stock-analyzer-pro-git-prototype-aaryan-manawats-projects.vercel.app,https://stock-analyzer-cl9o3tivx-aaryan-manawats-projects.vercel.app,https://stockanalyzer-pro.vercel.app").split(",")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "")
@@ -696,12 +734,9 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             try:
                 # Call the database service to resolve user ID from email
                 async with httpx.AsyncClient() as client:
-                    user_id_response = await client.post(
-                        f"{DATABASE_SERVICE_URL}/users/resolve-id",
-                        json={"email": request.email},
-                        timeout=10.0
+                    user_id_response = await _make_database_request_with_retry(
+                        client, "POST", f"{DATABASE_SERVICE_URL}/users/resolve-id", json_data={"email": request.email}
                     )
-                    user_id_response.raise_for_status()
                     resolved_user_id = user_id_response.json().get("user_id")
                     print(f"✅ Resolved user ID from email {request.email}: {resolved_user_id}")
             except Exception as e:
@@ -953,19 +988,17 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             serialized_frontend_response = make_json_serializable(frontend_response)
             
             async with httpx.AsyncClient() as client:
-                store_response = await client.post(
-                    f"{DATABASE_SERVICE_URL}/analyses/store",
-                    json={
+                store_response = await _make_database_request_with_retry(
+                    client, "POST", f"{DATABASE_SERVICE_URL}/analyses/store",
+                    json_data={
                         "analysis": serialized_frontend_response,
                         "user_id": resolved_user_id,
                         "symbol": request.stock,
                         "exchange": request.exchange,
                         "period": request.period,
                         "interval": request.interval
-                    },
-                    timeout=30.0 # Add a timeout for the HTTP request
+                    }
                 )
-                store_response.raise_for_status() # Raise an exception for bad status codes
                 analysis_id = store_response.json().get("analysis_id")
             
             if not analysis_id:
@@ -1126,19 +1159,17 @@ async def enhanced_mtf_analyze(request: AnalysisRequest):
             serialized_mtf_results = make_json_serializable(mtf_results)
 
             async with httpx.AsyncClient() as client:
-                store_response = await client.post(
-                    f"{DATABASE_SERVICE_URL}/analyses/store",
-                    json={
+                store_response = await _make_database_request_with_retry(
+                    client, "POST", f"{DATABASE_SERVICE_URL}/analyses/store",
+                    json_data={
                         "analysis": serialized_mtf_results,
                         "user_id": request.user_id,
                         "symbol": request.stock,
                         "exchange": request.exchange,
                         "period": request.period,
                         "interval": request.interval
-                    },
-                    timeout=30.0 # Add a timeout for the HTTP request
+                    }
                 )
-                store_response.raise_for_status() # Raise an exception for bad status codes
                 analysis_id = store_response.json().get("analysis_id")
             
             if not analysis_id:

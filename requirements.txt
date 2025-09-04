@@ -65,3 +65,4 @@ aiohttp==3.12.9
 aiofiles==24.1.0
 httpx==0.28.1
 httpx-sse==0.4.0
+aiocron==1.8

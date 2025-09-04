@@ -17,6 +17,9 @@ from pydantic import BaseModel, Field
 
 from supabase import create_client, Client # Import Supabase client
 
+import httpx # Import httpx for self-ping
+import aiocron # Import aiocron for scheduling
+
 app = FastAPI(title="Database Service", version="1.0.0")
 
 # Load CORS origins from environment variable
@@ -618,6 +621,22 @@ async def root():
         },
         "timestamp": datetime.now().isoformat()
     }
+
+# Self-ping function to keep the service alive
+@aiocron.crontab(os.getenv("DATABASE_SERVICE_PING_CRON", "*/5 * * * *")) # Default every 5 minutes
+async def self_ping():
+    service_url = os.getenv("DATABASE_SERVICE_URL", "http://localhost") # Default to localhost
+    port = int(os.getenv("DATABASE_PORT", 8003)) # Get port from env var
+    host = os.getenv("SERVICE_HOST", "0.0.0.0") # Get host from env var
+    full_url = f"{service_url.replace('localhost', host)}:{port}/health"
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(full_url, timeout=5.0)
+            print(f"[Self-Ping] Health check to {full_url} responded with status: {response.status_code}")
+    except httpx.RequestError as e:
+        print(f"[Self-Ping] Request error to {full_url}: {e}")
+    except Exception as e:
+        print(f"[Self-Ping] Unexpected error during self-ping to {full_url}: {e}")
 
 if __name__ == "__main__":
     import uvicorn
