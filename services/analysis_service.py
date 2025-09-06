@@ -2244,4 +2244,4 @@ if __name__ == "__main__":
     print(f"🏭 Sector analysis available at /sector/*")
     print(f"📈 Pattern recognition available at /patterns/*")
     
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(app, host=host, port=port, reload=True)

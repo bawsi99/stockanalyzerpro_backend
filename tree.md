@@ -4,13 +4,29 @@
 backend/
 ├── __init__.py
 ├── README.md
+├── analysis/
+│   ├── __pycache__/
+│   ├── advanced_analysis.py
+│   ├── datasets.py
+│   ├── heavy_load.py
+│   ├── inference.py
+│   └── orchestrator.py
+├── analysis_datasets/
+├── analysis_service.log
 ├── api/
 │   ├── __init__.py
+│   ├── __pycache__/
 │   ├── endpoints.py
 │   ├── main.py
 │   └── responses.py
+├── backtesting/
+│   └── backtesting.py
+├── cache/
+│   ├── [30 CSV files - cached data]
+│   └── cache_metadata.json
 ├── config/
 │   ├── __init__.py
+│   ├── __pycache__/
 │   ├── constraints.txt
 │   ├── deployment_config.py
 │   ├── requirements_data_service.txt
@@ -21,6 +37,7 @@ backend/
 │   └── storage_config.py
 ├── core/
 │   ├── __init__.py
+│   ├── __pycache__/
 │   ├── chart_manager.py
 │   ├── config.py
 │   ├── instrument_filter.py
@@ -31,6 +48,7 @@ backend/
 │   └── utils.py
 ├── data/
 │   ├── __init__.py
+│   ├── __pycache__/
 │   ├── analysis_datasets/
 │   │   ├── analysis_datasets.json
 │   │   ├── portfolio_dataset.json
@@ -65,30 +83,17 @@ backend/
 │   ├── signals/
 │   │   ├── __init__.py
 │   │   ├── __pycache__/
-│   │   │   ├── __init__.cpython-310.pyc
-│   │   │   ├── config.cpython-310.pyc
-│   │   │   ├── regimes.cpython-310.pyc
-│   │   │   ├── schema.cpython-310.pyc
-│   │   │   └── scoring.cpython-310.pyc
 │   │   ├── config.py
 │   │   ├── regimes.py
 │   │   ├── schema.py
 │   │   ├── scoring.py
 │   │   └── weights_config.json
 │   └── zerodha_instruments.csv
+├── data_service.log
+├── database_service.log
+├── enhanced_sector_data/
 ├── gemini/
 │   ├── __pycache__/
-│   │   ├── context_engineer.cpython-310.pyc
-│   │   ├── debug_config.cpython-310.pyc
-│   │   ├── debug_logger.cpython-310.pyc
-│   │   ├── error_utils.cpython-310.pyc
-│   │   ├── gemini_client.cpython-310.pyc
-│   │   ├── gemini_core.cpython-310.pyc
-│   │   ├── image_utils.cpython-310.pyc
-│   │   ├── parallel_pattern_detection.cpython-310.pyc
-│   │   ├── prompt_manager.cpython-310.pyc
-│   │   ├── schema.cpython-310.pyc
-│   │   └── token_tracker.cpython-310.pyc
 │   ├── context_engineer.py
 │   ├── debug_config.py
 │   ├── debug_logger.py
@@ -100,100 +105,133 @@ backend/
 │   ├── prompt_manager.py
 │   ├── schema.py
 │   └── token_tracker.py
+├── logs/
 ├── ml/
 │   ├── __init__.py
 │   ├── __pycache__/
-│   │   ├── __init__.cpython-310.pyc
-│   │   ├── inference.cpython-310.pyc
-│   │   └── technical_indicators.cpython-310.pyc
-│   ├── advanced_analysis.py
-│   ├── agent_capabilities.py
-│   ├── analysis_datasets.py
-│   ├── backtesting.py
-│   ├── bayesian_scorer.py
-│   ├── enhanced_mtf_analysis.py
-│   ├── enhanced_sector_classifier.py
-│   ├── heavy_load_analysis.py
-│   ├── inference.py
-│   ├── market_regime.py
-│   ├── mtf_analysis_utils.py
-│   ├── pattern_confirmation.py
-│   ├── pattern_database.py
-│   ├── patterns/
+│   ├── analysis/
 │   │   ├── __pycache__/
-│   │   ├── recognition.py
-│   │   └── visualization.py
+│   │   ├── market_regime.py
+│   │   ├── mtf_analysis.py
+│   │   └── mtf_utils.py
+│   ├── indicators/
+│   │   ├── __pycache__/
+│   │   ├── technical_indicators.py
+│   │   └── volume_profile.py
 │   ├── quant_system/
-│   │   ├── advanced_models/
-│   │   │   ├── advanced_feature_engineer.py
-│   │   │   ├── advanced_trading_system.py
-│   │   │   ├── advanced_training_strategies.py
-│   │   │   ├── dynamic_ensemble_manager.py
-│   │   │   ├── meta_learning_framework.py
-│   │   │   ├── multimodal_fusion_model.py
-│   │   │   ├── nbeats_model.py
-│   │   │   ├── neural_architecture_search.py
-│   │   │   ├── phase2_integration_manager.py
-│   │   │   ├── real_time_data_integrator.py
-│   │   │   └── temporal_fusion_transformer.py
-│   │   ├── catboost_info/
-│   │   │   ├── catboost_training.json
-│   │   │   ├── learn/
-│   │   │   │   └── events.out.tfevents
-│   │   │   ├── learn_error.tsv
-│   │   │   ├── time_left.tsv
-│   │   │   └── tmp/
-│   │   ├── datasets/
-│   │   │   ├── robust_patterns_meta.json
-│   │   │   ├── robust_patterns.parquet
-│   │   │   ├── test_general_patterns_meta.json
-│   │   │   └── test_general_patterns.parquet
-│   │   ├── ml/
+│   │   ├── __init__.py
+│   │   ├── __pycache__/
+│   │   ├── advanced/
 │   │   │   ├── __init__.py
 │   │   │   ├── __pycache__/
-│   │   │   ├── core.py
-│   │   │   ├── feature_engineering.py
+│   │   │   ├── integration/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── __pycache__/
+│   │   │   │   ├── phase2_manager.py
+│   │   │   │   └── real_time_integrator.py
+│   │   │   ├── models/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── __pycache__/
+│   │   │   │   ├── ensemble_manager.py
+│   │   │   │   ├── multimodal_fusion.py
+│   │   │   │   ├── nbeats.py
+│   │   │   │   └── tft.py
+│   │   │   └── training/
+│   │   │       ├── __init__.py
+│   │   │       ├── __pycache__/
+│   │   │       ├── advanced_strategies.py
+│   │   │       ├── meta_learning.py
+│   │   │       └── neural_architecture_search.py
+│   │   ├── core/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/
+│   │   │   ├── base_models.py
+│   │   │   ├── config.py
+│   │   │   ├── registry.py
+│   │   │   └── utils.py
+│   │   ├── data/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/
+│   │   │   ├── dataset_builder.py
+│   │   │   ├── datasets/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── cache/
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── catboost_info/
+│   │   │   │   │   │   ├── catboost_training.json
+│   │   │   │   │   │   ├── learn/
+│   │   │   │   │   │   │   └── events.out.tfevents
+│   │   │   │   │   │   ├── learn_error.tsv
+│   │   │   │   │   │   ├── time_left.tsv
+│   │   │   │   │   │   └── tmp/
+│   │   │   │   │   └── nas_results/
+│   │   │   │   │       ├── nas_results_1755854300.json
+│   │   │   │   │       └── nas_results_1755854599.json
+│   │   │   │   ├── models/
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── enhanced_pattern_model.joblib
+│   │   │   │   │   ├── pattern_catboost.joblib
+│   │   │   │   │   └── pattern_registry.json
+│   │   │   │   └── patterns/
+│   │   │   │       ├── __init__.py
+│   │   │   │       ├── robust_patterns_meta.json
+│   │   │   │       ├── robust_patterns.parquet
+│   │   │   │       ├── test_general_patterns_meta.json
+│   │   │   │       └── test_general_patterns.parquet
+│   │   │   ├── enhanced_pipeline.py
+│   │   │   ├── market_data_integration.py
+│   │   │   └── pipeline.py
+│   │   ├── engines/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/
 │   │   │   ├── hybrid_ml.py
 │   │   │   ├── pattern_ml.py
 │   │   │   ├── raw_data_ml.py
-│   │   │   ├── traditional_ml.py
 │   │   │   └── unified_manager.py
-│   │   ├── models/
-│   │   │   ├── enhanced_pattern_model.joblib
-│   │   │   ├── pattern_catboost.joblib
-│   │   │   └── pattern_registry.json
-│   │   ├── nas_results/
-│   │   │   ├── nas_results_1755854300.json
-│   │   │   └── nas_results_1755854599.json
-│   │   ├── advanced_trading_strategies_with_risk_management.py
-│   │   ├── analyze_price_ml.py
-│   │   ├── backtesting_engine.py
-│   │   ├── best_nbeats_model.pth
-│   │   ├── data_pipeline.py
-│   │   ├── dataset_builder.py
-│   │   ├── deploy_live_trading_system.py
-│   │   ├── enhanced_data_pipeline.py
-│   │   ├── enhanced_feature_engineering.py
-│   │   ├── enhanced_ml_engine.py
-│   │   ├── enhanced_training.py
-│   │   ├── live_trading.log
-│   │   ├── model_comparison.py
-│   │   ├── production_market_data_integration.py
-│   │   ├── production_trading_system.py
-│   │   ├── production_trading.log
-│   │   ├── quant_system_integration.py
-│   │   ├── risk_management.py
-│   │   ├── robust_evaluation.py
-│   │   ├── run_quant_tests.py
-│   │   ├── simplified_production_trading_system.py
-│   │   ├── train_evaluate_pattern.py
-│   │   └── zerodha_instruments.csv
-│   ├── risk_scoring.py
-│   ├── sector_benchmarking.py
-│   ├── sector_classifier.py
-│   ├── service_specific_memory_analyzer.py
-│   ├── technical_indicators.py
-│   └── volume_profile.py
+│   │   ├── evaluation/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/
+│   │   │   ├── model_comparison.py
+│   │   │   ├── price_analysis.py
+│   │   │   └── robust_evaluation.py
+│   │   ├── features/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/
+│   │   │   ├── enhanced_features.py
+│   │   │   ├── feature_engineer.py
+│   │   │   └── technical_indicators.py
+│   │   ├── REORGANIZATION_SUMMARY.md
+│   │   ├── scripts/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/
+│   │   │   ├── run_tests.py
+│   │   │   └── train_models.py
+│   │   ├── trading/
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__/
+│   │   │   ├── backtesting/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── __pycache__/
+│   │   │   │   └── engine.py
+│   │   │   ├── execution/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── __pycache__/
+│   │   │   │   ├── live_deployment.py
+│   │   │   │   ├── production_system.py
+│   │   │   │   └── simplified_system.py
+│   │   │   └── strategies/
+│   │   │       ├── __init__.py
+│   │   │       ├── __pycache__/
+│   │   │       ├── advanced_strategies.py
+│   │   │       └── risk_management.py
+│   │   └── utils/
+│   │       ├── __init__.py
+│   │       └── __pycache__/
+│   └── sector/
+│       ├── __pycache__/
+│       ├── benchmarking.py
+│       ├── classifier.py
+│       └── enhanced_classifier.py
 ├── myenv/
 │   ├── bin/
 │   │   ├── [Python virtual environment executables]
@@ -289,6 +327,13 @@ backend/
 │               ├── isympy.1
 │               └── ttx.1
 ├── output/
+│   └── charts/
+├── patterns/
+│   ├── __pycache__/
+│   ├── confirmation.py
+│   ├── database.py
+│   ├── recognition.py
+│   └── visualization.py
 ├── prompts/
 │   ├── final_stock_decision.txt
 │   ├── image_analysis_comprehensive_overview.txt
@@ -305,6 +350,9 @@ backend/
 │   ├── optimized_reversal_patterns.txt
 │   ├── optimized_technical_overview.txt
 │   └── optimized_volume_analysis.txt
+├── risk/
+│   ├── bayesian_scorer.py
+│   └── scoring.py
 ├── scripts/
 │   ├── __init__.py
 │   ├── calibrate_all.py
@@ -316,6 +364,7 @@ backend/
 │   └── start_consolidated_service.py
 ├── services/
 │   ├── __init__.py
+│   ├── __pycache__/
 │   ├── analysis_service.py
 │   ├── central_data_provider.py
 │   ├── consolidated_service.py
@@ -323,11 +372,19 @@ backend/
 │   ├── database_service.py
 │   ├── enhanced_data_service.py
 │   └── websocket_service.py
-└── zerodha/
-    ├── __init__.py
-    ├── client.py
-    ├── token.py
-    └── ws_client.py
+├── tree.md
+├── utils/
+│   └── memory_analyzer.py
+├── zerodha/
+│   ├── __init__.py
+│   ├── __pycache__/
+│   ├── cache/
+│   │   ├── b69a63e156b3e23d8f3129be5d8028f1.csv
+│   │   └── cache_metadata.json
+│   ├── client.py
+│   ├── token_updater.py
+│   └── ws_client.py
+└── zerodha_instruments.csv
 ```
 
 ## Summary
@@ -335,26 +392,40 @@ backend/
 The backend directory contains a comprehensive stock analysis and trading system with the following main components:
 
 ### Core Modules
+- **analysis/**: Advanced analysis modules including heavy load processing and orchestration
 - **api/**: FastAPI endpoints and responses
+- **backtesting/**: Backtesting functionality for trading strategies
+- **cache/**: Cached data storage (30 CSV files)
 - **config/**: Configuration files and requirements
 - **core/**: Core utilities, cache management, and client connections
 - **data/**: Data storage, analysis datasets, and sector categorization
 - **gemini/**: AI/ML integration with Google Gemini
 - **ml/**: Machine learning models, analysis, and quantitative trading system
+- **patterns/**: Pattern recognition and confirmation modules
+- **risk/**: Risk management and scoring systems
 - **services/**: Various backend services for data processing and analysis
 - **zerodha/**: Zerodha trading platform integration
 
 ### Key Features
-- **Quantitative Trading System**: Advanced ML models and trading strategies
+- **Quantitative Trading System**: Advanced ML models and trading strategies with reorganized structure
 - **Data Management**: Cached data, sector analysis, and instrument filtering
 - **AI Integration**: Gemini-powered analysis and pattern detection
 - **Real-time Trading**: Live trading system with risk management
 - **Backtesting**: Comprehensive backtesting engine for strategy validation
+- **Pattern Recognition**: Advanced pattern detection and confirmation systems
 
 ### File Counts
-- **Total Python files**: ~100+ .py files
+- **Total Python files**: ~120+ .py files
 - **Configuration files**: 8 config files
-- **Data files**: 280+ CSV files in cache, multiple JSON datasets
+- **Data files**: 310+ CSV files in cache, multiple JSON datasets
 - **Model files**: 2 .joblib model files, 1 .pth PyTorch model
-- **Log files**: 2 trading log files
+- **Log files**: 3 service log files
 - **Virtual Environment**: Complete Python 3.10 virtual environment in myenv/
+- **Prompt files**: 15 text files for AI prompts
+
+### Recent Changes
+- **ML Structure Reorganization**: The `ml/quant_system/` directory has been reorganized with better separation of concerns
+- **New Analysis Module**: Added dedicated `analysis/` directory for advanced analysis functionality
+- **Pattern Recognition**: Moved pattern-related modules to dedicated `patterns/` directory
+- **Risk Management**: Separated risk management into dedicated `risk/` directory
+- **Enhanced Data Structure**: Improved organization of data files and caching system

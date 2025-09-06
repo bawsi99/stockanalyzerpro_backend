@@ -1436,4 +1436,4 @@ if __name__ == "__main__":
     print(f"🔌 WebSocket streaming available at /ws/stream")
     print(f"🔐 Authentication endpoints available at /auth/*")
     
-    uvicorn.run(app, host=host, port=port) 
+    uvicorn.run(app, host=host, port=port, reload=True) 
