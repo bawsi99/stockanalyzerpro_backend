@@ -14,7 +14,7 @@ import asyncio
 import time
 
 # --- Import clean_for_json ---
-from utils import clean_for_json
+from core.utils import clean_for_json
 
 
 class GeminiClient:
