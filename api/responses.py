@@ -1009,7 +1009,7 @@ class FrontendResponseBuilder:
                     out['reliability'] = _reliability_from_score(score)
                 # Compute risk metrics when possible
                 try:
-                    from ml.risk_scoring import calculate_risk_score, extract_reward_risk
+                    from analysis.risk_scoring import calculate_risk_score, extract_reward_risk
                     current_price = float(data['close'].iloc[-1]) if not data.empty else 0.0
                     rr, _risk_abs = extract_reward_risk(out, current_price)
                     # Approximate volatility from Bollinger bandwidth or ADX if present
