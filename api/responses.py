@@ -848,7 +848,8 @@ class FrontendResponseBuilder:
             cached_patterns = None
             if symbol:
                 try:
-                    from services.central_data_provider import central_data_provider
+                    from services.central_data_provider import CentralDataProvider
+                    central_data_provider = CentralDataProvider()
                     cached_patterns = central_data_provider.get_patterns(symbol=symbol, exchange=exchange, interval=interval, data=data)
                 except Exception:
                     cached_patterns = None

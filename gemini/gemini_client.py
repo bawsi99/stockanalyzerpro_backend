@@ -719,7 +719,8 @@ JSON:
             # Fetch stock data for pattern detection via central data provider (non-blocking)
             stock_data_for_patterns = None
             try:
-                from central_data_provider import central_data_provider
+                from services.central_data_provider import CentralDataProvider
+                central_data_provider = CentralDataProvider()
                 stock_data_for_patterns = await central_data_provider.get_stock_data_async(
                     symbol=symbol,
                     exchange=exchange,

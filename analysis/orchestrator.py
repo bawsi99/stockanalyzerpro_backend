@@ -1622,7 +1622,8 @@ if __name__ == "__main__":
             overlays = self._create_overlays(stock_data, state.indicators)
             # Store detected patterns into central cache for reuse by frontend builder or later stages
             try:
-                from services.central_data_provider import central_data_provider
+                from services.central_data_provider import CentralDataProvider
+                central_data_provider = CentralDataProvider()
                 patterns_payload = {
                     "triangles": overlays.get("triangles", []),
                     "flags": overlays.get("flags", []),
