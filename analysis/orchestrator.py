@@ -1222,7 +1222,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
         try:
             if stock_data is None or getattr(stock_data, 'empty', True):
                 return {}
-            from ml.quant_system.engines.unified_manager import unified_ml_manager
+            from ml.quant_system.engines.unified_manager import UnifiedMLManager
+            unified_ml_manager = UnifiedMLManager()
             try:
                 _ = unified_ml_manager.train_all_engines(stock_data, None)
             except Exception:
