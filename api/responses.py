@@ -65,8 +65,8 @@ class FrontendResponseBuilder:
                     "mathematical_validation": True,
                     "calculation_method": "code_execution",
                     "accuracy_improvement": "high",
-                    "technical_indicators": FrontendResponseBuilder._build_technical_indicators(data, indicators),
-                    "ai_analysis": FrontendResponseBuilder._build_ai_analysis(ai_analysis, data, interval),
+                    "technical_indicators": FrontendResponseBuilder._build_technical_indicators(data, indicators, latest_price),
+                    "ai_analysis": FrontendResponseBuilder._build_ai_analysis(ai_analysis, data, interval, latest_price),
                     # Deterministic signals: pass through if present; otherwise compute from indicators/MTF context
                     "signals": FrontendResponseBuilder._extract_signals(
                         ai_analysis=ai_analysis,
@@ -95,6 +95,7 @@ class FrontendResponseBuilder:
                         symbol=symbol,
                         exchange=exchange,
                         interval=interval,
+                        latest_price=latest_price,
                     ),
                     # Derive risk level and recommendation from AI analysis to match legacy behavior
                     # Compute values once and reuse to avoid duplication
@@ -117,8 +118,8 @@ class FrontendResponseBuilder:
                         "risk_level": computed_risk_level,
                         "recommendation": computed_recommendation
                     },
-                    "support_levels": FrontendResponseBuilder._extract_support_levels(data, indicators),
-                    "resistance_levels": FrontendResponseBuilder._extract_resistance_levels(data, indicators),
+                    "support_levels": FrontendResponseBuilder._extract_support_levels(data, indicators, latest_price),
+                    "resistance_levels": FrontendResponseBuilder._extract_resistance_levels(data, indicators, latest_price),
                     "triangle_patterns": [],
                     "flag_patterns": [],
                     "volume_anomalies_detailed": [],
@@ -134,7 +135,7 @@ class FrontendResponseBuilder:
 
             try:
                 vp = calculate_volume_profile(data)
-                support_levels, resistance_levels = identify_significant_levels(vp, float(latest_price))
+                support_levels, resistance_levels = identify_significant_levels(vp, latest_price)
                 volume_profile_analysis = {
                     "support": [{"price": float(p), "strength": "high"} for p in (support_levels[:3] if support_levels else [])],
                     "resistance": [{"price": float(p), "strength": "high"} for p in (resistance_levels[:3] if resistance_levels else [])],
@@ -334,14 +335,14 @@ class FrontendResponseBuilder:
             }
     
     @staticmethod
-    def _build_technical_indicators(data: pd.DataFrame, indicators: dict) -> dict:
+    def _build_technical_indicators(data: pd.DataFrame, indicators: dict, latest_price: float) -> dict:
         """Build technical indicators structure from canonical schema produced by
         TechnicalIndicators.calculate_all_indicators_optimized.
 
         Falls back to minimal synthesis only when canonical fields are missing.
         """
         try:
-            latest_close = data['close'].iloc[-1] if not data.empty else 0.0
+            latest_close = latest_price
             latest_volume = data['volume'].iloc[-1] if not data.empty else 0.0
 
             # If indicators are already in structured form (from calculate_all_indicators_optimized),
@@ -578,12 +579,11 @@ class FrontendResponseBuilder:
             return {}
     
     @staticmethod
-    def _build_ai_analysis(ai_analysis: dict, data: pd.DataFrame, interval: str) -> dict:
+    def _build_ai_analysis(ai_analysis: dict, data: pd.DataFrame, interval: str, latest_price: float) -> dict:
         """Build AI analysis structure."""
         try:
             trend = ai_analysis.get('trend', 'Unknown')
             confidence = ai_analysis.get('confidence_pct', 0)
-            latest_price = data['close'].iloc[-1] if not data.empty else 0
             # Infer a more appropriate trend duration from data and interval
             inferred_duration = FrontendResponseBuilder._infer_trend_duration(data, interval)
             
@@ -799,12 +799,14 @@ class FrontendResponseBuilder:
             return "short-term"
 
     @staticmethod
-    def _build_overlays(data: pd.DataFrame, advanced_patterns: dict = None, symbol: str = "", exchange: str = "NSE", interval: str = "day") -> dict:
+    def _build_overlays(data: pd.DataFrame, advanced_patterns: dict = None, symbol: str = "", exchange: str = "NSE", interval: str = "day", latest_price: float = 0) -> dict:
         """Build overlays structure using actual pattern recognition."""
         try:
             # Early fallback for insufficient data to avoid index errors downstream
             if data is None or data.empty or len(data) < 2:
-                latest_price = data['close'].iloc[-1] if (data is not None and not data.empty) else 0
+                # Use passed latest_price or fallback to 0 if not provided
+                if latest_price == 0 and data is not None and not data.empty:
+                    latest_price = data['close'].iloc[-1]
                 return {
                     "triangles": [],
                     "flags": [],
@@ -1005,12 +1007,12 @@ class FrontendResponseBuilder:
                 # Compute risk metrics when possible
                 try:
                     from analysis.risk_scoring import calculate_risk_score, extract_reward_risk
-                    current_price = float(data['close'].iloc[-1]) if not data.empty else 0.0
+                    current_price = latest_price
                     rr, _risk_abs = extract_reward_risk(out, current_price)
                     # Approximate volatility from Bollinger bandwidth or ADX if present
                     vol_proxy = 0.1
                     try:
-                        bb = (FrontendResponseBuilder._build_technical_indicators(data, {}) or {}).get('bollinger_bands', {})
+                        bb = (FrontendResponseBuilder._build_technical_indicators(data, {}, latest_price) or {}).get('bollinger_bands', {})
                         vol_proxy = float(bb.get('bandwidth', vol_proxy))
                     except Exception:
                         pass
@@ -1100,7 +1102,9 @@ class FrontendResponseBuilder:
         except Exception as e:
             logger.error(f"Error building overlays: {e}")
             # Fallback to basic structure if pattern recognition fails
-            latest_price = data['close'].iloc[-1] if not data.empty else 0
+            # Use passed latest_price or fallback calculation
+            if latest_price == 0:
+                latest_price = data['close'].iloc[-1] if not data.empty else 0
             return {
                 "triangles": [],
                 "flags": [],
@@ -1124,13 +1128,11 @@ class FrontendResponseBuilder:
             }
     
     @staticmethod
-    def _extract_support_levels(data: pd.DataFrame, indicators: dict) -> list:
+    def _extract_support_levels(data: pd.DataFrame, indicators: dict, latest_price: float) -> list:
         """Extract support levels."""
         try:
             if data.empty:
                 return []
-            
-            latest_price = data['close'].iloc[-1]
             sma_20 = indicators.get('sma_20', [latest_price])[-1] if indicators.get('sma_20') else latest_price
             sma_50 = indicators.get('sma_50', [latest_price])[-1] if indicators.get('sma_50') else latest_price
             
@@ -1147,13 +1149,11 @@ class FrontendResponseBuilder:
             return []
     
     @staticmethod
-    def _extract_resistance_levels(data: pd.DataFrame, indicators: dict) -> list:
+    def _extract_resistance_levels(data: pd.DataFrame, indicators: dict, latest_price: float) -> list:
         """Extract resistance levels."""
         try:
             if data.empty:
                 return []
-            
-            latest_price = data['close'].iloc[-1]
             sma_20 = indicators.get('sma_20', [latest_price])[-1] if indicators.get('sma_20') else latest_price
             sma_50 = indicators.get('sma_50', [latest_price])[-1] if indicators.get('sma_50') else latest_price
             
