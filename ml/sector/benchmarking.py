@@ -338,14 +338,14 @@ class SectorBenchmarkingProvider:
                     logging.warning(f"Error calculating performance for {sector}: {e}")
                     continue
             
-            # Rank sectors by performance
+            # Rank sectors by performance - OPTIMIZED: Only store rank, not duplicate performance data
             sorted_sectors = sorted(sector_performance.items(), 
                                   key=lambda x: x[1]['relative_strength'], reverse=True)
             
             for rank, (sector, data) in enumerate(sorted_sectors, 1):
                 sector_rankings[sector] = {
-                    'rank': rank,
-                    'performance': data
+                    'rank': rank
+                    # Performance data already available in sector_performance[sector]
                 }
             
             # Identify rotation patterns
@@ -440,14 +440,14 @@ class SectorBenchmarkingProvider:
                     }
                     sector_momentum[sector] = returns.iloc[-1] - returns.iloc[0]
             
-            # Rank sectors by performance
+            # Rank sectors by performance - OPTIMIZED: Only store rank, not duplicate performance data
             sorted_sectors = sorted(sector_performance.items(), 
                                   key=lambda x: x[1]['relative_strength'], reverse=True)
             
             for rank, (sector, data) in enumerate(sorted_sectors, 1):
                 sector_rankings[sector] = {
-                    'rank': rank,
-                    'performance': data
+                    'rank': rank
+                    # Performance data already available in sector_performance[sector]
                 }
             
             # Identify rotation patterns
@@ -2329,8 +2329,8 @@ class SectorBenchmarkingProvider:
             
             for rank, (sector, data) in enumerate(sorted_sectors, 1):
                 sector_rankings[sector] = {
-                    'rank': rank,
-                    'performance': data
+                    'rank': rank
+                    # OPTIMIZED: Performance data already available in sector_performance[sector]
                 }
             
             # Identify rotation patterns
@@ -2477,15 +2477,16 @@ class SectorBenchmarkingProvider:
                 'market_context': {}
             }
             
-            # Extract sector rotation context
+            # Extract sector rotation context - OPTIMIZED: Use sector_performance instead of sector_rankings.performance
             if comprehensive.get('sector_rotation'):
                 rotation_data = comprehensive['sector_rotation']
                 sector_rankings = rotation_data.get('sector_rankings', {})
+                sector_performance = rotation_data.get('sector_performance', {})
                 
                 if stock_sector and stock_sector in sector_rankings:
                     relevant_data['sector_rotation_context'] = {
                         'stock_sector_rank': sector_rankings[stock_sector]['rank'],
-                        'stock_sector_performance': sector_rankings[stock_sector]['performance'],
+                        'stock_sector_performance': sector_performance.get(stock_sector, {}),  # OPTIMIZED: Get from sector_performance
                         'leading_sectors': rotation_data.get('rotation_patterns', {}).get('leading_sectors', []),
                         'lagging_sectors': rotation_data.get('rotation_patterns', {}).get('lagging_sectors', []),
                         'rotation_strength': rotation_data.get('rotation_patterns', {}).get('rotation_strength', 'unknown'),
@@ -2796,14 +2797,14 @@ class SectorBenchmarkingProvider:
                     logging.warning(f"Error calculating rotation for {sector_name}: {e}")
                     continue
             
-            # Rank sectors
+            # Rank sectors - OPTIMIZED: Only store rank, not duplicate performance data
             sorted_sectors = sorted(sector_performance.items(), 
                                   key=lambda x: x[1]['relative_strength'], reverse=True)
             
             for rank, (sector_name, data) in enumerate(sorted_sectors, 1):
                 sector_rankings[sector_name] = {
-                    'rank': rank,
-                    'performance': data
+                    'rank': rank
+                    # Performance data already available in sector_performance[sector_name]
                 }
             
             return {

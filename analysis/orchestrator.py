@@ -901,11 +901,13 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                     'recommendations': sector_rotation.get('recommendations', [])
                 }
                 
-                # Find current sector's rank and performance
+                # Find current sector's rank and performance - OPTIMIZED: Get performance from sector_performance
                 sector_rankings = sector_rotation.get('sector_rankings', {})
+                sector_performance = sector_rotation.get('sector_performance', {})
                 if sector in sector_rankings:
                     enhanced_context['rotation_insights']['sector_rank'] = sector_rankings[sector]['rank']
-                    enhanced_context['rotation_insights']['sector_performance'] = sector_rankings[sector]['performance']
+                    # OPTIMIZED: Get performance data from sector_performance instead of duplicated data
+                    enhanced_context['rotation_insights']['sector_performance'] = sector_performance.get(sector, {})
                 
                 # Add rotation-based trading recommendations
                 for rec in sector_rotation.get('recommendations', []):
