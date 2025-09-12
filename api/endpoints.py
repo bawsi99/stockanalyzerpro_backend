@@ -47,7 +47,7 @@ import uvicorn
 # Local imports
 from zerodha.client import ZerodhaDataClient
 from ml.indicators.technical_indicators import TechnicalIndicators, IndianMarketMetricsProvider
-from ml.patterns.recognition import PatternRecognition
+from patterns.recognition import PatternRecognition
 from ml.sector.classifier import SectorClassifier
 from ml.sector.enhanced_classifier import enhanced_sector_classifier
 from ml.sector.benchmarking import SectorBenchmarkingProvider

@@ -340,7 +340,7 @@ class CentralDataProvider:
                 return None
             
             # Import PatternRecognition here to avoid circular imports
-            from ml.patterns.recognition import PatternRecognition
+            from patterns.recognition import PatternRecognition
             
             # Detect various patterns
             patterns = {}
