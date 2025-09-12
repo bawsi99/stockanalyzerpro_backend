@@ -97,24 +97,25 @@ class FrontendResponseBuilder:
                         interval=interval,
                     ),
                     # Derive risk level and recommendation from AI analysis to match legacy behavior
-                    "risk_level": (lambda conf: (
+                    # Compute values once and reuse to avoid duplication
+                    "risk_level": (computed_risk_level := (lambda conf: (
                         'Low' if conf >= 80 else 'Medium' if conf >= 60 else 'High' if conf >= 40 else 'Very High'
-                    ))(float(ai_analysis.get('confidence_pct', 0) or 0)),
-                    "recommendation": (lambda conf, trend: (
+                    ))(float(ai_analysis.get('confidence_pct', 0) or 0))),
+                    "recommendation": (computed_recommendation := (lambda conf, trend: (
                         'Strong Buy' if conf >= 80 and trend == 'Bullish' else
                         'Strong Sell' if conf >= 80 and trend == 'Bearish' else
                         'Buy' if conf >= 60 and trend == 'Bullish' else
                         'Sell' if conf >= 60 and trend == 'Bearish' else
                         'Hold' if conf >= 60 else 'Wait and Watch' if conf >= 40 else 'Avoid Trading'
-                    ))(float(ai_analysis.get('confidence_pct', 0) or 0), ai_analysis.get('trend', 'Unknown')),
+                    ))(float(ai_analysis.get('confidence_pct', 0) or 0), ai_analysis.get('trend', 'Unknown'))),
                     "indicator_summary": indicator_summary,
                     "chart_insights": chart_insights,
                     "consensus": FrontendResponseBuilder._build_consensus(ai_analysis, indicators, data, mtf_context),
                     "summary": {
                         "overall_signal": ai_analysis.get('trend', 'Unknown'),
                         "confidence": ai_analysis.get('confidence_pct', 0),
-                        "risk_level": "medium",
-                        "recommendation": "hold"
+                        "risk_level": computed_risk_level,
+                        "recommendation": computed_recommendation
                     },
                     "support_levels": FrontendResponseBuilder._extract_support_levels(data, indicators),
                     "resistance_levels": FrontendResponseBuilder._extract_resistance_levels(data, indicators),
