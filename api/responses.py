@@ -115,7 +115,6 @@ class FrontendResponseBuilder:
                     "indicator_summary_md": indicator_summary,
                     "chart_insights": chart_insights,
                     "consensus": FrontendResponseBuilder._build_consensus(ai_analysis, indicators, data, mtf_context),
-                    "indicators": FrontendResponseBuilder._build_technical_indicators(data, indicators),
                     "summary": {
                         "overall_signal": ai_analysis.get('trend', 'Unknown'),
                         "confidence": ai_analysis.get('confidence_pct', 0),
