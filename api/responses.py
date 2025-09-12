@@ -60,7 +60,6 @@ class FrontendResponseBuilder:
                     "price_change": float(price_change),
                     "price_change_percentage": float(price_change_pct),
                     "analysis_period": f"{period} days",
-                    "interval": interval,
                     "analysis_timestamp": datetime.now().isoformat(),
                     "analysis_type": "enhanced_with_code_execution",
                     "mathematical_validation": True,
