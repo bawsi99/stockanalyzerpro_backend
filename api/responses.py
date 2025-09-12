@@ -107,9 +107,7 @@ class FrontendResponseBuilder:
                         'Sell' if conf >= 60 and trend == 'Bearish' else
                         'Hold' if conf >= 60 else 'Wait and Watch' if conf >= 40 else 'Avoid Trading'
                     ))(float(ai_analysis.get('confidence_pct', 0) or 0), ai_analysis.get('trend', 'Unknown')),
-                    # Provide both keys for backward/forward compatibility
                     "indicator_summary": indicator_summary,
-                    "indicator_summary_md": indicator_summary,
                     "chart_insights": chart_insights,
                     "consensus": FrontendResponseBuilder._build_consensus(ai_analysis, indicators, data, mtf_context),
                     "summary": {
@@ -755,7 +753,7 @@ class FrontendResponseBuilder:
                     "Volume confirmation supports bullish bias",
                     "Risk management through proper stop-loss placement"
                 ],
-                "indicator_summary_md": ai_analysis.get('indicator_summary', ''),
+                "indicator_summary": ai_analysis.get('indicator_summary', ''),
                 "chart_insights": ai_analysis.get('chart_insights', '')
             }
         except Exception as e:

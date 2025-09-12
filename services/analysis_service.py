@@ -574,7 +574,7 @@ def validate_analysis_results(results: dict) -> dict:
         'ai_analysis': {},
         'indicators': {},
         'overlays': {},
-        'indicator_summary_md': '',
+        'indicator_summary': '',
         'chart_insights': '',
         'summary': {},
         'trading_guidance': {},

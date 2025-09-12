@@ -1742,7 +1742,7 @@ if __name__ == "__main__":
                 "charts": chart_paths,
                 
                 # Markdown summaries (keep as is)
-                "indicator_summary_md": indicator_summary,
+                "indicator_summary": indicator_summary,
                 "chart_insights": chart_insights
             }
             
@@ -2394,7 +2394,7 @@ if __name__ == "__main__":
                     "Volume confirmation supports bullish bias",
                     "Risk management through proper stop-loss placement"
                 ],
-                "indicator_summary_md": ai_analysis.get('indicator_summary', ''),
+                "indicator_summary": ai_analysis.get('indicator_summary', ''),
                 "chart_insights": ai_analysis.get('chart_insights', '')
             }
         except Exception as e:
