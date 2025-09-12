@@ -23,11 +23,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('ZerodhaClient')
 
 
+# Resolve .env path relative to this file (backend/config/.env)
+ENV_PATH = Path(__file__).resolve().parent.parent / "config" / ".env"
+
 # Load environment variables from .env file (for initial load)
-dotenv.load_dotenv("../config/.env")
+dotenv.load_dotenv(dotenv_path=str(ENV_PATH))
 
 # Utility function to always read the latest value from .env
-def get_env_value(key: str, env_path: str = "../config/.env") -> str:
+def get_env_value(key: str, env_path: str = str(ENV_PATH)) -> str:
     """Read a value from the .env file directly, with fallback to system environment."""
     # First try to read from .env file if it exists
     if os.path.exists(env_path):
@@ -252,7 +255,7 @@ class ZerodhaDataClient:
         
     def _save_access_token(self, access_token: str):
         """Save the access token to the .env file, replacing the old value if present."""
-        env_path = "../config/.env"
+        env_path = str(ENV_PATH)
         lines = []
         found = False
         if os.path.exists(env_path):
@@ -276,7 +279,7 @@ class ZerodhaDataClient:
         Args:
             request_token: The request token obtained from the user
         """
-        env_path = "../config/.env"
+        env_path = str(ENV_PATH)
         try:
             # Create .env file if it doesn't exist
             if not os.path.exists(env_path):
