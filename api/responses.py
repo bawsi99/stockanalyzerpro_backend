@@ -46,6 +46,9 @@ class FrontendResponseBuilder:
             # Convert interval format for frontend display
             frontend_interval = interval_to_frontend_display(interval)
             
+            # Create timestamp once to avoid duplication
+            timestamp = datetime.now().isoformat()
+            
             # Build basic response structure
             result = {
                 "success": True,
@@ -53,14 +56,14 @@ class FrontendResponseBuilder:
                 "exchange": exchange,
                 "analysis_period": frontend_interval,
                 "interval": interval,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": timestamp,
                 "message": f"Analysis completed successfully for {symbol}",
                 "results": {
                     "current_price": float(latest_price),
                     "price_change": float(price_change),
                     "price_change_percentage": float(price_change_pct),
                     "analysis_period": f"{period} days",
-                    "analysis_timestamp": datetime.now().isoformat(),
+                    "analysis_timestamp": timestamp,
                     "analysis_type": "enhanced_with_code_execution",
                     "mathematical_validation": True,
                     "calculation_method": "code_execution",

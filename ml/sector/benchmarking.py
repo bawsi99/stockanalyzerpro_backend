@@ -180,9 +180,12 @@ class SectorBenchmarkingProvider:
             logging.info(f"DEBUG: Stock returns length after dropna: {len(stock_returns)}")
             logging.info(f"DEBUG: Stock returns first 5 values: {stock_returns.head()}")
             
-            if len(stock_returns) < 30:
-                logging.warning(f"Insufficient stock returns data for {stock_symbol}: {len(stock_returns)} < 30")
+            if len(stock_returns) < 10:
+                logging.warning(f"Severely insufficient stock returns data for {stock_symbol}: {len(stock_returns)} < 10")
                 return self._get_fallback_benchmarking(stock_symbol, user_sector or "UNKNOWN")
+            
+            elif len(stock_returns) < 30:
+                logging.info(f"Limited stock returns data for {stock_symbol}: {len(stock_returns)} < 30 (recommended). Using degraded analysis mode.")
             
             # Prioritize user-provided sector over detected sector
             if user_sector:
@@ -234,6 +237,26 @@ class SectorBenchmarkingProvider:
             logging.info(f"  - Sector Stocks Count: {len(sector_stocks)}")
             logging.info(f"  - Sample Stocks: {sector_stocks[:5] if sector_stocks else 'None'}")
             
+            # Add data quality assessment
+            data_quality_assessment = {
+                "sufficient_data": len(stock_returns) >= 30,
+                "data_points": len(stock_returns),
+                "minimum_recommended": 30,
+                "reliability": "high" if len(stock_returns) >= 50 else "moderate" if len(stock_returns) >= 30 else "limited",
+                "analysis_mode": "full" if len(stock_returns) >= 30 else "degraded",
+                "limitations": [] if len(stock_returns) >= 30 else [
+                    "Sector comparison may be less accurate with limited data",
+                    "Risk metrics are simplified due to insufficient history",
+                    "Some benchmarking features may be unavailable"
+                ],
+                "recommendations": [] if len(stock_returns) >= 50 else [
+                    "Results are reliable but may improve with more historical data"
+                ] if len(stock_returns) >= 30 else [
+                    "Use sector analysis results with caution due to limited data",
+                    "Focus on recent performance trends rather than long-term metrics"
+                ]
+            }
+            
             # Build comprehensive results with correct structure
             results = {
                 "stock_symbol": stock_symbol,
@@ -248,6 +271,7 @@ class SectorBenchmarkingProvider:
                 "relative_performance": relative_performance,
                 "sector_risk_metrics": risk_metrics,
                 "analysis_summary": analysis_summary,
+                "data_quality": data_quality_assessment,
                 "timestamp": datetime.now().isoformat(),
                 "data_points": {
                     "stock_data_points": len(stock_returns),
@@ -2127,9 +2151,28 @@ class SectorBenchmarkingProvider:
                 "risk_assessment": "medium",
                 "investment_recommendation": "hold"
             },
+            "data_quality": {
+                "sufficient_data": False,
+                "data_points": 0,
+                "minimum_recommended": 30,
+                "reliability": "none",
+                "analysis_mode": "fallback",
+                "limitations": [
+                    "No or insufficient historical data available",
+                    "Using default values and estimates",
+                    "Sector benchmarking not available",
+                    "All indicators are approximations"
+                ],
+                "recommendations": [
+                    "Verify stock symbol is correct",
+                    "Try different time period or interval",
+                    "Results should not be used for investment decisions",
+                    "Focus on current market price and recent news instead"
+                ]
+            },
             "timestamp": datetime.now().isoformat(),
             "data_points": {"stock_data_points": 0, "market_data_points": 0, "sector_data_points": 0},
-            "error": "Comprehensive benchmarking analysis failed"
+            "error": "Comprehensive benchmarking analysis failed - insufficient data"
         }
 
     def get_stock_specific_benchmarking(self, stock_symbol: str, stock_data: pd.DataFrame, user_sector: str = None) -> Dict[str, Any]:

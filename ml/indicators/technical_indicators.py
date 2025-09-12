@@ -2200,18 +2200,260 @@ class TechnicalIndicators:
         }
 
     @staticmethod
+    def calculate_minimal_indicators(data: pd.DataFrame, symbol: str = None) -> Dict[str, Any]:
+        """
+        Calculate minimal indicators for datasets with insufficient data.
+        Uses adaptive periods and fallback values to provide basic analysis.
+        
+        Args:
+            data: DataFrame containing price data (may have limited rows)
+            symbol: Stock symbol for logging purposes
+            
+        Returns:
+            Dict containing minimal indicators with reliability metadata
+        """
+        if data.empty:
+            return {
+                'error': 'no_data',
+                'message': 'No data available for analysis',
+                'data_quality': {
+                    'sufficient_data': False,
+                    'data_points': 0,
+                    'reliability': 'none'
+                }
+            }
+        
+        data_length = len(data)
+        latest_price = data['close'].iloc[-1]
+        
+        # Adaptive period calculation based on available data
+        def get_adaptive_period(desired_period: int, minimum_ratio: float = 0.5) -> int:
+            """Get adaptive period ensuring we have at least minimum_ratio of data points"""
+            min_points = max(2, int(desired_period * minimum_ratio))
+            return min(desired_period, max(min_points, data_length - 1)) if data_length > 1 else 1
+        
+        indicators = {}
+        
+        # === MOVING AVERAGES (Adaptive periods) ===
+        sma_20_period = get_adaptive_period(20, 0.3)  # At least 6 points for 20-day SMA
+        sma_50_period = get_adaptive_period(50, 0.2)  # At least 10 points for 50-day SMA
+        
+        try:
+            sma_20 = data['close'].rolling(window=sma_20_period, min_periods=1).mean()
+            sma_50 = data['close'].rolling(window=sma_50_period, min_periods=1).mean() if data_length >= 2 else sma_20
+            
+            # Use current price as SMA 200 fallback
+            sma_200_value = latest_price if data_length < 10 else sma_50.iloc[-1]
+            
+            # EMA with adaptive span
+            ema_span = get_adaptive_period(20, 0.5)
+            ema_20 = data['close'].ewm(span=ema_span, min_periods=1).mean()
+            
+            indicators['moving_averages'] = {
+                'sma_20': float(sma_20.iloc[-1]),
+                'sma_50': float(sma_50.iloc[-1]),
+                'sma_200': float(sma_200_value),
+                'ema_20': float(ema_20.iloc[-1]),
+                'ema_50': float(sma_50.iloc[-1]),  # Use SMA 50 as EMA 50 fallback
+                'price_to_sma_200': float((latest_price / sma_200_value - 1)) if sma_200_value > 0 else 0.0,
+                'sma_20_to_sma_50': float((sma_20.iloc[-1] / sma_50.iloc[-1] - 1)) if sma_50.iloc[-1] > 0 else 0.0,
+                'golden_cross': False,  # Cannot determine with limited data
+                'death_cross': False,   # Cannot determine with limited data
+                'signal': 'neutral',
+                'periods_used': {
+                    'sma_20': sma_20_period,
+                    'sma_50': sma_50_period,
+                    'ema_20': ema_span
+                }
+            }
+        except Exception as e:
+            indicators['moving_averages'] = {
+                'sma_20': latest_price, 'sma_50': latest_price, 'sma_200': latest_price,
+                'ema_20': latest_price, 'ema_50': latest_price,
+                'price_to_sma_200': 0.0, 'sma_20_to_sma_50': 0.0,
+                'golden_cross': False, 'death_cross': False, 'signal': 'neutral',
+                'error': str(e)
+            }
+        
+        # === RSI (Simplified) ===
+        try:
+            if data_length >= 3:
+                rsi_period = get_adaptive_period(14, 0.3)  # At least 4 points for RSI
+                delta = data['close'].diff()
+                gain = delta.where(delta > 0, 0)
+                loss = -delta.where(delta < 0, 0)
+                
+                avg_gain = gain.rolling(window=rsi_period, min_periods=2).mean()
+                avg_loss = loss.rolling(window=rsi_period, min_periods=2).mean()
+                
+                rs = avg_gain / (avg_loss + 1e-10)  # Avoid division by zero
+                rsi = 100 - (100 / (1 + rs))
+                rsi_value = float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50.0
+            else:
+                rsi_value = 50.0  # Neutral RSI for very limited data
+            
+            indicators['rsi'] = {
+                'rsi_14': rsi_value,
+                'trend': 'neutral',
+                'status': 'neutral',
+                'signal': 'neutral'
+            }
+        except Exception:
+            indicators['rsi'] = {'rsi_14': 50.0, 'trend': 'neutral', 'status': 'neutral', 'signal': 'neutral'}
+        
+        # === VOLUME ANALYSIS (Simplified) ===
+        try:
+            if 'volume' in data.columns and data_length >= 2:
+                current_volume = data['volume'].iloc[-1]
+                avg_volume = data['volume'].mean()
+                volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
+                
+                indicators['volume'] = {
+                    'volume_ratio': float(volume_ratio),
+                    'obv': float(current_volume),  # Simplified OBV
+                    'obv_trend': 'neutral',
+                    'signal': 'high_volume' if volume_ratio > 1.5 else 'low_volume' if volume_ratio < 0.5 else 'normal'
+                }
+            else:
+                indicators['volume'] = {
+                    'volume_ratio': 1.0,
+                    'obv': 0.0,
+                    'obv_trend': 'neutral',
+                    'signal': 'normal'
+                }
+        except Exception:
+            indicators['volume'] = {'volume_ratio': 1.0, 'obv': 0.0, 'obv_trend': 'neutral', 'signal': 'normal'}
+        
+        # === BASIC MACD (Simplified) ===
+        try:
+            if data_length >= 5:
+                fast_period = get_adaptive_period(12, 0.4)
+                slow_period = get_adaptive_period(26, 0.3)
+                
+                fast_ema = data['close'].ewm(span=fast_period, min_periods=1).mean()
+                slow_ema = data['close'].ewm(span=slow_period, min_periods=1).mean()
+                macd_line = fast_ema - slow_ema
+                signal_line = macd_line.ewm(span=3, min_periods=1).mean()  # Shorter signal period
+                histogram = macd_line - signal_line
+                
+                indicators['macd'] = {
+                    'macd_line': float(macd_line.iloc[-1]),
+                    'signal_line': float(signal_line.iloc[-1]),
+                    'histogram': float(histogram.iloc[-1]),
+                    'signal': 'bullish' if macd_line.iloc[-1] > signal_line.iloc[-1] else 'bearish'
+                }
+            else:
+                indicators['macd'] = {
+                    'macd_line': 0.0, 'signal_line': 0.0, 'histogram': 0.0, 'signal': 'neutral'
+                }
+        except Exception:
+            indicators['macd'] = {'macd_line': 0.0, 'signal_line': 0.0, 'histogram': 0.0, 'signal': 'neutral'}
+        
+        # === BOLLINGER BANDS (Simplified) ===
+        try:
+            if data_length >= 3:
+                bb_period = get_adaptive_period(20, 0.3)
+                sma = data['close'].rolling(window=bb_period, min_periods=2).mean()
+                std = data['close'].rolling(window=bb_period, min_periods=2).std()
+                
+                upper_band = sma + (std * 2)
+                lower_band = sma - (std * 2)
+                
+                indicators['bollinger_bands'] = {
+                    'upper_band': float(upper_band.iloc[-1]) if not pd.isna(upper_band.iloc[-1]) else latest_price * 1.1,
+                    'middle_band': float(sma.iloc[-1]) if not pd.isna(sma.iloc[-1]) else latest_price,
+                    'lower_band': float(lower_band.iloc[-1]) if not pd.isna(lower_band.iloc[-1]) else latest_price * 0.9,
+                    'percent_b': 0.5,  # Neutral position
+                    'bandwidth': 0.1,  # Default bandwidth
+                    'signal': 'neutral'
+                }
+            else:
+                indicators['bollinger_bands'] = {
+                    'upper_band': latest_price * 1.05, 'middle_band': latest_price, 'lower_band': latest_price * 0.95,
+                    'percent_b': 0.5, 'bandwidth': 0.05, 'signal': 'neutral'
+                }
+        except Exception:
+            indicators['bollinger_bands'] = {
+                'upper_band': latest_price * 1.05, 'middle_band': latest_price, 'lower_band': latest_price * 0.95,
+                'percent_b': 0.5, 'bandwidth': 0.05, 'signal': 'neutral'
+            }
+        
+        # === DATA QUALITY METADATA ===
+        reliability = 'low' if data_length < 10 else 'moderate' if data_length < 20 else 'high'
+        
+        indicators['data_quality'] = {
+            'sufficient_data': data_length >= 20,
+            'data_points': data_length,
+            'minimum_recommended': 30,
+            'reliability': reliability,
+            'analysis_type': 'minimal_indicators',
+            'limitations': [
+                'Limited historical data may affect indicator accuracy',
+                'Some complex indicators are simplified or unavailable',
+                'Trend analysis is limited with insufficient data points'
+            ] if data_length < 20 else [],
+            'recommendations': [
+                'Use results as rough guidance only',
+                'Consider longer time periods for more reliable analysis',
+                'Focus on price action rather than technical indicators'
+            ] if data_length < 10 else []
+        }
+        
+        # === BASIC TREND ANALYSIS ===
+        try:
+            if data_length >= 3:
+                recent_trend = 'up' if data['close'].iloc[-1] > data['close'].iloc[-3] else 'down'
+            else:
+                recent_trend = 'neutral'
+            
+            indicators['trend_data'] = {
+                'direction': recent_trend,
+                'strength': 'weak',  # Always weak with limited data
+                'confidence': 'low'
+            }
+        except Exception:
+            indicators['trend_data'] = {'direction': 'neutral', 'strength': 'weak', 'confidence': 'low'}
+        
+        # Add basic placeholders for other expected indicators
+        indicators.update({
+            'adx': {'adx': None, 'trend_direction': 'neutral', 'trend_strength': 'weak'},
+            'volatility': {'atr': None, 'volatility_regime': 'normal'},
+            'enhanced_volume': {'vwap': latest_price, 'mfi': 50.0},
+            'enhanced_momentum': {'stochastic_k': 50.0, 'williams_r': -50.0},
+            'trend_strength': {'overall_strength': 'weak'},
+            'enhanced_levels': {'dynamic_support': [], 'dynamic_resistance': []}
+        })
+        
+        return indicators
+
+    @staticmethod
     def calculate_all_indicators_optimized(data: pd.DataFrame, stock_symbol: str = None, prefetch: Dict[str, pd.DataFrame] | None = None) -> Dict[str, Any]:
         """
         Calculate all technical indicators with optimized data reduction (95-98% reduction in historical data).
+        Handles insufficient data gracefully by falling back to minimal indicators.
         
         Args:
             data: DataFrame containing price and volume data
             stock_symbol: Stock symbol for sector classification
+            prefetch: Pre-fetched data to avoid duplicate API calls
             
         Returns:
             Dict[str, Any]: Dictionary containing all calculated indicators with reduced historical data
         """
+        # Check for insufficient data and route to minimal indicators
+        if len(data) < 20:
+            print(f"[INDICATORS] Using minimal indicators for {stock_symbol}: {len(data)} data points < 20 (recommended: 30+)")
+            minimal_indicators = TechnicalIndicators.calculate_minimal_indicators(data, stock_symbol)
+            # Add a flag to indicate this is using minimal calculation
+            minimal_indicators['calculation_type'] = 'minimal_due_to_insufficient_data'
+            minimal_indicators['full_analysis_available'] = False
+            return minimal_indicators
+        
+        print(f"[INDICATORS] Using optimized full indicators for {stock_symbol}: {len(data)} data points")
+        
         indicators = {}
+        indicators['calculation_type'] = 'optimized_full_analysis'
+        indicators['full_analysis_available'] = True
         
         # Calculate Moving Averages (only current values)
         sma_20 = TechnicalIndicators.calculate_sma(data, 'close', 20)
@@ -2501,6 +2743,25 @@ class TechnicalIndicators:
         scenario_analysis = TechnicalIndicators.calculate_scenario_analysis_metrics(data)
         indicators['stress_testing'] = stress_testing
         indicators['scenario_analysis'] = scenario_analysis
+        
+        # Add data quality metadata for full analysis
+        data_length = len(data)
+        indicators['data_quality'] = {
+            'sufficient_data': data_length >= 20,
+            'data_points': data_length,
+            'minimum_recommended': 30,
+            'reliability': 'high' if data_length >= 50 else 'moderate' if data_length >= 30 else 'acceptable',
+            'analysis_type': 'optimized_full_analysis',
+            'limitations': [] if data_length >= 30 else [
+                'Some indicators may be less reliable with limited data',
+                'Consider longer time periods for more stable analysis'
+            ],
+            'recommendations': [] if data_length >= 50 else [
+                'Results are reliable but may improve with more historical data'
+            ] if data_length >= 30 else [
+                'Use results with caution due to limited historical data'
+            ]
+        }
         
         return indicators
 

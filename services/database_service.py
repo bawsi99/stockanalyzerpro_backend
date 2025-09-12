@@ -625,10 +625,10 @@ async def root():
 # Self-ping function to keep the service alive
 @aiocron.crontab(os.getenv("DATABASE_SERVICE_PING_CRON", "*/5 * * * *")) # Default every 5 minutes
 async def self_ping():
-    service_url = os.getenv("DATABASE_SERVICE_URL", "http://localhost") # Default to localhost
-    port = int(os.getenv("DATABASE_PORT", 8003)) # Get port from env var
-    host = os.getenv("SERVICE_HOST", "0.0.0.0") # Get host from env var
-    full_url = f"{service_url.replace('localhost', host)}:{port}/health"
+    # Build URL deterministically to avoid duplicate ports (e.g., http://0.0.0.0:8003:8003)
+    port = int(os.getenv("DATABASE_PORT", 8003))
+    host = os.getenv("SERVICE_HOST", "0.0.0.0")
+    full_url = f"http://{host}:{port}/health"
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(full_url, timeout=5.0)
