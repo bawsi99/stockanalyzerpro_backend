@@ -7,17 +7,90 @@ import sys
 from pathlib import Path
 import logging
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Union, Optional, List
 import pandas as pd
 
 # Add the backend directory to Python path
 backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 
-from ml.indicators.volume_profile import calculate_volume_profile, identify_significant_levels
-from ml.analysis.market_regime import detect_market_regime
+# Safe imports with fallbacks
+try:
+    from ml.indicators.volume_profile import calculate_volume_profile, identify_significant_levels
+    VOLUME_PROFILE_AVAILABLE = True
+except ImportError as e:
+    logger = logging.getLogger(__name__)
+    logger.warning(f"Volume profile module not available: {e}")
+    VOLUME_PROFILE_AVAILABLE = False
+    
+    def calculate_volume_profile(data):
+        return {}
+    
+    def identify_significant_levels(vp, price):
+        return [], []
+
+try:
+    from ml.analysis.market_regime import detect_market_regime
+    MARKET_REGIME_AVAILABLE = True
+except ImportError as e:
+    logger = logging.getLogger(__name__)
+    logger.warning(f"Market regime module not available: {e}")
+    MARKET_REGIME_AVAILABLE = False
+    
+    def detect_market_regime(data):
+        return "unknown"
 
 logger = logging.getLogger(__name__)
+
+def _calculate_risk_level(confidence_pct: float) -> str:
+    """Calculate risk level based on confidence percentage."""
+    confidence = float(confidence_pct or 0)
+    if confidence >= 80:
+        return 'Low'
+    elif confidence >= 60:
+        return 'Medium'
+    elif confidence >= 40:
+        return 'High'
+    else:
+        return 'Very High'
+
+def _calculate_recommendation(confidence_pct: float, trend: str) -> str:
+    """Calculate recommendation based on confidence and trend."""
+    confidence = float(confidence_pct or 0)
+    trend = trend or 'Unknown'
+    
+    if confidence >= 80 and trend == 'Bullish':
+        return 'Strong Buy'
+    elif confidence >= 80 and trend == 'Bearish':
+        return 'Strong Sell'
+    elif confidence >= 60 and trend == 'Bullish':
+        return 'Buy'
+    elif confidence >= 60 and trend == 'Bearish':
+        return 'Sell'
+    elif confidence >= 60:
+        return 'Hold'
+    elif confidence >= 40:
+        return 'Wait and Watch'
+    else:
+        return 'Avoid Trading'
+
+def _safe_data_access(data: pd.DataFrame, column: str, index: int, default: float = 0.0) -> float:
+    """Safely access DataFrame data with bounds checking."""
+    try:
+        if data is None or data.empty or len(data) <= abs(index) or column not in data.columns:
+            return default
+        return float(data[column].iloc[index])
+    except (IndexError, KeyError, ValueError, TypeError):
+        return default
+
+def _safe_divide(numerator: float, denominator: float, default: float = 0.0) -> float:
+    """Safely divide two numbers, returning default if denominator is zero."""
+    try:
+        if denominator == 0:
+            return default
+        return float(numerator / denominator)
+    except (ValueError, TypeError, ZeroDivisionError):
+        return default
 
 class FrontendResponseBuilder:
     """Builds the exact response structure that the frontend expects."""
@@ -26,22 +99,32 @@ class FrontendResponseBuilder:
     def build_frontend_response(symbol: str, exchange: str, data: pd.DataFrame, 
                               indicators: dict, ai_analysis: dict, indicator_summary: str, 
                               chart_insights: str, chart_paths: dict, sector_context: dict, 
-                              mtf_context: dict, advanced_analysis: dict, ml_predictions: dict | None, period: int, interval: str) -> dict:
+                              mtf_context: dict, advanced_analysis: dict, ml_predictions: Optional[dict], period: int, interval: str) -> dict:
         """
         Build the exact response structure that the frontend expects.
         """
         try:
-            # Normalize/guard input data
-            from core.utils import ensure_ohlcv_dataframe, interval_to_frontend_display
+            # Validate inputs
+            if data is None or not isinstance(data, pd.DataFrame):
+                raise ValueError("Invalid data provided")
+            
+            # Normalize/guard input data with safe imports
             try:
+                from core.utils import ensure_ohlcv_dataframe, interval_to_frontend_display
                 data = ensure_ohlcv_dataframe(data)
-            except Exception:
-                pass
+            except ImportError as e:
+                logger.warning(f"Core utils not available, using data as-is: {e}")
+                def interval_to_frontend_display(interval):
+                    return interval
+            except Exception as e:
+                logger.warning(f"Data normalization failed: {e}")
 
-            # Get latest price and basic info
-            latest_price = data['close'].iloc[-1] if not data.empty else 0
-            price_change = data['close'].iloc[-1] - data['close'].iloc[-2] if len(data) > 1 else 0
-            price_change_pct = (price_change / data['close'].iloc[-2]) * 100 if len(data) > 1 and data['close'].iloc[-2] != 0 else 0
+            # Get latest price and basic info with safe access
+            latest_price = _safe_data_access(data, 'close', -1, 0.0)
+            previous_price = _safe_data_access(data, 'close', -2, latest_price)
+            
+            price_change = latest_price - previous_price
+            price_change_pct = _safe_divide((price_change * 100), previous_price, 0.0)
             
             # Convert interval format for frontend display
             frontend_interval = interval_to_frontend_display(interval)
@@ -100,26 +183,17 @@ class FrontendResponseBuilder:
                         interval=interval,
                         latest_price=latest_price,
                     ),
-                    # Derive risk level and recommendation from AI analysis to match legacy behavior
-                    # Compute values once and reuse to avoid duplication
-                    "risk_level": (computed_risk_level := (lambda conf: (
-                        'Low' if conf >= 80 else 'Medium' if conf >= 60 else 'High' if conf >= 40 else 'Very High'
-                    ))(float(ai_analysis.get('confidence_pct', 0) or 0))),
-                    "recommendation": (computed_recommendation := (lambda conf, trend: (
-                        'Strong Buy' if conf >= 80 and trend == 'Bullish' else
-                        'Strong Sell' if conf >= 80 and trend == 'Bearish' else
-                        'Buy' if conf >= 60 and trend == 'Bullish' else
-                        'Sell' if conf >= 60 and trend == 'Bearish' else
-                        'Hold' if conf >= 60 else 'Wait and Watch' if conf >= 40 else 'Avoid Trading'
-                    ))(float(ai_analysis.get('confidence_pct', 0) or 0), ai_analysis.get('trend', 'Unknown'))),
+                    # Derive risk level and recommendation from AI analysis using helper functions
+                    "risk_level": _calculate_risk_level(ai_analysis.get('confidence_pct', 0)),
+                    "recommendation": _calculate_recommendation(ai_analysis.get('confidence_pct', 0), ai_analysis.get('trend', 'Unknown')),
                     "indicator_summary": indicator_summary,
                     "chart_insights": chart_insights,
                     "consensus": FrontendResponseBuilder._build_consensus(ai_analysis, indicators, data, mtf_context),
                     "summary": {
                         "overall_signal": ai_analysis.get('trend', 'Unknown'),
                         "confidence": ai_analysis.get('confidence_pct', 0),
-                        "risk_level": computed_risk_level,
-                        "recommendation": computed_recommendation
+                        "risk_level": _calculate_risk_level(ai_analysis.get('confidence_pct', 0)),
+                        "recommendation": _calculate_recommendation(ai_analysis.get('confidence_pct', 0), ai_analysis.get('trend', 'Unknown'))
                     },
                     "support_levels": FrontendResponseBuilder._extract_support_levels(data, indicators, latest_price),
                     "resistance_levels": FrontendResponseBuilder._extract_resistance_levels(data, indicators, latest_price),
@@ -130,21 +204,31 @@ class FrontendResponseBuilder:
                 }
             }
             # Augment with market regime and volume-based S/R (safe fallbacks)
-            try:
-                market_regime = detect_market_regime(data)
-            except Exception as _e:
-                logger.warning(f"market_regime detection failed: {_e}")
+            if MARKET_REGIME_AVAILABLE:
+                try:
+                    market_regime = detect_market_regime(data)
+                except Exception as e:
+                    logger.warning(f"Market regime detection failed: {e}")
+                    market_regime = "unknown"
+            else:
                 market_regime = "unknown"
 
-            try:
-                vp = calculate_volume_profile(data)
-                support_levels, resistance_levels = identify_significant_levels(vp, latest_price)
-                volume_profile_analysis = {
-                    "support": [{"price": float(p), "strength": "high"} for p in (support_levels[:3] if support_levels else [])],
-                    "resistance": [{"price": float(p), "strength": "high"} for p in (resistance_levels[:3] if resistance_levels else [])],
-                }
-            except Exception as _e:
-                logger.warning(f"volume_profile analysis failed: {_e}")
+            if VOLUME_PROFILE_AVAILABLE and not data.empty:
+                try:
+                    vp = calculate_volume_profile(data)
+                    support_levels, resistance_levels = identify_significant_levels(vp, latest_price)
+                    # Validate levels before processing
+                    valid_support = [float(p) for p in (support_levels[:3] if support_levels and isinstance(support_levels, (list, tuple)) else []) if p is not None and not pd.isna(p)]
+                    valid_resistance = [float(p) for p in (resistance_levels[:3] if resistance_levels and isinstance(resistance_levels, (list, tuple)) else []) if p is not None and not pd.isna(p)]
+                    
+                    volume_profile_analysis = {
+                        "support": [{"price": p, "strength": "high"} for p in valid_support],
+                        "resistance": [{"price": p, "strength": "high"} for p in valid_resistance],
+                    }
+                except Exception as e:
+                    logger.warning(f"Volume profile analysis failed: {e}")
+                    volume_profile_analysis = {"support": [], "resistance": []}
+            else:
                 volume_profile_analysis = {"support": [], "resistance": []}
 
             result["results"]["market_regime"] = market_regime
@@ -163,7 +247,7 @@ class FrontendResponseBuilder:
             }
 
     @staticmethod
-    def _extract_signals(ai_analysis: dict, indicators: dict, interval: str = "day", mtf_context: dict | None = None, data: pd.DataFrame = None) -> dict:
+    def _extract_signals(ai_analysis: dict, indicators: dict, interval: str = "day", mtf_context: Optional[dict] = None, data: Optional[pd.DataFrame] = None) -> dict:
         """Extract or compute deterministic signals for the frontend.
 
         Priority:
@@ -174,21 +258,40 @@ class FrontendResponseBuilder:
         # 1) Pass-through from ai_analysis if available
         try:
             if isinstance(ai_analysis, dict) and ai_analysis.get("signals"):
-                return ai_analysis["signals"]
-        except Exception:
-            pass
+                signals = ai_analysis["signals"]
+                if isinstance(signals, dict):
+                    return signals
+                else:
+                    logger.warning(f"Invalid signals format in ai_analysis: {type(signals)}")
+        except Exception as e:
+            logger.warning(f"Error accessing ai_analysis signals: {e}")
 
         # 2) Pass-through from indicators if embedded
         try:
             if isinstance(indicators, dict) and indicators.get("signals"):
-                return indicators["signals"]
-        except Exception:
-            pass
+                signals = indicators["signals"]
+                if isinstance(signals, dict):
+                    return signals
+                else:
+                    logger.warning(f"Invalid signals format in indicators: {type(signals)}")
+        except Exception as e:
+            logger.warning(f"Error accessing indicators signals: {e}")
 
         # 3) Compute from indicators and/or MTF context
         try:
             # Lazy import to avoid heavy import-time costs or circular deps
-            from data.signals.scoring import compute_signals_summary
+            try:
+                from data.signals.scoring import compute_signals_summary
+            except ImportError as e:
+                logger.warning(f"Signals scoring module not available: {e}")
+                # Return neutral fallback
+                return {
+                    "consensus_score": 0.0,
+                    "consensus_bias": "neutral",
+                    "confidence": 0.3,
+                    "per_timeframe": [],
+                    "regime": {"trend": "unknown", "volatility": "normal"}
+                }
 
             # If multi-timeframe indicators are present in ai_analysis, prefer them
             per_timeframe_indicators = {}
@@ -214,15 +317,16 @@ class FrontendResponseBuilder:
                             indicators_min['rsi'] = {'rsi_14': float(rsi_val)}
                         # Map macd_signal -> synthetic macd_line/signal_line
                         macd_sig = (summary.get('key_indicators') or {}).get('macd_signal')
-                        if isinstance(macd_sig, str):
-                            if macd_sig.lower() == 'bullish':
+                        if isinstance(macd_sig, str) and macd_sig.strip():
+                            macd_lower = macd_sig.lower().strip()
+                            if macd_lower == 'bullish':
                                 indicators_min['macd_line'] = 1.0
                                 indicators_min['signal_line'] = 0.0
-                            elif macd_sig.lower() == 'bearish':
+                            elif macd_lower == 'bearish':
                                 indicators_min['macd_line'] = -1.0
                                 indicators_min['signal_line'] = 0.0
                             else:
-                                # neutral
+                                # neutral or unknown
                                 indicators_min['macd_line'] = 0.0
                                 indicators_min['signal_line'] = 0.0
                             indicators_min['macd'] = {
@@ -231,23 +335,26 @@ class FrontendResponseBuilder:
                             }
                         # Map volume_status -> synthetic volume_ratio
                         vol_status = (summary.get('key_indicators') or {}).get('volume_status')
-                        if isinstance(vol_status, str):
+                        if isinstance(vol_status, str) and vol_status.strip():
+                            vol_lower = vol_status.lower().strip()
                             ratio = 1.0
-                            if vol_status == 'high':
+                            if vol_lower == 'high':
                                 ratio = 1.6
-                            elif vol_status == 'low':
+                            elif vol_lower == 'low':
                                 ratio = 0.4
                             indicators_min['volume_ratio'] = ratio
                             indicators_min['volume'] = {'volume_ratio': ratio}
                         # Map trend -> supertrend.direction to inject timeframe-specific bias
                         trend = summary.get('trend')
-                        if isinstance(trend, str) and trend in ('bullish', 'bearish', 'neutral'):
-                            if trend == 'bullish':
-                                indicators_min['supertrend'] = {'direction': 'up'}
-                            elif trend == 'bearish':
-                                indicators_min['supertrend'] = {'direction': 'down'}
-                            else:
-                                indicators_min['supertrend'] = {'direction': 'neutral'}
+                        if isinstance(trend, str) and trend.strip():
+                            trend_lower = trend.lower().strip()
+                            if trend_lower in ('bullish', 'bearish', 'neutral'):
+                                if trend_lower == 'bullish':
+                                    indicators_min['supertrend'] = {'direction': 'up'}
+                                elif trend_lower == 'bearish':
+                                    indicators_min['supertrend'] = {'direction': 'down'}
+                                else:
+                                    indicators_min['supertrend'] = {'direction': 'neutral'}
                         # Use MTF confidence to shape ADX strength
                         try:
                             tf_conf = float(summary.get('confidence')) if summary.get('confidence') is not None else 0.5
@@ -833,11 +940,25 @@ class FrontendResponseBuilder:
                 }
 
             # Import the orchestrator to use its pattern recognition
-            from analysis.orchestrator import StockAnalysisOrchestrator
-            from ml.bayesian_scorer import BayesianPatternScorer
+            try:
+                from analysis.orchestrator import StockAnalysisOrchestrator
+                ORCHESTRATOR_AVAILABLE = True
+            except ImportError as e:
+                logger.warning(f"Analysis orchestrator not available: {e}")
+                ORCHESTRATOR_AVAILABLE = False
+                
+            try:
+                from ml.bayesian_scorer import BayesianPatternScorer
+                BAYESIAN_SCORER_AVAILABLE = True
+            except ImportError as e:
+                logger.warning(f"Bayesian scorer not available: {e}")
+                BAYESIAN_SCORER_AVAILABLE = False
             
-            # Create orchestrator instance
-            orchestrator = StockAnalysisOrchestrator()
+            # Create orchestrator instance if available
+            if ORCHESTRATOR_AVAILABLE:
+                orchestrator = StockAnalysisOrchestrator()
+            else:
+                orchestrator = None
             
             # Generate overlays directly without recalculating all indicators to
             # avoid unnecessary heavy computations and potential upstream errors
@@ -851,7 +972,11 @@ class FrontendResponseBuilder:
                     from services.central_data_provider import CentralDataProvider
                     central_data_provider = CentralDataProvider()
                     cached_patterns = central_data_provider.get_patterns(symbol=symbol, exchange=exchange, interval=interval, data=data)
-                except Exception:
+                except ImportError as e:
+                    logger.warning(f"Central data provider not available: {e}")
+                    cached_patterns = None
+                except Exception as e:
+                    logger.warning(f"Error getting cached patterns: {e}")
                     cached_patterns = None
 
             if isinstance(cached_patterns, dict) and cached_patterns:
@@ -866,7 +991,20 @@ class FrontendResponseBuilder:
                     "advanced_patterns": cached_patterns.get("advanced_patterns", {}),
                 }
             else:
-                overlays = orchestrator._create_overlays(data, {})
+                if orchestrator is not None:
+                    overlays = orchestrator._create_overlays(data, {})
+                else:
+                    # Fallback when orchestrator is not available
+                    overlays = {
+                        "triangles": [],
+                        "flags": [],
+                        "support_resistance": {"support": [], "resistance": []},
+                        "double_tops": [],
+                        "double_bottoms": [],
+                        "divergences": [],
+                        "volume_anomalies": [],
+                        "advanced_patterns": {},
+                    }
 
             # Prefer orchestrator-detected advanced patterns; merge in any external ones (from advanced_analysis)
             backend_adv = overlays.get("advanced_patterns", {}) or {}
@@ -918,19 +1056,31 @@ class FrontendResponseBuilder:
 
             # Normalize, de-duplicate and limit advanced patterns to keep UI clean
             # Use ML-powered CatBoost predictor for modern pattern analysis
-            from ml.inference import predict_probability, get_model_version, get_pattern_prediction_breakdown
+            try:
+                from ml.inference import predict_probability, get_model_version, get_pattern_prediction_breakdown
+                ML_INFERENCE_AVAILABLE = True
+            except ImportError as e:
+                logger.warning(f"ML inference modules not available: {e}")
+                ML_INFERENCE_AVAILABLE = False
+                
+                def predict_probability(features, pattern_type):
+                    return 0.5
+                    
+                def get_model_version():
+                    return "1.0.0"
+                    
+                def get_pattern_prediction_breakdown(features, pattern_type):
+                    return {'model_version': '1.0.0', 'confidence': 0.5}
 
             def _score_of(p: dict) -> float:
                 # ML-powered probability estimate using unified ML system
                 try:
-                    pattern_type = (
-                        str(p.get('pattern_type', ''))  # Use empty string instead of None
-                        or str(p.get('type', ''))  # Use empty string instead of None
-                        or "unknown"
-                    )
-                    # Ensure we don't have "None" as a string
-                    if pattern_type == "None" or pattern_type == "null":
+                    # Safely extract pattern type
+                    pattern_type = p.get('pattern_type') or p.get('type')
+                    if pattern_type is None or pattern_type == "None" or pattern_type == "null" or not str(pattern_type).strip():
                         pattern_type = "unknown"
+                    else:
+                        pattern_type = str(pattern_type).strip()
                         
                     features = {
                         'duration': float(p.get('duration') or p.get('length') or 0.0),
@@ -1180,7 +1330,29 @@ class FrontendResponseBuilder:
         compute_signals_summary. Avoid duplicating per-indicator logic.
         """
         try:
-            from data.signals.scoring import compute_signals_summary
+            try:
+                from data.signals.scoring import compute_signals_summary
+            except ImportError as e:
+                logger.warning(f"Signals scoring module not available for consensus: {e}")
+                # Return default consensus without computation
+                return {
+                    "overall_signal": "Neutral",
+                    "signal_strength": "Weak",
+                    "bullish_percentage": 33.33,
+                    "bearish_percentage": 33.33,
+                    "neutral_percentage": 33.34,
+                    "bullish_score": 33.33,
+                    "bearish_score": 33.33,
+                    "neutral_score": 33.34,
+                    "total_weight": 3,
+                    "confidence": 50.0,
+                    "signal_details": [],
+                    "data_quality_flags": ["Module not available"],
+                    "warnings": [f"Signals scoring module not available: {str(e)}"],
+                    "bullish_count": 1,
+                    "bearish_count": 1,
+                    "neutral_count": 1
+                }
             per_timeframe_indicators: dict[str, dict] = {}
             
             # Prefer MTF indicators if present in ai_analysis
@@ -1203,15 +1375,19 @@ class FrontendResponseBuilder:
                         if rsi_val is not None:
                             indicators_min['rsi'] = {'rsi_14': float(rsi_val)}
                         macd_sig = ki.get('macd_signal')
-                        if isinstance(macd_sig, str):
-                            indicators_min['macd'] = {'macd_line': 1.0 if macd_sig.lower()== 'bullish' else -1.0 if macd_sig.lower()=='bearish' else 0.0,
-                                                      'signal_line': 0.0}
+                        if isinstance(macd_sig, str) and macd_sig.strip():
+                            macd_lower = macd_sig.lower().strip()
+                            macd_line_value = 1.0 if macd_lower == 'bullish' else -1.0 if macd_lower == 'bearish' else 0.0
+                            indicators_min['macd'] = {'macd_line': macd_line_value, 'signal_line': 0.0}
                         trend = summary.get('trend')
-                        if isinstance(trend, str):
-                            indicators_min['supertrend'] = {'direction': 'up' if trend=='bullish' else 'down' if trend=='bearish' else 'neutral'}
+                        if isinstance(trend, str) and trend.strip():
+                            trend_lower = trend.lower().strip()
+                            direction = 'up' if trend_lower == 'bullish' else 'down' if trend_lower == 'bearish' else 'neutral'
+                            indicators_min['supertrend'] = {'direction': direction}
                         vol_status = ki.get('volume_status')
-                        if isinstance(vol_status, str):
-                            ratio = 1.6 if vol_status=='high' else 0.4 if vol_status=='low' else 1.0
+                        if isinstance(vol_status, str) and vol_status.strip():
+                            vol_lower = vol_status.lower().strip()
+                            ratio = 1.6 if vol_lower == 'high' else 0.4 if vol_lower == 'low' else 1.0
                             indicators_min['volume'] = {'volume_ratio': float(ratio)}
                         try:
                             tf_conf = float(summary.get('confidence')) if summary.get('confidence') is not None else 0.5
