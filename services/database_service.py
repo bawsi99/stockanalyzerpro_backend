@@ -645,4 +645,4 @@ if __name__ == "__main__":
     host = os.getenv("SERVICE_HOST", "0.0.0.0")
     
     print(f"🚀 Starting Database Service on {host}:{port}")
-    uvicorn.run(app, host=host, port=port, reload=True)
+    uvicorn.run(app, host=host, port=port)
