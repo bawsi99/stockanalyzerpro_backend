@@ -866,20 +866,29 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 (sector_benchmarking or {}).get('sector_info', {}).get('sector') if isinstance(sector_benchmarking, dict) else None
             ) or ''
 
-            # Create sector context with only necessary data
-            # Extract only the essential information from sector_benchmarking to reduce memory usage
+            # Create sector context with necessary data
+            # Extract the essential information from sector_benchmarking while preserving performance metrics
             essential_benchmarking = {}
             if isinstance(sector_benchmarking, dict):
-                # Extract only key metrics and summary data
+                # Extract ALL the key components that frontend needs
                 if 'sector_info' in sector_benchmarking:
                     essential_benchmarking['sector_info'] = sector_benchmarking['sector_info']
-                if 'performance_metrics' in sector_benchmarking:
-                    essential_benchmarking['performance_metrics'] = sector_benchmarking['performance_metrics']
-                if 'summary' in sector_benchmarking:
-                    essential_benchmarking['summary'] = sector_benchmarking['summary']
+                if 'market_benchmarking' in sector_benchmarking:
+                    essential_benchmarking['market_benchmarking'] = sector_benchmarking['market_benchmarking']
+                if 'sector_benchmarking' in sector_benchmarking:
+                    essential_benchmarking['sector_benchmarking'] = sector_benchmarking['sector_benchmarking']
+                if 'relative_performance' in sector_benchmarking:
+                    essential_benchmarking['relative_performance'] = sector_benchmarking['relative_performance']
+                if 'sector_risk_metrics' in sector_benchmarking:
+                    essential_benchmarking['sector_risk_metrics'] = sector_benchmarking['sector_risk_metrics']
+                if 'analysis_summary' in sector_benchmarking:
+                    essential_benchmarking['analysis_summary'] = sector_benchmarking['analysis_summary']
+                if 'timestamp' in sector_benchmarking:
+                    essential_benchmarking['timestamp'] = sector_benchmarking['timestamp']
+                if 'data_points' in sector_benchmarking:
+                    essential_benchmarking['data_points'] = sector_benchmarking['data_points']
                 
-                # Clear original large data structure
-                sector_benchmarking.clear()
+                # Don't clear the original data structure - we need it!
                 
             sector_context = {
                 'sector_benchmarking': essential_benchmarking,
