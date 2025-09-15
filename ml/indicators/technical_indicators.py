@@ -980,10 +980,16 @@ class TechnicalIndicators:
         # Psychological levels (round numbers)
         current_price = data['close'].iloc[-1]
         psychological_levels = []
-        for i in range(-5, 6):
-            level = round(current_price / 100) * 100 + (i * 100)
-            if 0 < level < current_price * 2:  # Reasonable range
-                psychological_levels.append(level)
+        
+        # Check if current_price is valid (not NaN or infinite)
+        if pd.notna(current_price) and np.isfinite(current_price) and current_price > 0:
+            for i in range(-5, 6):
+                level = round(current_price / 100) * 100 + (i * 100)
+                if 0 < level < current_price * 2:  # Reasonable range
+                    psychological_levels.append(level)
+        else:
+            # If current_price is invalid, provide default levels
+            psychological_levels = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
         
         return {
             "dynamic_support": support_levels[:3] if len(support_levels) >= 3 else support_levels,
@@ -2458,12 +2464,31 @@ class TechnicalIndicators:
         # Calculate Moving Averages (only current values)
         sma_20 = TechnicalIndicators.calculate_sma(data, 'close', 20)
         sma_50 = TechnicalIndicators.calculate_sma(data, 'close', 50)
-        sma_200 = TechnicalIndicators.calculate_sma(data, 'close', 200)
+        
+        # Only calculate SMA 200 if we have sufficient data (at least 200 points for reliability)
+        if len(data) >= 200:
+            sma_200 = TechnicalIndicators.calculate_sma(data, 'close', 200)
+            # If SMA 200 is NaN due to insufficient valid data, use fallback
+            if pd.isna(sma_200.iloc[-1]):
+                sma_200 = sma_50 if len(data) >= 50 and not pd.isna(sma_50.iloc[-1]) else pd.Series([data['close'].iloc[-1]] * len(data), index=data.index)
+        else:
+            # Use a fallback: current price or SMA 50 if available
+            if len(data) >= 50:
+                sma_200 = sma_50  # Use SMA 50 as proxy for SMA 200
+            else:
+                # Create a series with current price as fallback
+                sma_200 = pd.Series([data['close'].iloc[-1]] * len(data), index=data.index)
+        
         ema_20 = TechnicalIndicators.calculate_ema(data, 'close', 20)
         ema_50 = TechnicalIndicators.calculate_ema(data, 'close', 50)
         
         # Calculate price to MA ratios
         current_price = data['close'].iloc[-1]
+        
+        # Handle case where current_price itself is NaN
+        if pd.isna(current_price):
+            current_price = data['close'].dropna().iloc[-1] if not data['close'].dropna().empty else 100.0
+        
         # Handle division by zero or NaN for price to SMA 200
         if pd.isna(sma_200.iloc[-1]) or sma_200.iloc[-1] == 0:
             price_to_sma_200 = 0.0  # Default to neutral
@@ -2481,12 +2506,15 @@ class TechnicalIndicators:
         death_cross = sma_20.iloc[-1] < sma_50.iloc[-1] and sma_20.iloc[-2] >= sma_50.iloc[-2]
         
         # Add Moving Averages to indicators (only current values, no historical arrays)
+        # Ensure no NaN values are passed to frontend
+        sma_200_final = float(sma_200.iloc[-1]) if not pd.isna(sma_200.iloc[-1]) else current_price
+        
         indicators['moving_averages'] = {
-            'sma_20': float(sma_20.iloc[-1]),
-            'sma_50': float(sma_50.iloc[-1]),
-            'sma_200': float(sma_200.iloc[-1]),
-            'ema_20': float(ema_20.iloc[-1]),
-            'ema_50': float(ema_50.iloc[-1]),
+            'sma_20': float(sma_20.iloc[-1]) if not pd.isna(sma_20.iloc[-1]) else current_price,
+            'sma_50': float(sma_50.iloc[-1]) if not pd.isna(sma_50.iloc[-1]) else current_price,
+            'sma_200': sma_200_final,
+            'ema_20': float(ema_20.iloc[-1]) if not pd.isna(ema_20.iloc[-1]) else current_price,
+            'ema_50': float(ema_50.iloc[-1]) if not pd.isna(ema_50.iloc[-1]) else current_price,
             'price_to_sma_200': float(price_to_sma_200),
             'sma_20_to_sma_50': float(sma_20_to_sma_50),
             'golden_cross': bool(golden_cross),
