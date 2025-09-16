@@ -1,6 +1,6 @@
 {
-  "sector_code": "REALTY",
-  "display_name": "Real Estate",
+  "sector_code": "NIFTY_REALTY",
+  "display_name": "Nifty Realty",
   "indices": [
     "NIFTY REALTY"
   ],

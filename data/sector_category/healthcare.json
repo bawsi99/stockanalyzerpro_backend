@@ -1,6 +1,6 @@
 {
-  "sector_code": "HEALTHCARE",
-  "display_name": "Healthcare",
+  "sector_code": "NIFTY_HEALTHCARE",
+  "display_name": "Nifty Healthcare",
   "indices": [
     "NIFTY HEALTHCARE"
   ],

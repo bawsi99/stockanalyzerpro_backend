@@ -1,0 +1,107 @@
+{
+  "NIFTY_AUTO": {
+    "display_name": "Nifty Auto",
+    "primary_index": "NIFTY AUTO",
+    "sector_code": "NIFTY_AUTO"
+  },
+  "NIFTY_BANK": {
+    "display_name": "Nifty Bank", 
+    "primary_index": "NIFTY BANK",
+    "sector_code": "NIFTY_BANK"
+  },
+  "NIFTY_CHEMICALS": {
+    "display_name": "Nifty Chemicals",
+    "primary_index": "NIFTY CHEMICALS", 
+    "sector_code": "NIFTY_CHEMICALS"
+  },
+  "NIFTY_FINANCIAL_SERVICES": {
+    "display_name": "Nifty Financial Services",
+    "primary_index": "NIFTY FINANCIAL SERVICES",
+    "sector_code": "NIFTY_FINANCIAL_SERVICES"
+  },
+  "NIFTY_FINANCIAL_SERVICES_25_50": {
+    "display_name": "Nifty Financial Services 25/50",
+    "primary_index": "NIFTY FIN SERVICE 25/50",
+    "sector_code": "NIFTY_FINANCIAL_SERVICES_25_50"
+  },
+  "NIFTY_FINANCIAL_SERVICES_EX_BANK": {
+    "display_name": "Nifty Financial Services Ex Bank",
+    "primary_index": "NIFTY FIN SERVICE EX BANK", 
+    "sector_code": "NIFTY_FINANCIAL_SERVICES_EX_BANK"
+  },
+  "NIFTY_FMCG": {
+    "display_name": "Nifty FMCG",
+    "primary_index": "NIFTY FMCG",
+    "sector_code": "NIFTY_FMCG"
+  },
+  "NIFTY_HEALTHCARE": {
+    "display_name": "Nifty Healthcare",
+    "primary_index": "NIFTY HEALTHCARE",
+    "sector_code": "NIFTY_HEALTHCARE"
+  },
+  "NIFTY_IT": {
+    "display_name": "Nifty IT",
+    "primary_index": "NIFTY IT",
+    "sector_code": "NIFTY_IT"
+  },
+  "NIFTY_MEDIA": {
+    "display_name": "Nifty Media",
+    "primary_index": "NIFTY MEDIA",
+    "sector_code": "NIFTY_MEDIA"
+  },
+  "NIFTY_METAL": {
+    "display_name": "Nifty Metal",
+    "primary_index": "NIFTY METAL",
+    "sector_code": "NIFTY_METAL"
+  },
+  "NIFTY_PHARMA": {
+    "display_name": "Nifty Pharma",
+    "primary_index": "NIFTY PHARMA",
+    "sector_code": "NIFTY_PHARMA"
+  },
+  "NIFTY_PRIVATE_BANK": {
+    "display_name": "Nifty Private Bank",
+    "primary_index": "NIFTY PRIVATE BANK",
+    "sector_code": "NIFTY_PRIVATE_BANK"
+  },
+  "NIFTY_PSU_BANK": {
+    "display_name": "Nifty PSU Bank",
+    "primary_index": "NIFTY PSU BANK",
+    "sector_code": "NIFTY_PSU_BANK"
+  },
+  "NIFTY_REALTY": {
+    "display_name": "Nifty Realty",
+    "primary_index": "NIFTY REALTY",
+    "sector_code": "NIFTY_REALTY"
+  },
+  "NIFTY_CONSUMER_DURABLES": {
+    "display_name": "Nifty Consumer Durables",
+    "primary_index": "NIFTY CONSR DURBL",
+    "sector_code": "NIFTY_CONSUMER_DURABLES"
+  },
+  "NIFTY_OIL_AND_GAS": {
+    "display_name": "Nifty Oil and Gas",
+    "primary_index": "NIFTY OIL AND GAS",
+    "sector_code": "NIFTY_OIL_AND_GAS"
+  },
+  "NIFTY500_HEALTHCARE": {
+    "display_name": "Nifty500 Healthcare",
+    "primary_index": "NIFTY500 HEALTHCARE",
+    "sector_code": "NIFTY500_HEALTHCARE"
+  },
+  "NIFTY_MIDSMALL_FINANCIAL_SERVICES": {
+    "display_name": "Nifty MidSmall Financial Services",
+    "primary_index": "NIFTY MIDSMALL FIN SERVICES",
+    "sector_code": "NIFTY_MIDSMALL_FINANCIAL_SERVICES"
+  },
+  "NIFTY_MIDSMALL_HEALTHCARE": {
+    "display_name": "Nifty MidSmall Healthcare",
+    "primary_index": "NIFTY MIDSMALL HEALTHCARE",
+    "sector_code": "NIFTY_MIDSMALL_HEALTHCARE"
+  },
+  "NIFTY_MIDSMALL_IT_TELECOM": {
+    "display_name": "Nifty MidSmall IT & Telecom",
+    "primary_index": "NIFTY MIDSMALL IT & TELECOM",
+    "sector_code": "NIFTY_MIDSMALL_IT_TELECOM"
+  }
+}

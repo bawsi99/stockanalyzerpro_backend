@@ -1,6 +1,6 @@
 {
-  "sector_code": "METAL",
-  "display_name": "Metals & Mining",
+  "sector_code": "NIFTY_METAL",
+  "display_name": "Nifty Metal",
   "indices": [
     "NIFTY METAL"
   ],

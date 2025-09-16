@@ -1,6 +1,6 @@
 {
-  "sector_code": "MEDIA",
-  "display_name": "Media & Entertainment",
+  "sector_code": "NIFTY_MEDIA",
+  "display_name": "Nifty Media",
   "indices": [
     "NIFTY MEDIA"
   ],

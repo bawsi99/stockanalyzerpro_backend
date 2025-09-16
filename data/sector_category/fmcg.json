@@ -1,6 +1,6 @@
 {
-  "sector_code": "FMCG",
-  "display_name": "Fast Moving Consumer Goods",
+  "sector_code": "NIFTY_FMCG",
+  "display_name": "Nifty FMCG",
   "indices": [
     "NIFTY FMCG"
   ],

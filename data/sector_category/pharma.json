@@ -1,6 +1,6 @@
 {
-  "sector_code": "PHARMA",
-  "display_name": "Pharmaceuticals",
+  "sector_code": "NIFTY_PHARMA",
+  "display_name": "Nifty Pharma",
   "indices": [
     "NIFTY PHARMA"
   ],

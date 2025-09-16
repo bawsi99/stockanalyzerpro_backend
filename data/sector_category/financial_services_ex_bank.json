@@ -1,0 +1,36 @@
+{
+  "sector_code": "NIFTY_FINANCIAL_SERVICES_EX_BANK",
+  "display_name": "Nifty Financial Services Ex Bank",
+  "indices": [
+    "NIFTY FIN SERVICE EX BANK"
+  ],
+  "primary_index": "NIFTY FIN SERVICE EX BANK",
+  "stocks": [
+    "BAJFINANCE",
+    "BAJAJFINSV",
+    "HDFCAMC",
+    "SBICARD",
+    "BAJAJHLDNG",
+    "CHOLAFIN",
+    "MUTHOOTFIN",
+    "MANAPPURAM",
+    "ANGELONE",
+    "POLICYBZR",
+    "PAYTM",
+    "CDSL",
+    "LICI",
+    "SBILIFE",
+    "HDFCLIFE",
+    "ICICIPRULI",
+    "MAXLIFEINS",
+    "STARHEALTH",
+    "NYKAA",
+    "PVR",
+    "IRCTC",
+    "ZOMATO",
+    "BHARTIARTL",
+    "JSWSTEEL",
+    "TATAMOTORS"
+  ],
+  "description": "Financial services companies excluding banks - NBFCs, insurance, capital markets, and fintech (25 stocks)"
+}

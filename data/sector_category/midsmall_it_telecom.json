@@ -1,0 +1,36 @@
+{
+  "sector_code": "NIFTY_MIDSMALL_IT_TELECOM",
+  "display_name": "Nifty MidSmall IT & Telecom",
+  "indices": [
+    "NIFTY MIDSMALL IT & TELECOM"
+  ],
+  "primary_index": "NIFTY MIDSMALL IT & TELECOM",
+  "stocks": [
+    "LTTS",
+    "MINDTREE",
+    "MPHASIS",
+    "COFORGE",
+    "PERSISTENT",
+    "L&TINFOTECH",
+    "CYIENT",
+    "SONATSOFTW",
+    "RATEGAIN",
+    "NEWGEN",
+    "TATATECH",
+    "HAPPSTMNDS",
+    "LATENTVIEW",
+    "ZENSAR",
+    "KPITTECH",
+    "NIITTECH",
+    "BIRLASOFT",
+    "ONMOBILE",
+    "RAMCOCEM",
+    "SAKSOFT",
+    "RSYSTEMS",
+    "NELCAST",
+    "BHARTIARTL",
+    "VODAIDEACELL",
+    "INDUSIND"
+  ],
+  "description": "Mid and small-cap IT and telecom companies including software services, telecom infrastructure, and technology solutions (25 stocks)"
+}
