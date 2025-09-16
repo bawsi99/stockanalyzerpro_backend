@@ -44,45 +44,44 @@ class SectorBenchmarkingProvider:
         self.comprehensive_cache_duration = 7200  # OPTIMIZED: Increased from 3600 (1 hour) to 7200 (2 hours)
         self.last_comprehensive_update = None
         
-        # Sector index mappings (from technical_indicators.py)
-        self.sector_indices = {
-            'BANKING': 'NIFTY BANK',
+        # FIXED: Consolidated sector mappings - removed duplicates and added specific banking sectors
+        self.sector_tokens = {
+            # Financial Services (specific categories to avoid duplicates)
+            'BANKING': 'NIFTY BANK',                    # General banking sector
+            'PRIVATE_BANK': 'NIFTY PRIVATE BANK',       # Private banks only 
+            'PSU_BANK': 'NIFTY PSU BANK',               # Public sector banks only
+            'FINANCIAL_SERVICES': 'NIFTY FINANCIAL SERVICES',  # Broader financial services
+            
+            # Technology & Communication
             'IT': 'NIFTY IT',
-            'PHARMA': 'NIFTY PHARMA',
-            'AUTO': 'NIFTY AUTO',
-            'FMCG': 'NIFTY FMCG',
-            'ENERGY': 'NIFTY ENERGY',
-            'METAL': 'NIFTY METAL',
-            'REALTY': 'NIFTY REALTY',
-            'OIL_GAS': 'NIFTY OIL AND GAS',
-            'HEALTHCARE': 'NIFTY HEALTHCARE',
-            'CONSUMER_DURABLES': 'NIFTY CONSR DURBL',
-            'MEDIA': 'NIFTY MEDIA',
-            'INFRASTRUCTURE': 'NIFTY INFRA',
-            'CONSUMPTION': 'NIFTY CONSUMPTION',
             'TELECOM': 'NIFTY SERV SECTOR',
+            
+            # Healthcare & Pharmaceuticals  
+            'PHARMA': 'NIFTY PHARMA',
+            'HEALTHCARE': 'NIFTY HEALTHCARE',
+            
+            # Industrial & Manufacturing
+            'AUTO': 'NIFTY AUTO',
+            'METAL': 'NIFTY METAL',
+            'INFRASTRUCTURE': 'NIFTY INFRA',
+            
+            # Consumer & Retail
+            'FMCG': 'NIFTY FMCG',
+            'CONSUMER_DURABLES': 'NIFTY CONSR DURBL',
+            'CONSUMPTION': 'NIFTY CONSUMPTION',
+            
+            # Energy & Commodities
+            'ENERGY': 'NIFTY ENERGY', 
+            'OIL_GAS': 'NIFTY OIL AND GAS',
+            
+            # Other Sectors
+            'REALTY': 'NIFTY REALTY',
+            'MEDIA': 'NIFTY MEDIA',
             'TRANSPORT': 'NIFTY SERV SECTOR'
         }
         
-        # Sector tokens for data retrieval
-        self.sector_tokens = {
-            'BANKING': 'NIFTY BANK',
-            'IT': 'NIFTY IT',
-            'PHARMA': 'NIFTY PHARMA',
-            'AUTO': 'NIFTY AUTO',
-            'FMCG': 'NIFTY FMCG',
-            'ENERGY': 'NIFTY ENERGY',
-            'METAL': 'NIFTY METAL',
-            'REALTY': 'NIFTY REALTY',
-            'OIL_GAS': 'NIFTY OIL AND GAS',
-            'HEALTHCARE': 'NIFTY HEALTHCARE',
-            'CONSUMER_DURABLES': 'NIFTY CONSR DURBL',
-            'MEDIA': 'NIFTY MEDIA',
-            'INFRASTRUCTURE': 'NIFTY INFRA',
-            'CONSUMPTION': 'NIFTY CONSUMPTION',
-            'TELECOM': 'NIFTY SERV SECTOR',
-            'TRANSPORT': 'NIFTY SERV SECTOR'
-        }
+        # DEPRECATED: Keeping for backward compatibility but will be phased out
+        self.sector_indices = self.sector_tokens.copy()
         
         logging.info("SectorBenchmarkingProvider initialized with hybrid caching strategy")
     
@@ -591,28 +590,14 @@ class SectorBenchmarkingProvider:
             )
             avg_correlation = upper_triangle.stack().mean()
             
-            # Identify high and low correlation pairs
-            high_correlation_pairs = []
-            low_correlation_pairs = []
+            # ENHANCED: Categorize correlations with proper handling of negative correlations
+            correlation_pairs = self._categorize_correlations(correlation_matrix)
             
-            for i in range(len(correlation_matrix.columns)):
-                for j in range(i + 1, len(correlation_matrix.columns)):
-                    sector1 = correlation_matrix.columns[i]
-                    sector2 = correlation_matrix.columns[j]
-                    correlation = correlation_matrix.iloc[i, j]
-                    
-                    if correlation > 0.7:
-                        high_correlation_pairs.append({
-                            'sector1': sector1,
-                            'sector2': sector2,
-                            'correlation': round(correlation, 3)
-                        })
-                    elif correlation < 0.3:
-                        low_correlation_pairs.append({
-                            'sector1': sector1,
-                            'sector2': sector2,
-                            'correlation': round(correlation, 3)
-                        })
+            # Extract categorized pairs for backward compatibility and enhanced analysis
+            high_correlation_pairs = correlation_pairs['high_positive'] + correlation_pairs['high_negative']
+            low_correlation_pairs = correlation_pairs['low']
+            moderate_correlation_pairs = correlation_pairs['moderate_positive'] + correlation_pairs['moderate_negative']
+            negative_correlation_pairs = correlation_pairs['high_negative'] + correlation_pairs['moderate_negative']
             
             # Generate diversification insights
             diversification_insights = self._generate_diversification_insights(
@@ -656,10 +641,20 @@ class SectorBenchmarkingProvider:
                 'average_correlation': float(round(avg_correlation, 3)),
                 'high_correlation_pairs': high_correlation_pairs_clean,
                 'low_correlation_pairs': low_correlation_pairs_clean,
+                # ENHANCED: New correlation categories
+                'moderate_correlation_pairs': convert_numpy_types(moderate_correlation_pairs),
+                'negative_correlation_pairs': convert_numpy_types(negative_correlation_pairs),
+                'correlation_breakdown': {
+                    'high_positive': convert_numpy_types(correlation_pairs['high_positive']),
+                    'moderate_positive': convert_numpy_types(correlation_pairs['moderate_positive']),
+                    'low': convert_numpy_types(correlation_pairs['low']),
+                    'moderate_negative': convert_numpy_types(correlation_pairs['moderate_negative']),
+                    'high_negative': convert_numpy_types(correlation_pairs['high_negative'])
+                },
                 'sector_volatility': sector_volatility_clean,
                 'diversification_insights': diversification_insights_clean,
                 'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'optimization_note': 'Timeframes optimized for reduced data fetching'
+                'optimization_note': 'Enhanced correlation analysis with negative correlation support'
             }
             
         except Exception as e:
@@ -737,28 +732,14 @@ class SectorBenchmarkingProvider:
             )
             avg_correlation = upper_triangle.stack().mean()
             
-            # Identify high and low correlation pairs
-            high_correlation_pairs = []
-            low_correlation_pairs = []
+            # ENHANCED: Categorize correlations with proper handling of negative correlations
+            correlation_pairs = self._categorize_correlations(correlation_matrix)
             
-            for i in range(len(correlation_matrix.columns)):
-                for j in range(i + 1, len(correlation_matrix.columns)):
-                    sector1 = correlation_matrix.columns[i]
-                    sector2 = correlation_matrix.columns[j]
-                    correlation = correlation_matrix.iloc[i, j]
-                    
-                    if correlation > 0.7:
-                        high_correlation_pairs.append({
-                            'sector1': sector1,
-                            'sector2': sector2,
-                            'correlation': round(correlation, 3)
-                        })
-                    elif correlation < 0.3:
-                        low_correlation_pairs.append({
-                            'sector1': sector1,
-                            'sector2': sector2,
-                            'correlation': round(correlation, 3)
-                        })
+            # Extract categorized pairs for backward compatibility and enhanced analysis
+            high_correlation_pairs = correlation_pairs['high_positive'] + correlation_pairs['high_negative']
+            low_correlation_pairs = correlation_pairs['low']
+            moderate_correlation_pairs = correlation_pairs['moderate_positive'] + correlation_pairs['moderate_negative']
+            negative_correlation_pairs = correlation_pairs['high_negative'] + correlation_pairs['moderate_negative']
             
             # Generate diversification insights
             diversification_insights = self._generate_diversification_insights(
@@ -802,10 +783,20 @@ class SectorBenchmarkingProvider:
                 'average_correlation': float(round(avg_correlation, 3)),
                 'high_correlation_pairs': high_correlation_pairs_clean,
                 'low_correlation_pairs': low_correlation_pairs_clean,
+                # ENHANCED: New correlation categories
+                'moderate_correlation_pairs': convert_numpy_types(moderate_correlation_pairs),
+                'negative_correlation_pairs': convert_numpy_types(negative_correlation_pairs),
+                'correlation_breakdown': {
+                    'high_positive': convert_numpy_types(correlation_pairs['high_positive']),
+                    'moderate_positive': convert_numpy_types(correlation_pairs['moderate_positive']),
+                    'low': convert_numpy_types(correlation_pairs['low']),
+                    'moderate_negative': convert_numpy_types(correlation_pairs['moderate_negative']),
+                    'high_negative': convert_numpy_types(correlation_pairs['high_negative'])
+                },
                 'sector_volatility': sector_volatility_clean,
                 'diversification_insights': diversification_insights_clean,
                 'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'optimization_note': 'Async timeframes optimized for reduced data fetching'
+                'optimization_note': 'Async enhanced correlation analysis with negative correlation support'
             }
             
         except Exception as e:
@@ -942,72 +933,173 @@ class SectorBenchmarkingProvider:
             logging.error(f"Error generating rotation recommendations: {e}")
             return []
     
+    def _categorize_correlations(self, correlation_matrix: pd.DataFrame) -> Dict[str, List]:
+        """
+        Categorize correlations into high positive, moderate positive, low, moderate negative, and high negative.
+        
+        Args:
+            correlation_matrix: Correlation matrix dataframe
+            
+        Returns:
+            Dict containing categorized correlation pairs
+        """
+        high_positive = []
+        moderate_positive = []
+        low = []
+        moderate_negative = []
+        high_negative = []
+        
+        # Process each pair of sectors
+        for i in range(len(correlation_matrix.columns)):
+            for j in range(i + 1, len(correlation_matrix.columns)):
+                sector1 = correlation_matrix.columns[i]
+                sector2 = correlation_matrix.columns[j]
+                correlation = correlation_matrix.iloc[i, j]
+                
+                # Create common pair structure
+                pair = {
+                    'sector1': sector1,
+                    'sector2': sector2,
+                    'correlation': round(correlation, 3),
+                    'relationship': 'aligned' if correlation >= 0 else 'inverse'
+                }
+                
+                # Categorize based on absolute correlation value
+                abs_corr = abs(correlation)
+                
+                if abs_corr >= 0.5:  # IMPROVED: Lowered from 0.7 to 0.5 for high correlation
+                    if correlation >= 0:
+                        high_positive.append(pair)
+                    else:
+                        high_negative.append(pair)
+                elif abs_corr >= 0.3:  # Moderate correlation: 0.3 to 0.5
+                    if correlation >= 0:
+                        moderate_positive.append(pair)
+                    else:
+                        moderate_negative.append(pair)
+                else:  # Low correlation: < 0.3
+                    low.append(pair)
+        
+        return {
+            'high_positive': high_positive,
+            'moderate_positive': moderate_positive,
+            'low': low,
+            'moderate_negative': moderate_negative,
+            'high_negative': high_negative
+        }
+    
     def _generate_diversification_insights(self, correlation_matrix: pd.DataFrame,
                                          high_correlation_pairs: List[Dict],
                                          low_correlation_pairs: List[Dict],
                                          avg_correlation: float) -> Dict[str, Any]:
-        """Generate insights for portfolio diversification."""
+        """ENHANCED: Generate actionable diversification insights with negative correlation support."""
         try:
+            # Get enhanced correlation categorization
+            correlation_pairs = self._categorize_correlations(correlation_matrix)
+            
             insights = {
-                'diversification_quality': 'excellent',
+                'diversification_quality': 'good',
+                'diversification_score': 0,
                 'risk_reduction_opportunities': [],
                 'concentration_risks': [],
+                'hedging_opportunities': [],  # NEW: For negative correlations
                 'recommendations': []
             }
             
+            # ENHANCED: Calculate diversification score based on absolute correlations
+            abs_avg_correlation = abs(avg_correlation) if not np.isnan(avg_correlation) else 0.5
+            
             # Assess overall diversification quality
-            if avg_correlation < 0.3:
+            if abs_avg_correlation < 0.3:
                 insights['diversification_quality'] = 'excellent'
-            elif avg_correlation < 0.5:
+                insights['diversification_score'] = 90
+            elif abs_avg_correlation < 0.5:
                 insights['diversification_quality'] = 'good'
-            elif avg_correlation < 0.7:
-                insights['diversification_quality'] = 'moderate'
+                insights['diversification_score'] = 75
+            elif abs_avg_correlation < 0.7:
+                insights['diversification_quality'] = 'moderate' 
+                insights['diversification_score'] = 60
             else:
                 insights['diversification_quality'] = 'poor'
-            
-            # Identify concentration risks
-            for pair in high_correlation_pairs:
+                insights['diversification_score'] = 30
+                
+            # ENHANCED: Identify concentration risks (positive high correlations)
+            for pair in correlation_pairs['high_positive']:
+                risk_level = 'critical' if pair['correlation'] > 0.8 else 'high'
                 insights['concentration_risks'].append({
-                    'message': f"High correlation ({pair['correlation']}) between {pair['sector1']} and {pair['sector2']}",
-                    'risk_level': 'high' if pair['correlation'] > 0.8 else 'medium',
-                    'recommendation': f"Consider reducing exposure to one of these sectors"
+                    'message': f"High positive correlation ({pair['correlation']}) between {pair['sector1']} and {pair['sector2']}",
+                    'risk_level': risk_level,
+                    'relationship': 'aligned',
+                    'recommendation': f"Consider reducing exposure to one of these sectors to minimize concentration risk"
                 })
             
-            # Identify diversification opportunities
-            for pair in low_correlation_pairs:
+            # ENHANCED: Identify hedging opportunities (negative correlations)
+            for pair in correlation_pairs['high_negative']:
+                insights['hedging_opportunities'].append({
+                    'message': f"Strong negative correlation ({pair['correlation']}) between {pair['sector1']} and {pair['sector2']}",
+                    'opportunity_level': 'excellent',
+                    'relationship': 'inverse',
+                    'recommendation': f"Excellent hedging pair - when one sector declines, the other typically rises"
+                })
+            
+            for pair in correlation_pairs['moderate_negative']:
+                insights['hedging_opportunities'].append({
+                    'message': f"Moderate negative correlation ({pair['correlation']}) between {pair['sector1']} and {pair['sector2']}",
+                    'opportunity_level': 'good',
+                    'relationship': 'inverse',
+                    'recommendation': f"Good hedging potential - partial inverse relationship"
+                })
+            
+            # Identify low correlation diversification opportunities
+            for pair in correlation_pairs['low']:
                 insights['risk_reduction_opportunities'].append({
                     'message': f"Low correlation ({pair['correlation']}) between {pair['sector1']} and {pair['sector2']}",
-                    'opportunity': 'excellent' if pair['correlation'] < 0.2 else 'good',
-                    'recommendation': f"Good diversification pair for portfolio construction"
+                    'opportunity': 'excellent' if abs(pair['correlation']) < 0.2 else 'good',
+                    'relationship': 'independent',
+                    'recommendation': f"Good diversification pair - sectors move relatively independently"
                 })
             
-            # Generate overall recommendations
+            # ENHANCED: Generate comprehensive recommendations
             if insights['diversification_quality'] == 'excellent':
                 insights['recommendations'].append({
                     'type': 'positive',
-                    'message': "Excellent sector diversification - portfolio is well-balanced",
-                    'priority': 'low'
+                    'message': "Excellent sector diversification - portfolio is well-balanced across sectors",
+                    'priority': 'info'
                 })
             elif insights['diversification_quality'] == 'poor':
                 insights['recommendations'].append({
                     'type': 'warning',
-                    'message': "Poor sector diversification - consider rebalancing portfolio",
+                    'message': "Poor sector diversification - high correlation risk detected",
                     'priority': 'high'
                 })
             
-            if len(high_correlation_pairs) > 3:
+            # Concentration risk warnings
+            if len(correlation_pairs['high_positive']) > 3:
                 insights['recommendations'].append({
                     'type': 'warning',
-                    'message': f"Multiple high-correlation sector pairs detected - concentration risk",
+                    'message': f"Multiple high-correlation sector pairs detected ({len(correlation_pairs['high_positive'])}) - significant concentration risk",
+                    'priority': 'high'
+                })
+            
+            # Hedging opportunities
+            if len(correlation_pairs['high_negative']) > 0:
+                insights['recommendations'].append({
+                    'type': 'opportunity',
+                    'message': f"Found {len(correlation_pairs['high_negative'])} strong negative correlation pairs - excellent for hedging strategies",
                     'priority': 'medium'
                 })
             
-            if len(low_correlation_pairs) > 5:
+            # Diversification opportunities
+            if len(correlation_pairs['low']) > 5:
                 insights['recommendations'].append({
                     'type': 'positive',
-                    'message': f"Multiple low-correlation sector pairs available for diversification",
+                    'message': f"Multiple low-correlation pairs available ({len(correlation_pairs['low'])}) - good diversification potential",
                     'priority': 'low'
                 })
+            
+            # Adjust diversification score based on negative correlations (bonus for hedging)
+            if len(correlation_pairs['high_negative']) > 0:
+                insights['diversification_score'] = min(100, insights['diversification_score'] + len(correlation_pairs['high_negative']) * 5)
             
             return insights
             
