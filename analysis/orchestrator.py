@@ -1005,7 +1005,7 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 try:
                     # Use unified optimized comprehensive sector analysis
                     comprehensive = await self.sector_benchmarking_provider.get_optimized_comprehensive_sector_analysis(
-                        symbol, data, sector
+                        symbol, data, sector, requested_period=period
                     )
                     sector_context = comprehensive or {}
                 except Exception as e:

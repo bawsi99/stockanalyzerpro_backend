@@ -1,6 +1,6 @@
 {
-  "sector_code": "BANKING",
-  "display_name": "Banking & Financial Services",
+  "sector_code": "NIFTY_BANK",
+  "display_name": "Nifty Bank",
   "indices": [
     "NIFTY BANK"
   ],

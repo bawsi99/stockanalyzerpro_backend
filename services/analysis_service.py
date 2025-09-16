@@ -310,9 +310,9 @@ def scheduled_calibration_task() -> None:
         symbols = os.environ.get(
             "CALIB_SYMBOLS",
             "NIFTY_50,NIFTY_BANK,NIFTY_IT,NIFTY_PHARMA,NIFTY_AUTO,"
-            "NIFTY_FMCG,NIFTY_ENERGY,NIFTY_METAL,NIFTY_REALTY,NIFTY_MEDIA,"
-            "NIFTY_CONSUMER_DURABLES,NIFTY_HEALTHCARE,NIFTY_INFRA,NIFTY_OIL_GAS,"
-            "NIFTY_SERV_SECTOR"
+            "NIFTY_FMCG,NIFTY_OIL_AND_GAS,NIFTY_METAL,NIFTY_REALTY,NIFTY_MEDIA,"
+            "NIFTY_CONSUMER_DURABLES,NIFTY_HEALTHCARE,NIFTY_CHEMICALS,"
+            "NIFTY_FINANCIAL_SERVICES,NIFTY_PRIVATE_BANK,NIFTY_PSU_BANK"
         )
         
         # Write outside the watched tree to avoid reload loops
@@ -815,93 +815,100 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         # Charts are only needed for AI analysis which is already done in enhanced_analyze_stock
         chart_paths = {}
         
-        # Get sector context (auto-detect sector if not provided)
+        # Get sector context (prioritize orchestrator's result, use service as fallback)
         sector_context = None
-        try:
-            # Determine sector to use
-            detected_sector = None
+        orchestrator_sector_context = analysis_results.get('sector_context')
+        
+        if orchestrator_sector_context:
+            print(f"✅ Using orchestrator's sector context for {request.stock}")
+            sector_context = orchestrator_sector_context
+        else:
+            print(f"🔄 Orchestrator sector context not available, generating sector context for {request.stock}")
             try:
-                if not request.sector:
-                    from ml.sector.classifier import SectorClassifier as _sc
-                    detected_sector = _sc(sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category')).get_stock_sector(request.stock)
-                    # Clear module reference when done
-                    del _sc
-            except Exception:
+                # Determine sector to use
                 detected_sector = None
+                try:
+                    if not request.sector:
+                        from ml.sector.classifier import SectorClassifier as _sc
+                        detected_sector = _sc(sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category')).get_stock_sector(request.stock)
+                        # Clear module reference when done
+                        del _sc
+                except Exception:
+                    detected_sector = None
 
-            # Use sector benchmarking provider directly
-            from ml.sector.benchmarking import SectorBenchmarkingProvider
-            sector_benchmarking_provider = SectorBenchmarkingProvider()
+                # Use sector benchmarking provider directly
+                from ml.sector.benchmarking import SectorBenchmarkingProvider
+                sector_benchmarking_provider = SectorBenchmarkingProvider()
 
-            # Launch sector tasks in parallel for reduced latency
-            print(f"🔄 Starting parallel sector analysis tasks for {request.stock}")
-            benchmarking_task = sector_benchmarking_provider.get_comprehensive_benchmarking_async(
-                request.stock,
-                stock_data,
-                user_sector=request.sector
-            )
-            rotation_task = sector_benchmarking_provider.analyze_sector_rotation_async("1M")
-            correlation_task = sector_benchmarking_provider.generate_sector_correlation_matrix_async("3M")
+                # Launch sector tasks in parallel for reduced latency
+                print(f"🔄 Starting parallel sector analysis tasks for {request.stock}")
+                benchmarking_task = sector_benchmarking_provider.get_comprehensive_benchmarking_async(
+                    request.stock,
+                    stock_data,
+                    user_sector=request.sector
+                )
+                rotation_task = sector_benchmarking_provider.analyze_sector_rotation_async("1M")
+                correlation_task = sector_benchmarking_provider.generate_sector_correlation_matrix_async("3M")
 
-            sector_benchmarking, sector_rotation, sector_correlation = await asyncio.gather(
-                benchmarking_task,
-                rotation_task,
-                correlation_task,
-                return_exceptions=True,
-            )
+                sector_benchmarking, sector_rotation, sector_correlation = await asyncio.gather(
+                    benchmarking_task,
+                    rotation_task,
+                    correlation_task,
+                    return_exceptions=True,
+                )
 
-            # Robust fallback handling
-            if isinstance(sector_benchmarking, Exception):
-                print(f"Warning: sector_benchmarking failed: {sector_benchmarking}")
-                sector_benchmarking = {}
-            if isinstance(sector_rotation, Exception):
-                print(f"Warning: sector_rotation failed: {sector_rotation}")
-                sector_rotation = None
-            if isinstance(sector_correlation, Exception):
-                print(f"Warning: sector_correlation failed: {sector_correlation}")
-                sector_correlation = None
+                # Robust fallback handling
+                if isinstance(sector_benchmarking, Exception):
+                    print(f"Warning: sector_benchmarking failed: {sector_benchmarking}")
+                    sector_benchmarking = {}
+                if isinstance(sector_rotation, Exception):
+                    print(f"Warning: sector_rotation failed: {sector_rotation}")
+                    sector_rotation = None
+                if isinstance(sector_correlation, Exception):
+                    print(f"Warning: sector_correlation failed: {sector_correlation}")
+                    sector_correlation = None
 
-            # Prefer explicit request.sector, then detected, then fallback from benchmarking payload
-            sector_value = request.sector or detected_sector or (
-                (sector_benchmarking or {}).get('sector_info', {}).get('sector') if isinstance(sector_benchmarking, dict) else None
-            ) or ''
+                # Prefer explicit request.sector, then detected, then fallback from benchmarking payload
+                sector_value = request.sector or detected_sector or (
+                    (sector_benchmarking or {}).get('sector_info', {}).get('sector') if isinstance(sector_benchmarking, dict) else None
+                ) or ''
 
-            # Create sector context with necessary data
-            # Extract the essential information from sector_benchmarking while preserving performance metrics
-            essential_benchmarking = {}
-            if isinstance(sector_benchmarking, dict):
-                # Extract ALL the key components that frontend needs
-                if 'sector_info' in sector_benchmarking:
-                    essential_benchmarking['sector_info'] = sector_benchmarking['sector_info']
-                if 'market_benchmarking' in sector_benchmarking:
-                    essential_benchmarking['market_benchmarking'] = sector_benchmarking['market_benchmarking']
-                if 'sector_benchmarking' in sector_benchmarking:
-                    essential_benchmarking['sector_benchmarking'] = sector_benchmarking['sector_benchmarking']
-                if 'relative_performance' in sector_benchmarking:
-                    essential_benchmarking['relative_performance'] = sector_benchmarking['relative_performance']
-                if 'sector_risk_metrics' in sector_benchmarking:
-                    essential_benchmarking['sector_risk_metrics'] = sector_benchmarking['sector_risk_metrics']
-                if 'analysis_summary' in sector_benchmarking:
-                    essential_benchmarking['analysis_summary'] = sector_benchmarking['analysis_summary']
-                if 'timestamp' in sector_benchmarking:
-                    essential_benchmarking['timestamp'] = sector_benchmarking['timestamp']
-                if 'data_points' in sector_benchmarking:
-                    essential_benchmarking['data_points'] = sector_benchmarking['data_points']
-                
-                # Don't clear the original data structure - we need it!
-                
-            sector_context = {
-                'sector_benchmarking': essential_benchmarking,
-                'sector_rotation': sector_rotation,
-                'sector_correlation': sector_correlation,
-                'sector': sector_value
-            }
+                # Create sector context with necessary data
+                # Extract the essential information from sector_benchmarking while preserving performance metrics
+                essential_benchmarking = {}
+                if isinstance(sector_benchmarking, dict):
+                    # Extract ALL the key components that frontend needs
+                    if 'sector_info' in sector_benchmarking:
+                        essential_benchmarking['sector_info'] = sector_benchmarking['sector_info']
+                    if 'market_benchmarking' in sector_benchmarking:
+                        essential_benchmarking['market_benchmarking'] = sector_benchmarking['market_benchmarking']
+                    if 'sector_benchmarking' in sector_benchmarking:
+                        essential_benchmarking['sector_benchmarking'] = sector_benchmarking['sector_benchmarking']
+                    if 'relative_performance' in sector_benchmarking:
+                        essential_benchmarking['relative_performance'] = sector_benchmarking['relative_performance']
+                    if 'sector_risk_metrics' in sector_benchmarking:
+                        essential_benchmarking['sector_risk_metrics'] = sector_benchmarking['sector_risk_metrics']
+                    if 'analysis_summary' in sector_benchmarking:
+                        essential_benchmarking['analysis_summary'] = sector_benchmarking['analysis_summary']
+                    if 'timestamp' in sector_benchmarking:
+                        essential_benchmarking['timestamp'] = sector_benchmarking['timestamp']
+                    if 'data_points' in sector_benchmarking:
+                        essential_benchmarking['data_points'] = sector_benchmarking['data_points']
+                    
+                    # Don't clear the original data structure - we need it!
+                    
+                sector_context = {
+                    'sector_benchmarking': essential_benchmarking,
+                    'sector_rotation': sector_rotation,
+                    'sector_correlation': sector_correlation,
+                    'sector': sector_value
+                }
 
-            print(f"✅ Sector context generated successfully for {request.stock}")
+                print(f"✅ Sector context generated successfully for {request.stock}")
 
-        except Exception as e:
-            print(f"Warning: Could not get sector context: {e}")
-            sector_context = {}
+            except Exception as e:
+                print(f"Warning: Could not get sector context: {e}")
+                sector_context = {}
         
         # Get Enhanced MTF context
         mtf_context = None

@@ -1,10 +1,10 @@
 {
-  "sector_code": "IT",
-  "display_name": "Information Technology",
+  "sector_code": "NIFTY_IT",
+  "display_name": "Nifty IT",
   "indices": [
     "NIFTY IT"
   ],
-  "primary_index": "NIFTY IT",
+  "primary_index": "NIFTY IT"
   "stocks": [
     "3IINFOLTD",
     "63MOONS",

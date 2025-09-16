@@ -2084,6 +2084,102 @@ class SectorBenchmarkingProvider:
             }
         }
     
+    def _calculate_fallback_sector_metrics(self, stock_symbol: str, sector: str, sector_index: str) -> Dict[str, Any]:
+        """
+        Calculate sector metrics for fallback analysis using simplified approach.
+        Attempts to get real sector data with minimal requirements.
+        """
+        try:
+            logging.info(f"Attempting fallback sector metrics calculation for {sector} ({sector_index})")
+            
+            # Try to get sector index data with minimal requirements (30 days minimum)
+            sector_data = self._get_sector_index_data(sector, 90)  # Try 3 months first
+            if sector_data is None or len(sector_data) < 30:
+                sector_data = self._get_sector_index_data(sector, 60)  # Try 2 months
+            if sector_data is None or len(sector_data) < 20:
+                sector_data = self._get_sector_index_data(sector, 30)  # Try 1 month minimum
+            
+            # Try to get NIFTY data for comparison
+            nifty_data = self._get_nifty_data(90)
+            if nifty_data is None or len(nifty_data) < 30:
+                nifty_data = self._get_nifty_data(60)
+            if nifty_data is None or len(nifty_data) < 20:
+                nifty_data = self._get_nifty_data(30)
+            
+            if sector_data is not None and len(sector_data) >= 20 and nifty_data is not None and len(nifty_data) >= 20:
+                logging.info(f"Calculating real sector metrics using {len(sector_data)} sector data points and {len(nifty_data)} market data points")
+                
+                # Calculate sector returns
+                sector_returns = sector_data['close'].pct_change().dropna()
+                nifty_returns = nifty_data['close'].pct_change().dropna()
+                
+                # Align data (use common dates)
+                common_dates = sector_returns.index.intersection(nifty_returns.index)
+                if len(common_dates) >= 15:
+                    sector_returns_aligned = sector_returns.loc[common_dates]
+                    nifty_returns_aligned = nifty_returns.loc[common_dates]
+                    
+                    # Calculate sector beta vs NIFTY
+                    sector_beta = self._calculate_beta(sector_returns_aligned, nifty_returns_aligned)
+                    
+                    # Calculate sector correlation vs NIFTY
+                    sector_correlation = self._calculate_correlation(sector_returns_aligned, nifty_returns_aligned)
+                    
+                    # Calculate sector volatility (annualized)
+                    sector_volatility = sector_returns_aligned.std() * np.sqrt(252)
+                    
+                    # Calculate sector returns
+                    sector_cumulative_return = (1 + sector_returns_aligned).prod() - 1
+                    sector_annualized_return = ((1 + sector_cumulative_return) ** (252 / len(sector_returns_aligned))) - 1
+                    
+                    # Calculate sector Sharpe ratio (assuming 5% risk-free rate)
+                    risk_free_rate = 0.05
+                    sector_sharpe = (sector_annualized_return - risk_free_rate) / sector_volatility if sector_volatility > 0 else 0
+                    
+                    # Calculate max drawdown
+                    sector_cumsum = (1 + sector_returns_aligned).cumprod()
+                    running_max = sector_cumsum.expanding().max()
+                    drawdown = (sector_cumsum - running_max) / running_max
+                    sector_max_drawdown = abs(drawdown.min())
+                    
+                    logging.info(f"Real sector metrics calculated - Beta: {sector_beta:.3f}, Correlation: {sector_correlation:.3f}, Volatility: {sector_volatility:.3f}")
+                    
+                    return {
+                        "sector_beta": round(sector_beta, 3),
+                        "sector_correlation": round(sector_correlation, 3),
+                        "sector_sharpe_ratio": round(sector_sharpe, 3),
+                        "sector_volatility": round(sector_volatility, 3),
+                        "sector_max_drawdown": round(sector_max_drawdown, 3),
+                        "sector_cumulative_return": round(sector_cumulative_return, 4),
+                        "sector_annualized_return": round(sector_annualized_return, 4),
+                        "sector_index": sector_index,
+                        "sector_data_points": len(common_dates),
+                        "fallback_calculation": True,
+                        "data_period_days": (common_dates[-1] - common_dates[0]).days,
+                        "note": "Calculated using limited available data"
+                    }
+                
+            logging.warning(f"Insufficient data for real sector metrics calculation. Sector data: {len(sector_data) if sector_data is not None else 'None'}, NIFTY data: {len(nifty_data) if nifty_data is not None else 'None'}")
+                
+        except Exception as e:
+            logging.error(f"Error in fallback sector metrics calculation: {e}")
+        
+        # Return default values if calculation failed
+        logging.info(f"Using default sector metrics for {sector}")
+        return {
+            "sector_beta": 1.0,
+            "sector_correlation": 0.6,
+            "sector_sharpe_ratio": 0.0,
+            "sector_volatility": 0.15,
+            "sector_max_drawdown": 0.10,
+            "sector_cumulative_return": 0.0,
+            "sector_annualized_return": 0.0,
+            "sector_index": sector_index,
+            "sector_data_points": 0,
+            "fallback_calculation": False,
+            "note": "Default values - insufficient data available"
+        }
+    
     def _get_fallback_benchmarking(self, stock_symbol: str, sector: str) -> Dict[str, Any]:
         """Get fallback benchmarking when analysis fails."""
         # Get sector information with better error handling and debugging
@@ -2132,17 +2228,7 @@ class SectorBenchmarkingProvider:
                 "sector_stocks_count": sector_stocks_count
             },
             "market_benchmarking": self._get_default_market_metrics(),
-            "sector_benchmarking": {
-                "sector_beta": 1.0,
-                "sector_correlation": 0.6,
-                "sector_sharpe_ratio": 0.0,
-                "sector_volatility": 0.15,
-                "sector_max_drawdown": 0.10,
-                "sector_cumulative_return": 0.0,
-                "sector_annualized_return": 0.0,
-                "sector_index": sector_index,
-                "sector_data_points": 0
-            },
+            "sector_benchmarking": self._calculate_fallback_sector_metrics(stock_symbol, sector, sector_index),
             "relative_performance": self._get_default_relative_performance(),
             "sector_risk_metrics": default_risk_metrics,
             "analysis_summary": {
@@ -2620,7 +2706,7 @@ class SectorBenchmarkingProvider:
             logging.error(f"Error generating market overview: {e}")
             return {} 
 
-    async def get_optimized_comprehensive_sector_analysis(self, symbol: str, stock_data: pd.DataFrame, sector: str) -> Dict[str, Any]:
+    async def get_optimized_comprehensive_sector_analysis(self, symbol: str, stock_data: pd.DataFrame, sector: str, requested_period: int = None) -> Dict[str, Any]:
         """
         OPTIMIZED: Unified sector data fetcher that minimizes API calls and maximizes data reuse.
         
@@ -2641,29 +2727,54 @@ class SectorBenchmarkingProvider:
         try:
             logging.info(f"OPTIMIZED: Starting unified sector analysis for {symbol} in {sector} sector")
             
-            # OPTIMIZED TIMEFRAMES: Reduced data requirements
-            OPTIMIZED_TIMEFRAMES = {
-                "sector_rotation": 30,    # 1M - sufficient for rotation analysis
-                "correlation": 60,        # 3M - sufficient for correlation analysis
-                "benchmarking": 180,      # 6M - sufficient for benchmarking metrics
-                "comprehensive": 180      # 6M - unified timeframe for all analyses
-            }
-            
-            # Use comprehensive timeframe for all data fetching
-            days = OPTIMIZED_TIMEFRAMES["comprehensive"]
+            # Calculate appropriate timeframes based on requested period
+            if requested_period:
+                # Use requested period with some buffer for analysis
+                base_days = min(requested_period, len(stock_data)) if stock_data is not None and not stock_data.empty else requested_period
+                days = max(30, base_days + 20)  # At least 30 days, add 20 day buffer
+                logging.info(f"OPTIMIZED: Using requested period of {requested_period} days, adjusted to {days} days for sector analysis")
+            else:
+                # Fallback to optimized timeframes
+                OPTIMIZED_TIMEFRAMES = {
+                    "sector_rotation": 30,    # 1M - sufficient for rotation analysis
+                    "correlation": 60,        # 3M - sufficient for correlation analysis
+                    "benchmarking": 180,      # 6M - sufficient for benchmarking metrics
+                    "comprehensive": 180      # 6M - unified timeframe for all analyses
+                }
+                days = OPTIMIZED_TIMEFRAMES["comprehensive"]
+                logging.info(f"OPTIMIZED: Using default comprehensive timeframe of {days} days")
             
             # STEP 1: Fetch NIFTY 50 data once (reused for all analyses)
             logging.info(f"OPTIMIZED: Fetching NIFTY 50 data once for {days} days (will be reused)")
             nifty_data = await self._get_nifty_data_async(days + 20)
-            if nifty_data is None or len(nifty_data) < days:
-                logging.warning("Could not fetch NIFTY 50 data for optimized analysis")
+            
+            # DEBUG: Log NIFTY data details
+            if nifty_data is not None:
+                logging.info(f"OPTIMIZED: NIFTY 50 data fetched - Length: {len(nifty_data)}, Required: {days}")
+                logging.info(f"OPTIMIZED: NIFTY 50 data date range: {nifty_data.index[0]} to {nifty_data.index[-1]}")
+            else:
+                logging.warning("OPTIMIZED: NIFTY 50 data is None")
+            
+            # Use more flexible data requirement - accept 80% of requested days
+            min_required_days = max(30, int(days * 0.8))  # At least 30 days, or 80% of requested
+            if nifty_data is None or len(nifty_data) < min_required_days:
+                logging.warning(f"Could not fetch sufficient NIFTY 50 data for optimized analysis. Got: {len(nifty_data) if nifty_data is not None else 'None'}, Required: {min_required_days}")
                 return self._get_fallback_optimized_analysis(symbol, sector)
             
             # STEP 2: Fetch stock's sector data once (reused for all analyses)
             logging.info(f"OPTIMIZED: Fetching {sector} sector data once for {days} days")
             sector_data = await self._get_sector_data_async(sector, days + 20)
-            if sector_data is None or len(sector_data) < days:
-                logging.warning(f"Could not fetch {sector} sector data for optimized analysis")
+            
+            # DEBUG: Log sector data details
+            if sector_data is not None:
+                logging.info(f"OPTIMIZED: {sector} sector data fetched - Length: {len(sector_data)}, Required: {days}")
+                logging.info(f"OPTIMIZED: {sector} sector data date range: {sector_data.index[0]} to {sector_data.index[-1]}")
+            else:
+                logging.warning(f"OPTIMIZED: {sector} sector data is None")
+            
+            # Use same flexible requirement as NIFTY data
+            if sector_data is None or len(sector_data) < min_required_days:
+                logging.warning(f"Could not fetch sufficient {sector} sector data for optimized analysis. Got: {len(sector_data) if sector_data is not None else 'None'}, Required: {min_required_days}")
                 return self._get_fallback_optimized_analysis(symbol, sector)
             
             # STEP 3: Fetch top 8 sectors for rotation analysis (instead of all 16)
@@ -2698,10 +2809,12 @@ class SectorBenchmarkingProvider:
             benchmarking = self._calculate_optimized_benchmarking(symbol, stock_data, sector, sector_data, nifty_data)
             
             # Calculate rotation metrics using relevant sectors
-            rotation = self._calculate_optimized_rotation(sector_data_dict, nifty_data, OPTIMIZED_TIMEFRAMES["sector_rotation"])
+            rotation_days = min(30, days // 2) if requested_period else 30  # Use half of sector analysis period, capped at 30 days
+            rotation = self._calculate_optimized_rotation(sector_data_dict, nifty_data, rotation_days)
             
             # Calculate correlation metrics using relevant sectors
-            correlation = self._calculate_optimized_correlation(sector_data_dict, OPTIMIZED_TIMEFRAMES["correlation"])
+            correlation_days = min(60, days) if requested_period else 60  # Use sector analysis period, capped at 60 days
+            correlation = self._calculate_optimized_correlation(sector_data_dict, correlation_days)
             
             # STEP 5: Build comprehensive result
             comprehensive_result = {
@@ -2926,18 +3039,68 @@ class SectorBenchmarkingProvider:
     def _get_fallback_optimized_analysis(self, symbol: str, sector: str) -> Dict[str, Any]:
         """
         Fallback analysis when optimized analysis fails.
+        Returns basic sector benchmarking using fallback methods.
         """
-        return {
-            'sector_benchmarking': {'sector': sector, 'error': 'Optimized analysis failed'},
-            'sector_rotation': {'error': 'Optimized analysis failed'},
-            'sector_correlation': {'error': 'Optimized analysis failed'},
-            'optimization_metrics': {
-                'api_calls_reduced': 'Fallback mode',
-                'data_points_reduced': 'Fallback mode',
-                'timeframes_optimized': 'Fallback mode',
-                'cache_duration': 'Fallback mode',
-                'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        logging.info(f"Using fallback analysis for {symbol} in {sector} sector")
+        
+        try:
+            # Try to get basic sector benchmarking using sync methods
+            fallback_benchmarking = self._get_fallback_benchmarking(symbol, sector)
+            
+            return {
+                'sector_benchmarking': fallback_benchmarking,
+                'sector_rotation': {
+                    'error': 'Optimized rotation analysis failed',
+                    'fallback_note': 'Basic sector info provided in sector_benchmarking'
+                },
+                'sector_correlation': {
+                    'error': 'Optimized correlation analysis failed', 
+                    'fallback_note': 'Basic sector info provided in sector_benchmarking'
+                },
+                'optimization_metrics': {
+                    'api_calls_reduced': 'Fallback mode - using cached/default data',
+                    'data_points_reduced': 'Fallback mode',
+                    'timeframes_optimized': 'Fallback mode',
+                    'cache_duration': 'Fallback mode',
+                    'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'fallback_reason': 'Insufficient market/sector data for optimized analysis'
+                }
             }
-        }
+        except Exception as e:
+            logging.error(f"Error in fallback analysis: {e}")
+            # Return minimal structure to prevent null sector_context
+            return {
+                'sector_benchmarking': {
+                    'stock_symbol': symbol,
+                    'sector_info': {
+                        'sector': sector,
+                        'sector_name': self.sector_classifier.get_sector_display_name(sector) or sector,
+                        'sector_index': self.sector_classifier.get_primary_sector_index(sector) or f'NIFTY_{sector}',
+                        'sector_stocks_count': len(self.sector_classifier.get_sector_stocks(sector)) if sector else 0
+                    },
+                    'market_benchmarking': {
+                        'beta': 1.0,
+                        'correlation': 0.5, 
+                        'sharpe_ratio': 0.0,
+                        'volatility': 0.0,
+                        'max_drawdown': 0.0,
+                        'cumulative_return': 0.0,
+                        'annualized_return': 0.0,
+                        'risk_free_rate': 0.05,
+                        'current_vix': 20,
+                        'data_source': 'NSE',
+                        'data_points': 0,
+                        'note': 'Fallback default values - insufficient data'
+                    },
+                    'fallback': True,
+                    'timestamp': datetime.now().isoformat()
+                },
+                'sector_rotation': {'fallback': True},
+                'sector_correlation': {'fallback': True},
+                'optimization_metrics': {
+                    'fallback_reason': 'Complete analysis failure - using minimal defaults',
+                    'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+            }
 
 # Global instance removed - instantiate locally as needed

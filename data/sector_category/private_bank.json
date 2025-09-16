@@ -1,0 +1,23 @@
+{
+  "sector_code": "NIFTY_PRIVATE_BANK",
+  "display_name": "Nifty Private Bank",
+  "indices": [
+    "NIFTY PRIVATE BANK"
+  ],
+  "primary_index": "NIFTY PRIVATE BANK",
+  "stocks": [
+    "HDFCBANK",
+    "ICICIBANK",
+    "KOTAKBANK",
+    "AXISBANK",
+    "INDUSINDBK",
+    "BANDHANBNK",
+    "FEDERALBNK",
+    "RBLBANK",
+    "IDFCFIRSTB",
+    "YESBANK",
+    "DCBBANK",
+    "SOUTHBANK"
+  ],
+  "description": "Private sector banking companies"
+}
