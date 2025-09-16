@@ -31,6 +31,7 @@ def main():
         ],
         help='Data interval (default: day). Supported: minute, 3minute, 5minute, 10minute, 15minute, 30minute, 60minute, day, week, month.'
     )
+    parser.add_argument('--sector', type=str, help='Sector to analyze (e.g., OIL_GAS)')
     args = parser.parse_args()
     print(f"Starting analysis for {args.stock} ({args.exchange})")
     print(f"Analysis period: {args.period} days")
@@ -43,7 +44,8 @@ def main():
                 symbol=args.stock,
                 exchange=args.exchange,
                 period=args.period,
-                interval=args.interval
+                interval=args.interval,
+                sector=args.sector
             ))
             if error_message:
                 print(f"Error during analysis: {error_message}")
