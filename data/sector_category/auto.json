@@ -1,6 +1,6 @@
 {
-  "sector_code": "AUTO",
-  "display_name": "Automobiles",
+  "sector_code": "NIFTY_AUTO",
+  "display_name": "Nifty Auto",
   "indices": [
     "NIFTY AUTO"
   ],
