@@ -3187,7 +3187,65 @@ class SectorBenchmarkingProvider:
             logging.info(f"  - Stock Excess Return: {stock_cumulative_return - nifty_cumulative_return:.6f}")
             logging.info(f"  - Sector Excess Return: {sector_cumulative_return - nifty_cumulative_return:.6f}")
             
+            # CRITICAL FIX: Calculate relative performance metrics (including sector rank, percentile, consistency)
+            logging.info(f"DEBUG: Calculating optimized relative performance metrics...")
+            
+            # Create mock market_metrics and sector_metrics for relative performance calculation
+            market_metrics = {
+                'excess_return': stock_cumulative_return - nifty_cumulative_return,
+                'volatility_ratio': stock_volatility / nifty_volatility if nifty_volatility > 0 else 1.0,
+                'data_points': len(nifty_returns)
+            }
+            
+            sector_metrics = {
+                'sector_excess_return': sector_cumulative_return - nifty_cumulative_return,
+                'sector_volatility_ratio': sector_volatility / nifty_volatility if nifty_volatility > 0 else 1.0,
+                'sector_correlation': sector_correlation,
+                'sector_return': sector_cumulative_return,
+                'data_points': len(sector_returns)
+            }
+            
+            # Calculate relative performance using existing method
+            relative_performance = self._calculate_relative_performance(
+                stock_data, sector, market_metrics, sector_metrics
+            )
+            
+            logging.info(f"DEBUG: Relative performance calculated:")
+            logging.info(f"  - Sector Rank: {relative_performance.get('vs_sector', {}).get('sector_rank', 'N/A')}")
+            logging.info(f"  - Sector Percentile: {relative_performance.get('vs_sector', {}).get('sector_percentile', 'N/A')}")
+            logging.info(f"  - Sector Consistency: {relative_performance.get('vs_sector', {}).get('sector_consistency', 'N/A')}")
+            
             result = {
+                'stock_symbol': symbol,
+                'sector_info': {
+                    'sector': sector,
+                    'sector_name': self.sector_classifier.get_sector_display_name(sector) if sector else sector,
+                    'sector_index': self.sector_classifier.get_primary_sector_index(sector) if sector else f"NIFTY_{sector}",
+                    'sector_stocks_count': len(self.sector_classifier.get_sector_stocks(sector)) if sector else 0
+                },
+                'market_benchmarking': {
+                    'beta': round(stock_beta, 3),
+                    'correlation': round(stock_correlation, 3),
+                    'volatility': round(stock_volatility, 3),
+                    'cumulative_return': round(stock_cumulative_return, 4),
+                    'annualized_return': round(stock_annualized_return, 4),
+                    'stock_sharpe': round(stock_sharpe, 3),
+                    'excess_return': round(stock_cumulative_return - nifty_cumulative_return, 4),
+                    'data_points': len(nifty_returns)
+                },
+                'sector_benchmarking': {
+                    'sector_beta': round(sector_beta, 3),
+                    'sector_correlation': round(sector_correlation, 3),
+                    'sector_volatility': round(sector_volatility, 3),
+                    'sector_cumulative_return': round(sector_cumulative_return, 4),
+                    'sector_annualized_return': round(sector_annualized_return, 4),
+                    'sector_sharpe_ratio': round(sector_sharpe, 3),
+                    'sector_excess_return': round(sector_cumulative_return - nifty_cumulative_return, 4),
+                    'sector_index': self.sector_classifier.get_primary_sector_index(sector) if sector else f"NIFTY_{sector}",
+                    'sector_data_points': len(sector_returns)
+                },
+                # CRITICAL FIX: Include relative performance with sector rank, percentile, consistency
+                'relative_performance': relative_performance,
                 'sector': sector,
                 'beta': round(stock_beta, 3),
                 'sector_beta': round(sector_beta, 3),
@@ -3219,21 +3277,32 @@ class SectorBenchmarkingProvider:
                     'stock_data_points': len(stock_returns),
                     'market_data_points': len(nifty_returns),
                     'sector_data_points': len(sector_returns)
-                }
+                },
+                'timestamp': datetime.now().isoformat(),
+                'analysis_summary': self._generate_analysis_summary(
+                    symbol, sector, market_metrics, sector_metrics, relative_performance
+                )
             }
             
             logging.info(f"DEBUG: Final optimized benchmarking result:")
             for key, value in result.items():
                 if isinstance(value, (int, float)):
                     logging.info(f"  - {key}: {value}")
+                elif key == 'relative_performance' and isinstance(value, dict):
+                    vs_sector = value.get('vs_sector', {})
+                    logging.info(f"  - {key}.vs_sector.sector_rank: {vs_sector.get('sector_rank', 'N/A')}")
+                    logging.info(f"  - {key}.vs_sector.sector_percentile: {vs_sector.get('sector_percentile', 'N/A')}")
+                    logging.info(f"  - {key}.vs_sector.sector_consistency: {vs_sector.get('sector_consistency', 'N/A')}")
                 else:
-                    logging.info(f"  - {key}: {value}")
+                    logging.info(f"  - {key}: {str(value)[:100]}...")  # Truncate long values
             logging.info(f"DEBUG: OPTIMIZED BENCHMARKING SUCCESS")
             
             return result
             
         except Exception as e:
             logging.error(f"Error in optimized benchmarking: {e}")
+            import traceback
+            traceback.print_exc()
             return {'sector': sector, 'error': str(e)}
     
     def _calculate_optimized_rotation(self, sector_data_dict: Dict[str, pd.DataFrame], 

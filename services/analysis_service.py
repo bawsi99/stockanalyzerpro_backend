@@ -1288,7 +1288,7 @@ async def sector_benchmark(request: AnalysisRequest):
         response = {
             "success": True,
             "stock_symbol": request.stock,
-            "sector_benchmarking": serialized_benchmarking,
+            "results": serialized_benchmarking,  # Frontend expects 'results' field
             "timestamp": pd.Timestamp.now().isoformat()
         }
         

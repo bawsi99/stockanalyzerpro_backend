@@ -1007,7 +1007,18 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                     comprehensive = await self.sector_benchmarking_provider.get_optimized_comprehensive_sector_analysis(
                         symbol, data, sector, requested_period=period
                     )
-                    sector_context = comprehensive or {}
+                    if comprehensive:
+                        # Structure the data to match frontend expectations
+                        sector_context = {
+                            'sector': sector,
+                            'sector_benchmarking': comprehensive.get('sector_benchmarking', {}),
+                            'sector_rotation': comprehensive.get('sector_rotation', {}),
+                            'sector_correlation': comprehensive.get('sector_correlation', {}),
+                            'optimization_metrics': comprehensive.get('optimization_metrics', {})
+                        }
+                        logger.info(f"[ENHANCED ANALYSIS] Structured sector context with keys: {list(sector_context.keys())}")
+                    else:
+                        sector_context = {}
                 except Exception as e:
                     logger.warning(f"[ENHANCED ANALYSIS] Failed to get sector context for {sector}: {e}")
             

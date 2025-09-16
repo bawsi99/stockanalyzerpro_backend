@@ -68,7 +68,7 @@ class SectorClassifier:
             cls._instance._initialized = False
         return cls._instance
     
-    def __init__(self, sector_folder: str = "sector_category"):
+    def __init__(self, sector_folder: str = None):
         """
         Initialize the SectorClassifier with data from JSON files.
         
@@ -78,6 +78,12 @@ class SectorClassifier:
         # Skip initialization if already initialized (singleton pattern)
         if hasattr(self, '_initialized') and self._initialized:
             return
+            
+        # Use provided path or construct absolute path to data/sector_category
+        if sector_folder is None:
+            # Default to correct absolute path in backend/data/sector_category
+            backend_path = Path(__file__).parent.parent.parent  # ml/sector -> ml -> backend
+            sector_folder = backend_path / "data" / "sector_category"
             
         self.sector_folder = Path(sector_folder)
         self.sector_mappings = {}
