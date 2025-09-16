@@ -84,6 +84,7 @@ class DataRequest(BaseModel):
     exchange: str = Field(default="NSE", description="Exchange (default: NSE)")
     period: int = Field(default=365, description="Period in days (default: 365)")
     interval: str = Field(default="day", description="Data interval (default: day)")
+    sector: str = Field(default="", description="Sector name (optional, will auto-detect if not provided)")
 
 class TechnicalAnalysisRequest(BaseModel):
     symbol: str = Field(..., description="Stock symbol")
@@ -757,7 +758,8 @@ async def full_analysis(request: DataRequest):
             symbol=request.symbol,
             exchange=request.exchange,
             period=request.period,
-            interval=request.interval
+            interval=request.interval,
+            sector=request.sector if request.sector else None
         )
         
         analysis_results, success_message, error_message = result
@@ -790,7 +792,8 @@ async def enhanced_analysis(request: DataRequest):
             symbol=request.symbol,
             exchange=request.exchange,
             period=request.period,
-            interval=request.interval
+            interval=request.interval,
+            sector=request.sector if request.sector else None
         )
         
         analysis_results, success_message, error_message = result

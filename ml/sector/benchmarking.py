@@ -164,21 +164,29 @@ class SectorBenchmarkingProvider:
     async def get_comprehensive_benchmarking_async(self, stock_symbol: str, stock_data: pd.DataFrame, user_sector: str = None) -> Dict[str, Any]:
         """Async version of get_comprehensive_benchmarking."""
         try:
-            # Debug: Log stock data info
-            logging.info(f"DEBUG: Starting comprehensive benchmarking for {stock_symbol}")
-            logging.info(f"DEBUG: Stock data shape: {stock_data.shape if stock_data is not None else 'None'}")
-            logging.info(f"DEBUG: Stock data columns: {stock_data.columns.tolist() if stock_data is not None else 'None'}")
+            # DEBUG: Comprehensive data tracing
+            logging.info(f"\n=== DEBUG: COMPREHENSIVE BENCHMARKING START for {stock_symbol} ===")
+            logging.info(f"DEBUG: Input stock_data shape: {stock_data.shape if stock_data is not None else 'None'}")
+            logging.info(f"DEBUG: Input stock_data columns: {stock_data.columns.tolist() if stock_data is not None else 'None'}")
+            logging.info(f"DEBUG: Input stock_data date range: {stock_data.index[0]} to {stock_data.index[-1] if stock_data is not None and len(stock_data) > 0 else 'N/A'}")
+            logging.info(f"DEBUG: Input user_sector: {user_sector}")
             
             # Check if stock_data is valid
             if stock_data is None or stock_data.empty or 'close' not in stock_data.columns:
-                logging.error(f"Invalid stock data for {stock_symbol}")
+                logging.error(f"DEBUG: Invalid stock data for {stock_symbol} - Reason: {('None' if stock_data is None else 'Empty' if stock_data.empty else 'No close column')}")
                 return self._get_fallback_benchmarking(stock_symbol, user_sector or "UNKNOWN")
             
             # Get stock returns
+            logging.info(f"DEBUG: Raw close prices - First 5: {stock_data['close'].head().tolist()}")
+            logging.info(f"DEBUG: Raw close prices - Last 5: {stock_data['close'].tail().tolist()}")
+            logging.info(f"DEBUG: Raw close prices - Has NaN: {stock_data['close'].isna().sum()} out of {len(stock_data)}")
+            
             stock_returns = stock_data['close'].pct_change().dropna()
             
-            logging.info(f"DEBUG: Stock returns length after dropna: {len(stock_returns)}")
-            logging.info(f"DEBUG: Stock returns first 5 values: {stock_returns.head()}")
+            logging.info(f"DEBUG: Stock returns after pct_change().dropna(): {len(stock_returns)} data points")
+            logging.info(f"DEBUG: Stock returns first 5 values: {stock_returns.head().tolist()}")
+            logging.info(f"DEBUG: Stock returns last 5 values: {stock_returns.tail().tolist()}")
+            logging.info(f"DEBUG: Stock returns stats - mean: {stock_returns.mean():.6f}, std: {stock_returns.std():.6f}")
             
             if len(stock_returns) < 10:
                 logging.warning(f"Severely insufficient stock returns data for {stock_symbol}: {len(stock_returns)} < 10")
@@ -207,10 +215,41 @@ class SectorBenchmarkingProvider:
                 tasks.append(None)
             
             # Execute tasks concurrently
+            logging.info(f"DEBUG: Executing {len(tasks)} async tasks concurrently")
             results = await asyncio.gather(*tasks, return_exceptions=True)
+            logging.info(f"DEBUG: Async tasks completed, processing results")
             
-            market_metrics = results[0] if not isinstance(results[0], Exception) else self._get_default_market_metrics()
-            sector_metrics = results[1] if len(results) > 1 and not isinstance(results[1], Exception) else None
+            # Process market metrics result
+            if isinstance(results[0], Exception):
+                logging.error(f"DEBUG: Market metrics task failed with exception: {results[0]}")
+                market_metrics = self._get_default_market_metrics()
+            else:
+                logging.info(f"DEBUG: Market metrics task succeeded")
+                market_metrics = results[0]
+                if market_metrics:
+                    logging.info(f"DEBUG: Market metrics keys: {list(market_metrics.keys())}")
+                    logging.info(f"DEBUG: Market metrics beta: {market_metrics.get('beta', 'N/A')}")
+                    logging.info(f"DEBUG: Market metrics correlation: {market_metrics.get('correlation', 'N/A')}")
+                else:
+                    logging.warning(f"DEBUG: Market metrics is None or empty")
+            
+            # Process sector metrics result
+            if len(results) > 1:
+                if isinstance(results[1], Exception):
+                    logging.error(f"DEBUG: Sector metrics task failed with exception: {results[1]}")
+                    sector_metrics = None
+                else:
+                    logging.info(f"DEBUG: Sector metrics task succeeded")
+                    sector_metrics = results[1]
+                    if sector_metrics:
+                        logging.info(f"DEBUG: Sector metrics keys: {list(sector_metrics.keys())}")
+                        logging.info(f"DEBUG: Sector metrics beta: {sector_metrics.get('sector_beta', 'N/A')}")
+                        logging.info(f"DEBUG: Sector metrics correlation: {sector_metrics.get('sector_correlation', 'N/A')}")
+                    else:
+                        logging.warning(f"DEBUG: Sector metrics is None or empty")
+            else:
+                logging.info(f"DEBUG: No sector metrics task was queued")
+                sector_metrics = None
             
             # Calculate relative performance
             relative_performance = self._calculate_relative_performance(stock_data, sector, market_metrics, sector_metrics)
@@ -376,7 +415,7 @@ class SectorBenchmarkingProvider:
             rotation_analysis = self._identify_rotation_patterns(sector_performance, timeframe)
             
             # Generate recommendations
-            recommendations = self._generate_rotation_recommendations(sector_rankings, rotation_analysis)
+            recommendations = self._generate_rotation_recommendations(sector_rankings, rotation_analysis, sector_performance)
             
             return {
                 'timeframe': timeframe,
@@ -478,7 +517,7 @@ class SectorBenchmarkingProvider:
             rotation_analysis = self._identify_rotation_patterns(sector_performance, timeframe)
             
             # Generate recommendations
-            recommendations = self._generate_rotation_recommendations(sector_rankings, rotation_analysis)
+            recommendations = self._generate_rotation_recommendations(sector_rankings, rotation_analysis, sector_performance)
             
             return {
                 'timeframe': timeframe,
@@ -827,38 +866,74 @@ class SectorBenchmarkingProvider:
             return {}
     
     def _generate_rotation_recommendations(self, sector_rankings: Dict, 
-                                         rotation_analysis: Dict) -> List[Dict]:
+                                         rotation_analysis: Dict,
+                                         sector_performance: Dict = None) -> List[Dict]:
         """Generate actionable rotation recommendations."""
         try:
             recommendations = []
             
-            # Add sector-specific recommendations
-            for sector, ranking in sector_rankings.items():
-                performance = ranking['performance']
-                rank = ranking['rank']
+            # If sector_performance is not provided, extract from rotation_analysis
+            if sector_performance is None:
+                # Try to get sector performance from rotation analysis patterns
+                leading_sectors = rotation_analysis.get('leading_sectors', [])
+                lagging_sectors = rotation_analysis.get('lagging_sectors', [])
                 
-                if rank <= 3 and performance['relative_strength'] > 5:
-                    recommendations.append({
-                        'type': 'overweight',
-                        'sector': sector,
-                        'reason': f"Strong sector momentum (+{performance['relative_strength']:.1f}% vs market)",
-                        'confidence': 'high' if performance['momentum'] > 3 else 'medium'
-                    })
+                # Generate recommendations based on leading/lagging sectors
+                for sector_data in leading_sectors[:3]:  # Top 3 leading
+                    if isinstance(sector_data, dict) and 'relative_strength' in sector_data:
+                        recommendations.append({
+                            'type': 'overweight',
+                            'sector': sector_data.get('sector', 'Unknown'),
+                            'reason': f"Leading sector momentum (+{sector_data['relative_strength']:.1f}% vs market)",
+                            'confidence': 'high' if sector_data.get('momentum', 0) > 3 else 'medium'
+                        })
                 
-                elif rank >= len(sector_rankings) - 2 and performance['relative_strength'] < -5:
-                    recommendations.append({
-                        'type': 'underweight',
-                        'sector': sector,
-                        'reason': f"Weak sector performance ({performance['relative_strength']:.1f}% vs market)",
-                        'confidence': 'high' if performance['momentum'] < -3 else 'medium'
-                    })
+                for sector_data in lagging_sectors[-2:]:  # Bottom 2 lagging
+                    if isinstance(sector_data, dict) and 'relative_strength' in sector_data:
+                        recommendations.append({
+                            'type': 'underweight',
+                            'sector': sector_data.get('sector', 'Unknown'),
+                            'reason': f"Lagging sector performance ({sector_data['relative_strength']:.1f}% vs market)",
+                            'confidence': 'high' if sector_data.get('momentum', 0) < -3 else 'medium'
+                        })
+            else:
+                # Use the provided sector_performance data
+                for sector, ranking in sector_rankings.items():
+                    if sector not in sector_performance:
+                        continue
+                        
+                    performance = sector_performance[sector]
+                    rank = ranking['rank']
+                    
+                    if rank <= 3 and performance['relative_strength'] > 5:
+                        recommendations.append({
+                            'type': 'overweight',
+                            'sector': sector,
+                            'reason': f"Strong sector momentum (+{performance['relative_strength']:.1f}% vs market)",
+                            'confidence': 'high' if performance['momentum'] > 3 else 'medium'
+                        })
+                    
+                    elif rank >= len(sector_rankings) - 2 and performance['relative_strength'] < -5:
+                        recommendations.append({
+                            'type': 'underweight',
+                            'sector': sector,
+                            'reason': f"Weak sector performance ({performance['relative_strength']:.1f}% vs market)",
+                            'confidence': 'high' if performance['momentum'] < -3 else 'medium'
+                        })
             
             # Add overall market rotation insight
-            if rotation_analysis['rotation_strength'] == 'strong':
+            rotation_strength = rotation_analysis.get('rotation_strength', 'weak')
+            if rotation_strength == 'strong':
                 recommendations.append({
                     'type': 'market_insight',
                     'message': "Strong sector rotation detected - consider rebalancing portfolio",
                     'confidence': 'high'
+                })
+            elif rotation_strength == 'moderate':
+                recommendations.append({
+                    'type': 'market_insight',
+                    'message': "Moderate sector rotation activity - monitor for opportunities",
+                    'confidence': 'medium'
                 })
             
             return recommendations
@@ -1006,27 +1081,47 @@ class SectorBenchmarkingProvider:
     async def _calculate_market_metrics_async(self, stock_returns: pd.Series) -> Dict[str, Any]:
         """Async version of _calculate_market_metrics."""
         try:
+            logging.info(f"\n=== DEBUG: MARKET METRICS CALCULATION START ===")
+            logging.info(f"DEBUG: Input stock_returns length: {len(stock_returns)}")
+            logging.info(f"DEBUG: Input stock_returns date range: {stock_returns.index[0]} to {stock_returns.index[-1]}")
+            
             # Get NIFTY 50 data asynchronously
             nifty_data = await self._get_nifty_data_async(365)
             
+            logging.info(f"DEBUG: NIFTY data fetched: {len(nifty_data) if nifty_data is not None else 'None'} data points")
+            if nifty_data is not None:
+                logging.info(f"DEBUG: NIFTY data date range: {nifty_data.index[0]} to {nifty_data.index[-1]}")
+                logging.info(f"DEBUG: NIFTY close prices - First 5: {nifty_data['close'].head().tolist()}")
+                logging.info(f"DEBUG: NIFTY close prices - Last 5: {nifty_data['close'].tail().tolist()}")
+            
             if nifty_data is None or len(nifty_data) < 20:  # Reduced from 30 to 20
-                logging.warning(f"Insufficient NIFTY data (got {len(nifty_data) if nifty_data is not None else 0} data points)")
+                logging.warning(f"DEBUG: Insufficient NIFTY data (got {len(nifty_data) if nifty_data is not None else 0} data points) - Using defaults")
                 return self._get_default_market_metrics()
             
             market_returns = nifty_data['close'].pct_change().dropna()
+            logging.info(f"DEBUG: NIFTY returns after pct_change().dropna(): {len(market_returns)} data points")
+            logging.info(f"DEBUG: NIFTY returns date range: {market_returns.index[0]} to {market_returns.index[-1]}")
             
             # Align data
+            logging.info(f"DEBUG: Before alignment - Stock returns: {len(stock_returns)}, Market returns: {len(market_returns)}")
             aligned_data = pd.concat([stock_returns, market_returns], axis=1).dropna()
+            logging.info(f"DEBUG: After alignment: {len(aligned_data)} data points")
+            if len(aligned_data) > 0:
+                logging.info(f"DEBUG: Aligned data date range: {aligned_data.index[0]} to {aligned_data.index[-1]}")
+            
             if len(aligned_data) < 15:  # Reduced from 30 to 15
-                logging.warning(f"Insufficient aligned market data (got {len(aligned_data)} data points)")
+                logging.warning(f"DEBUG: Insufficient aligned market data (got {len(aligned_data)} data points) - Using defaults")
                 return self._get_default_market_metrics()
             
             stock_aligned = aligned_data.iloc[:, 0]
             market_aligned = aligned_data.iloc[:, 1]
+            logging.info(f"DEBUG: Aligned stock returns - mean: {stock_aligned.mean():.6f}, std: {stock_aligned.std():.6f}")
+            logging.info(f"DEBUG: Aligned market returns - mean: {market_aligned.mean():.6f}, std: {market_aligned.std():.6f}")
             
             # Calculate metrics
             beta = self._calculate_beta(stock_aligned, market_aligned)
             correlation = self._calculate_correlation(stock_aligned, market_aligned)
+            logging.info(f"DEBUG: Calculated Beta: {beta:.6f}, Correlation: {correlation:.6f}")
             volatility_ratio = stock_aligned.std() / market_aligned.std() if market_aligned.std() > 0 else 1.0
             
             # Calculate performance metrics
@@ -1042,6 +1137,17 @@ class SectorBenchmarkingProvider:
             # Additional metrics expected by frontend
             market_volatility = market_aligned.std() * np.sqrt(252)
             market_annualized_return = market_aligned.mean() * 252
+            
+            logging.info(f"DEBUG: Final calculated metrics:")
+            logging.info(f"  - Beta: {beta:.6f}")
+            logging.info(f"  - Correlation: {correlation:.6f}")
+            logging.info(f"  - Volatility Ratio: {volatility_ratio:.6f}")
+            logging.info(f"  - Stock Cumulative Return: {stock_cumulative_return:.6f}")
+            logging.info(f"  - Market Cumulative Return: {market_cumulative_return:.6f}")
+            logging.info(f"  - Excess Return: {excess_return:.6f}")
+            logging.info(f"  - Stock Sharpe: {stock_sharpe:.6f}")
+            logging.info(f"  - Market Sharpe: {market_sharpe:.6f}")
+            logging.info(f"DEBUG: Market metrics calculation SUCCESS")
 
             return {
                 "beta": float(beta),
@@ -1069,30 +1175,55 @@ class SectorBenchmarkingProvider:
     def _calculate_sector_metrics(self, stock_returns: pd.Series, sector: str) -> Dict[str, Any]:
         """Calculate sector-specific benchmarking metrics."""
         try:
+            logging.info(f"\n=== DEBUG: SECTOR METRICS CALCULATION START ===")
+            logging.info(f"DEBUG: Sector: {sector}")
+            logging.info(f"DEBUG: Input stock_returns length: {len(stock_returns)}")
+            if len(stock_returns) > 0:
+                logging.info(f"DEBUG: Input stock_returns date range: {stock_returns.index[0]} to {stock_returns.index[-1]}")
+            
             if not sector:
+                logging.warning(f"DEBUG: No sector provided - returning None")
                 return None
             
             # Get sector index data
+            logging.info(f"DEBUG: Fetching sector index data for: {sector}")
             sector_data = self._get_sector_index_data(sector, 365)
             
+            logging.info(f"DEBUG: Sector data fetched: {len(sector_data) if sector_data is not None else 'None'} data points")
+            if sector_data is not None:
+                logging.info(f"DEBUG: Sector data date range: {sector_data.index[0]} to {sector_data.index[-1]}")
+                logging.info(f"DEBUG: Sector close prices - First 5: {sector_data['close'].head().tolist()}")
+                logging.info(f"DEBUG: Sector close prices - Last 5: {sector_data['close'].tail().tolist()}")
+            
             if sector_data is None or len(sector_data) < 20:  # Reduced from 30 to 20
-                logging.warning(f"Insufficient sector data for {sector} (got {len(sector_data) if sector_data is not None else 0} data points)")
+                logging.warning(f"DEBUG: Insufficient sector data for {sector} (got {len(sector_data) if sector_data is not None else 0} data points) - Using basic metrics")
                 # Return basic sector metrics instead of None
                 return self._get_basic_sector_metrics(stock_returns, sector)
             
             sector_returns = sector_data['close'].pct_change().dropna()
+            logging.info(f"DEBUG: Sector returns after pct_change().dropna(): {len(sector_returns)} data points")
+            logging.info(f"DEBUG: Sector returns date range: {sector_returns.index[0]} to {sector_returns.index[-1]}")
             
             # Align data
+            logging.info(f"DEBUG: Before alignment - Stock returns: {len(stock_returns)}, Sector returns: {len(sector_returns)}")
             aligned_data = pd.concat([stock_returns, sector_returns], axis=1).dropna()
+            logging.info(f"DEBUG: After alignment: {len(aligned_data)} data points")
+            if len(aligned_data) > 0:
+                logging.info(f"DEBUG: Aligned data date range: {aligned_data.index[0]} to {aligned_data.index[-1]}")
+            
             if len(aligned_data) < 30:
+                logging.warning(f"DEBUG: Insufficient aligned sector data (got {len(aligned_data)} data points) - returning None")
                 return None
             
             stock_aligned = aligned_data.iloc[:, 0]
             sector_aligned = aligned_data.iloc[:, 1]
+            logging.info(f"DEBUG: Aligned stock returns - mean: {stock_aligned.mean():.6f}, std: {stock_aligned.std():.6f}")
+            logging.info(f"DEBUG: Aligned sector returns - mean: {sector_aligned.mean():.6f}, std: {sector_aligned.std():.6f}")
             
             # Calculate metrics
             sector_beta = self._calculate_beta(stock_aligned, sector_aligned)
             sector_correlation = self._calculate_correlation(stock_aligned, sector_aligned)
+            logging.info(f"DEBUG: Calculated Sector Beta: {sector_beta:.6f}, Sector Correlation: {sector_correlation:.6f}")
             sector_volatility_ratio = stock_aligned.std() / sector_aligned.std() if sector_aligned.std() > 0 else 1.0
             
             # Calculate performance metrics
@@ -1111,6 +1242,18 @@ class SectorBenchmarkingProvider:
 
             # Get sector index symbol
             sector_index = self.sector_classifier.get_primary_sector_index(sector)
+            
+            logging.info(f"DEBUG: Final sector metrics calculated:")
+            logging.info(f"  - Sector Beta: {sector_beta:.6f}")
+            logging.info(f"  - Sector Correlation: {sector_correlation:.6f}")
+            logging.info(f"  - Sector Volatility Ratio: {sector_volatility_ratio:.6f}")
+            logging.info(f"  - Stock Cumulative Return: {stock_cumulative_return:.6f}")
+            logging.info(f"  - Sector Cumulative Return: {sector_cumulative_return:.6f}")
+            logging.info(f"  - Sector Excess Return: {sector_excess_return:.6f}")
+            logging.info(f"  - Stock Sharpe: {stock_sharpe:.6f}")
+            logging.info(f"  - Sector Sharpe: {sector_sharpe:.6f}")
+            logging.info(f"  - Sector Index: {sector_index}")
+            logging.info(f"DEBUG: Sector metrics calculation SUCCESS")
             
             return {
                 "sector_beta": float(sector_beta),
@@ -1632,8 +1775,14 @@ class SectorBenchmarkingProvider:
             # Get sector index symbol
             sector_index = self.sector_classifier.get_primary_sector_index(sector)
             logging.info(f"Resolved sector index for {sector}: {sector_index}")
+            
+            # FALLBACK: If classifier fails, use our hardcoded mappings
+            if not sector_index and sector in self.sector_indices:
+                sector_index = self.sector_indices[sector]
+                logging.info(f"Using fallback sector index mapping for {sector}: {sector_index}")
+            
             if not sector_index:
-                logging.warning(f"No primary index found for sector: {sector}")
+                logging.warning(f"No primary index found for sector: {sector} (checked both classifier and fallback mappings)")
                 return None
             
             # Fetch data from Zerodha
@@ -1671,8 +1820,14 @@ class SectorBenchmarkingProvider:
             
             # Get sector index symbol
             sector_index = self.sector_classifier.get_primary_sector_index(sector)
+            
+            # FALLBACK: If classifier fails, use our hardcoded mappings
+            if not sector_index and sector in self.sector_indices:
+                sector_index = self.sector_indices[sector]
+                logging.info(f"Using fallback sector index mapping for {sector}: {sector_index}")
+            
             if not sector_index:
-                logging.warning(f"No primary index found for sector: {sector}")
+                logging.warning(f"No primary index found for sector: {sector} (checked both classifier and fallback mappings)")
                 return None
             
             # Fetch data from Zerodha asynchronously
@@ -1784,14 +1939,21 @@ class SectorBenchmarkingProvider:
             return None
     
     def _calculate_beta(self, stock_returns: pd.Series, benchmark_returns: pd.Series) -> float:
-        """Calculate beta coefficient."""
+        """Calculate beta coefficient with data alignment."""
         try:
             if len(stock_returns) < 30 or len(benchmark_returns) < 30:
                 return 1.0
             
+            # Align data by using common date range
+            aligned_stock, aligned_benchmark = self._align_return_series(stock_returns, benchmark_returns)
+            
+            if len(aligned_stock) < 30 or len(aligned_benchmark) < 30:
+                logging.warning(f"Insufficient aligned data for beta calculation: {len(aligned_stock)} points")
+                return 1.0
+            
             # Use sample covariance and sample variance (ddof=1) consistently
-            cov = np.cov(stock_returns, benchmark_returns, ddof=1)[0, 1]
-            var = np.var(benchmark_returns, ddof=1)
+            cov = np.cov(aligned_stock, aligned_benchmark, ddof=1)[0, 1]
+            var = np.var(aligned_benchmark, ddof=1)
             
             if var == 0:
                 return 1.0
@@ -1804,12 +1966,19 @@ class SectorBenchmarkingProvider:
             return 1.0
     
     def _calculate_correlation(self, stock_returns: pd.Series, benchmark_returns: pd.Series) -> float:
-        """Calculate correlation coefficient."""
+        """Calculate correlation coefficient with data alignment."""
         try:
             if len(stock_returns) < 30 or len(benchmark_returns) < 30:
                 return 0.5
             
-            corr = np.corrcoef(stock_returns, benchmark_returns)[0, 1]
+            # Align data by using common date range
+            aligned_stock, aligned_benchmark = self._align_return_series(stock_returns, benchmark_returns)
+            
+            if len(aligned_stock) < 30 or len(aligned_benchmark) < 30:
+                logging.warning(f"Insufficient aligned data for correlation calculation: {len(aligned_stock)} points")
+                return 0.5
+            
+            corr = np.corrcoef(aligned_stock, aligned_benchmark)[0, 1]
             
             if np.isnan(corr):
                 return 0.5
@@ -1819,6 +1988,46 @@ class SectorBenchmarkingProvider:
         except Exception as e:
             logging.error(f"Error calculating correlation: {e}")
             return 0.5
+    
+    def _align_return_series(self, stock_returns: pd.Series, benchmark_returns: pd.Series) -> tuple:
+        """
+        Align two return series by their common date range.
+        
+        Args:
+            stock_returns: Stock return series
+            benchmark_returns: Benchmark return series
+            
+        Returns:
+            Tuple of aligned series (stock_aligned, benchmark_aligned)
+        """
+        try:
+            # Find common date range
+            common_start = max(stock_returns.index.min(), benchmark_returns.index.min())
+            common_end = min(stock_returns.index.max(), benchmark_returns.index.max())
+            
+            # Filter both series to common date range
+            stock_aligned = stock_returns[(stock_returns.index >= common_start) & (stock_returns.index <= common_end)]
+            benchmark_aligned = benchmark_returns[(benchmark_returns.index >= common_start) & (benchmark_returns.index <= common_end)]
+            
+            # Ensure they have the same dates by taking intersection
+            common_dates = stock_aligned.index.intersection(benchmark_aligned.index)
+            
+            if len(common_dates) == 0:
+                logging.warning("No common dates found between stock and benchmark data")
+                return stock_returns.tail(30), benchmark_returns.tail(30)  # Fallback to last 30 points
+            
+            stock_final = stock_aligned[common_dates]
+            benchmark_final = benchmark_aligned[common_dates]
+            
+            logging.info(f"Aligned data: Original lengths ({len(stock_returns)}, {len(benchmark_returns)}) → Aligned length {len(stock_final)}")
+            
+            return stock_final, benchmark_final
+            
+        except Exception as e:
+            logging.warning(f"Error aligning return series: {e}. Using tail alignment as fallback.")
+            # Fallback: use same length from the end
+            min_len = min(len(stock_returns), len(benchmark_returns))
+            return stock_returns.tail(min_len), benchmark_returns.tail(min_len)
     
     def _calculate_performance_ranking(self, market_metrics: Dict, sector_metrics: Dict,
                                      momentum_20d: float, momentum_50d: float) -> Dict[str, str]:
@@ -2755,8 +2964,10 @@ class SectorBenchmarkingProvider:
             else:
                 logging.warning("OPTIMIZED: NIFTY 50 data is None")
             
-            # Use more flexible data requirement - accept 80% of requested days
-            min_required_days = max(30, int(days * 0.8))  # At least 30 days, or 80% of requested
+            # Use more flexible data requirement - accept 60% of requested days, minimum 30 days
+            min_required_days = max(30, int(days * 0.6))  # At least 30 days, or 60% of requested (more lenient)
+            logging.info(f"DEBUG: Data requirement check - Days requested: {days}, Min required: {min_required_days}, NIFTY data available: {len(nifty_data) if nifty_data is not None else 'None'}")
+            
             if nifty_data is None or len(nifty_data) < min_required_days:
                 logging.warning(f"Could not fetch sufficient NIFTY 50 data for optimized analysis. Got: {len(nifty_data) if nifty_data is not None else 'None'}, Required: {min_required_days}")
                 return self._get_fallback_optimized_analysis(symbol, sector)
@@ -2773,6 +2984,8 @@ class SectorBenchmarkingProvider:
                 logging.warning(f"OPTIMIZED: {sector} sector data is None")
             
             # Use same flexible requirement as NIFTY data
+            logging.info(f"DEBUG: Sector data requirement check - {sector} data available: {len(sector_data) if sector_data is not None else 'None'}, Min required: {min_required_days}")
+            
             if sector_data is None or len(sector_data) < min_required_days:
                 logging.warning(f"Could not fetch sufficient {sector} sector data for optimized analysis. Got: {len(sector_data) if sector_data is not None else 'None'}, Required: {min_required_days}")
                 return self._get_fallback_optimized_analysis(symbol, sector)
@@ -2786,9 +2999,16 @@ class SectorBenchmarkingProvider:
             async def fetch_relevant_sector_data(sector_name):
                 try:
                     data = await self._get_sector_data_async(sector_name, days + 20)
-                    if data is not None and len(data) >= days * 0.8:
+                    # CRITICAL FIX: Use same flexible requirement as main data validation
+                    # Use 60% of requested days, minimum 30 days (same as line 2968)
+                    min_required = max(30, int(days * 0.6))
+                    logging.info(f"DEBUG: Fetching {sector_name} - Available: {len(data) if data is not None else 'None'}, Required: {min_required}")
+                    if data is not None and len(data) >= min_required:
+                        logging.info(f"✅ {sector_name} data accepted: {len(data)} >= {min_required}")
                         return sector_name, data
-                    return None
+                    else:
+                        logging.warning(f"❌ {sector_name} data rejected: {len(data) if data is not None else 'None'} < {min_required}")
+                        return None
                 except Exception as e:
                     logging.warning(f"Error fetching {sector_name}: {e}")
                     return None
@@ -2814,7 +3034,7 @@ class SectorBenchmarkingProvider:
             
             # Calculate correlation metrics using relevant sectors
             correlation_days = min(60, days) if requested_period else 60  # Use sector analysis period, capped at 60 days
-            correlation = self._calculate_optimized_correlation(sector_data_dict, correlation_days)
+            correlation = self._calculate_optimized_correlation(sector_data_dict, correlation_days, sector)
             
             # STEP 5: Build comprehensive result
             comprehensive_result = {
@@ -2879,27 +3099,95 @@ class SectorBenchmarkingProvider:
         OPTIMIZED: Calculate benchmarking metrics using pre-fetched data.
         """
         try:
+            logging.info(f"\n=== DEBUG: OPTIMIZED BENCHMARKING START for {symbol} ===")
+            logging.info(f"DEBUG: Sector: {sector}")
+            logging.info(f"DEBUG: Stock data shape: {stock_data.shape if stock_data is not None else 'None'}")
+            logging.info(f"DEBUG: Sector data shape: {sector_data.shape if sector_data is not None else 'None'}")
+            logging.info(f"DEBUG: NIFTY data shape: {nifty_data.shape if nifty_data is not None else 'None'}")
+            
+            if stock_data is not None and not stock_data.empty:
+                logging.info(f"DEBUG: Stock data date range: {stock_data.index[0]} to {stock_data.index[-1]}")
+                logging.info(f"DEBUG: Stock close prices - First 3: {stock_data['close'].head(3).tolist()}")
+                logging.info(f"DEBUG: Stock close prices - Last 3: {stock_data['close'].tail(3).tolist()}")
+            
+            if sector_data is not None and not sector_data.empty:
+                logging.info(f"DEBUG: Sector data date range: {sector_data.index[0]} to {sector_data.index[-1]}")
+                logging.info(f"DEBUG: Sector close prices - First 3: {sector_data['close'].head(3).tolist()}")
+                logging.info(f"DEBUG: Sector close prices - Last 3: {sector_data['close'].tail(3).tolist()}")
+            
+            if nifty_data is not None and not nifty_data.empty:
+                logging.info(f"DEBUG: NIFTY data date range: {nifty_data.index[0]} to {nifty_data.index[-1]}")
+                logging.info(f"DEBUG: NIFTY close prices - First 3: {nifty_data['close'].head(3).tolist()}")
+                logging.info(f"DEBUG: NIFTY close prices - Last 3: {nifty_data['close'].tail(3).tolist()}")
+            
             # Calculate stock returns
+            logging.info(f"DEBUG: Calculating stock returns...")
             stock_returns = stock_data['close'].pct_change().dropna()
+            logging.info(f"DEBUG: Stock returns length: {len(stock_returns)} (from {len(stock_data)} original data points)")
+            logging.info(f"DEBUG: Stock returns stats - mean: {stock_returns.mean():.6f}, std: {stock_returns.std():.6f}")
             
             # Calculate sector returns
+            logging.info(f"DEBUG: Calculating sector returns...")
             sector_returns = sector_data['close'].pct_change().dropna()
+            logging.info(f"DEBUG: Sector returns length: {len(sector_returns)} (from {len(sector_data)} original data points)")
+            logging.info(f"DEBUG: Sector returns stats - mean: {sector_returns.mean():.6f}, std: {sector_returns.std():.6f}")
             
             # Calculate NIFTY returns
+            logging.info(f"DEBUG: Calculating NIFTY returns...")
             nifty_returns = nifty_data['close'].pct_change().dropna()
+            logging.info(f"DEBUG: NIFTY returns length: {len(nifty_returns)} (from {len(nifty_data)} original data points)")
+            logging.info(f"DEBUG: NIFTY returns stats - mean: {nifty_returns.mean():.6f}, std: {nifty_returns.std():.6f}")
             
             # Calculate metrics
+            logging.info(f"DEBUG: Calculating beta and correlation metrics...")
             stock_beta = self._calculate_beta(stock_returns, nifty_returns)
             sector_beta = self._calculate_beta(sector_returns, nifty_returns)
             stock_correlation = self._calculate_correlation(stock_returns, nifty_returns)
             sector_correlation = self._calculate_correlation(sector_returns, nifty_returns)
             
+            logging.info(f"DEBUG: Calculated metrics:")
+            logging.info(f"  - Stock Beta: {stock_beta:.6f}")
+            logging.info(f"  - Sector Beta: {sector_beta:.6f}")
+            logging.info(f"  - Stock Correlation: {stock_correlation:.6f}")
+            logging.info(f"  - Sector Correlation: {sector_correlation:.6f}")
+            
             # Calculate performance metrics
+            logging.info(f"DEBUG: Calculating performance metrics...")
             stock_cumulative_return = (1 + stock_returns).prod() - 1
             sector_cumulative_return = (1 + sector_returns).prod() - 1
             nifty_cumulative_return = (1 + nifty_returns).prod() - 1
             
-            return {
+            # Calculate volatility (annualized)
+            stock_volatility = stock_returns.std() * np.sqrt(252)  # 252 trading days per year
+            sector_volatility = sector_returns.std() * np.sqrt(252)
+            nifty_volatility = nifty_returns.std() * np.sqrt(252)
+            
+            # Calculate annualized returns
+            days_in_data = len(stock_returns)
+            stock_annualized_return = ((1 + stock_cumulative_return) ** (252 / days_in_data)) - 1
+            sector_annualized_return = ((1 + sector_cumulative_return) ** (252 / days_in_data)) - 1
+            nifty_annualized_return = ((1 + nifty_cumulative_return) ** (252 / days_in_data)) - 1
+            
+            # Calculate Sharpe ratios (risk-adjusted returns)
+            risk_free_rate = 0.07  # 7% annual risk-free rate (Indian government bonds)
+            stock_sharpe = (stock_annualized_return - risk_free_rate) / stock_volatility if stock_volatility > 0 else 0
+            sector_sharpe = (sector_annualized_return - risk_free_rate) / sector_volatility if sector_volatility > 0 else 0
+            nifty_sharpe = (nifty_annualized_return - risk_free_rate) / nifty_volatility if nifty_volatility > 0 else 0
+            
+            logging.info(f"DEBUG: Performance metrics calculated:")
+            logging.info(f"  - Stock Cumulative Return: {stock_cumulative_return:.6f}")
+            logging.info(f"  - Sector Cumulative Return: {sector_cumulative_return:.6f}")
+            logging.info(f"  - NIFTY Cumulative Return: {nifty_cumulative_return:.6f}")
+            logging.info(f"  - Stock Annualized Return: {stock_annualized_return:.6f}")
+            logging.info(f"  - Sector Annualized Return: {sector_annualized_return:.6f}")
+            logging.info(f"  - Stock Volatility: {stock_volatility:.6f}")
+            logging.info(f"  - Sector Volatility: {sector_volatility:.6f}")
+            logging.info(f"  - Stock Sharpe Ratio: {stock_sharpe:.6f}")
+            logging.info(f"  - Sector Sharpe Ratio: {sector_sharpe:.6f}")
+            logging.info(f"  - Stock Excess Return: {stock_cumulative_return - nifty_cumulative_return:.6f}")
+            logging.info(f"  - Sector Excess Return: {sector_cumulative_return - nifty_cumulative_return:.6f}")
+            
+            result = {
                 'sector': sector,
                 'beta': round(stock_beta, 3),
                 'sector_beta': round(sector_beta, 3),
@@ -2907,8 +3195,42 @@ class SectorBenchmarkingProvider:
                 'sector_correlation': round(sector_correlation, 3),
                 'excess_return': round(stock_cumulative_return - nifty_cumulative_return, 4),
                 'sector_excess_return': round(sector_cumulative_return - nifty_cumulative_return, 4),
-                'optimization_note': 'Calculated using pre-fetched data'
+                # Add the new calculated metrics
+                'stock_sharpe': round(stock_sharpe, 3),
+                'sector_sharpe': round(sector_sharpe, 3),
+                'stock_volatility': round(stock_volatility, 3),
+                'sector_volatility': round(sector_volatility, 3),
+                'stock_annualized_return': round(stock_annualized_return, 4),
+                'sector_annualized_return': round(sector_annualized_return, 4),
+                'stock_cumulative_return': round(stock_cumulative_return, 4),
+                'sector_cumulative_return': round(sector_cumulative_return, 4),
+                'optimization_note': 'Calculated using pre-fetched data',
+                # Add data quality information for frontend
+                'data_quality': {
+                    'sufficient_data': True,
+                    'data_points': len(stock_returns),
+                    'minimum_recommended': 30,
+                    'reliability': 'high',
+                    'analysis_mode': 'optimized',
+                    'limitations': [],
+                    'recommendations': []
+                },
+                'data_points': {
+                    'stock_data_points': len(stock_returns),
+                    'market_data_points': len(nifty_returns),
+                    'sector_data_points': len(sector_returns)
+                }
             }
+            
+            logging.info(f"DEBUG: Final optimized benchmarking result:")
+            for key, value in result.items():
+                if isinstance(value, (int, float)):
+                    logging.info(f"  - {key}: {value}")
+                else:
+                    logging.info(f"  - {key}: {value}")
+            logging.info(f"DEBUG: OPTIMIZED BENCHMARKING SUCCESS")
+            
+            return result
             
         except Exception as e:
             logging.error(f"Error in optimized benchmarking: {e}")
@@ -2963,10 +3285,20 @@ class SectorBenchmarkingProvider:
                     # Performance data already available in sector_performance[sector_name]
                 }
             
+            # CRITICAL FIX: Add rotation patterns analysis that frontend expects
+            rotation_patterns = self._identify_rotation_patterns(sector_performance, f"{days}D")
+            
+            # CRITICAL FIX: Add recommendations that frontend expects  
+            recommendations = self._generate_rotation_recommendations(sector_rankings, rotation_patterns, sector_performance)
+            
+            logging.info(f"Optimized rotation calculated: {len(sector_performance)} sectors, rotation_strength: {rotation_patterns.get('rotation_strength', 'unknown')}")
+            
             return {
                 'timeframe': f"{days}D",
                 'sector_performance': sector_performance,
                 'sector_rankings': sector_rankings,
+                'rotation_patterns': rotation_patterns,  # CRITICAL FIX: Added this
+                'recommendations': recommendations,      # CRITICAL FIX: Added this
                 'optimization_note': 'Calculated using pre-fetched data'
             }
             
@@ -2975,7 +3307,7 @@ class SectorBenchmarkingProvider:
             return {'error': str(e)}
     
     def _calculate_optimized_correlation(self, sector_data_dict: Dict[str, pd.DataFrame], 
-                                       days: int) -> Dict[str, Any]:
+                                       days: int, current_sector: str = None) -> Dict[str, Any]:
         """
         OPTIMIZED: Calculate correlation metrics using pre-fetched data.
         """
@@ -3023,12 +3355,60 @@ class SectorBenchmarkingProvider:
                             'correlation': round(correlation, 3)
                         })
             
+            # Calculate sector volatilities
+            sector_volatilities = {}
+            for sector_name, returns in returns_data.items():
+                volatility = returns.std() * np.sqrt(252)  # Annualized volatility
+                sector_volatilities[sector_name] = round(volatility * 100, 2)  # Convert to percentage
+            
+            # Get current sector volatility (single value as expected by frontend)
+            sector_volatility = sector_volatilities.get(current_sector, None) if current_sector else None
+            
+            # Calculate diversification insights
+            diversification_quality = 'good'
+            if avg_correlation > 0.7:
+                diversification_quality = 'poor'
+            elif avg_correlation > 0.5:
+                diversification_quality = 'moderate'
+            elif avg_correlation > 0.3:
+                diversification_quality = 'good'
+            else:
+                diversification_quality = 'excellent'
+            
+            # Generate diversification recommendations
+            recommendations = []
+            if avg_correlation > 0.6:
+                recommendations.append({
+                    'type': 'diversification',
+                    'message': 'High sector correlation detected - consider diversifying across asset classes',
+                    'priority': 'high'
+                })
+            elif len(high_correlation_pairs) > 0:
+                recommendations.append({
+                    'type': 'sector_rotation',
+                    'message': f'Strong correlation between {high_correlation_pairs[0]["sector1"]} and {high_correlation_pairs[0]["sector2"]} sectors',
+                    'priority': 'medium'
+                })
+            
+            if len(low_correlation_pairs) > 0:
+                recommendations.append({
+                    'type': 'portfolio_balance',
+                    'message': f'Good diversification opportunity between {low_correlation_pairs[0]["sector1"]} and {low_correlation_pairs[0]["sector2"]} sectors',
+                    'priority': 'low'
+                })
+            
             return {
                 'timeframe': f"{days}D",
                 'correlation_matrix': correlation_matrix.round(3).to_dict(),
                 'average_correlation': round(avg_correlation, 3),
+                'sector_volatility': sector_volatility,  # CRITICAL FIX: Added missing field
+                'sector_volatilities': sector_volatilities,  # All sector volatilities for reference
                 'high_correlation_pairs': high_correlation_pairs,
                 'low_correlation_pairs': low_correlation_pairs,
+                'diversification_insights': {  # CRITICAL FIX: Added missing field
+                    'diversification_quality': diversification_quality,
+                    'recommendations': recommendations
+                },
                 'optimization_note': 'Calculated using pre-fetched data'
             }
             
