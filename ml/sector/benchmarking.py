@@ -44,44 +44,8 @@ class SectorBenchmarkingProvider:
         self.comprehensive_cache_duration = 7200  # OPTIMIZED: Increased from 3600 (1 hour) to 7200 (2 hours)
         self.last_comprehensive_update = None
         
-        # FIXED: Consolidated sector mappings - removed duplicates and added specific banking sectors
-        self.sector_tokens = {
-            # Financial Services (specific categories to avoid duplicates)
-            'BANKING': 'NIFTY BANK',                    # General banking sector
-            'PRIVATE_BANK': 'NIFTY PRIVATE BANK',       # Private banks only 
-            'PSU_BANK': 'NIFTY PSU BANK',               # Public sector banks only
-            'FINANCIAL_SERVICES': 'NIFTY FINANCIAL SERVICES',  # Broader financial services
-            
-            # Technology & Communication
-            'IT': 'NIFTY IT',
-            'TELECOM': 'NIFTY SERV SECTOR',
-            
-            # Healthcare & Pharmaceuticals  
-            'PHARMA': 'NIFTY PHARMA',
-            'HEALTHCARE': 'NIFTY HEALTHCARE',
-            
-            # Industrial & Manufacturing
-            'AUTO': 'NIFTY AUTO',
-            'METAL': 'NIFTY METAL',
-            'INFRASTRUCTURE': 'NIFTY INFRA',
-            
-            # Consumer & Retail
-            'FMCG': 'NIFTY FMCG',
-            'CONSUMER_DURABLES': 'NIFTY CONSR DURBL',
-            'CONSUMPTION': 'NIFTY CONSUMPTION',
-            
-            # Energy & Commodities
-            'ENERGY': 'NIFTY ENERGY', 
-            'OIL_GAS': 'NIFTY OIL AND GAS',
-            
-            # Other Sectors
-            'REALTY': 'NIFTY REALTY',
-            'MEDIA': 'NIFTY MEDIA',
-            'TRANSPORT': 'NIFTY SERV SECTOR'
-        }
-        
-        # DEPRECATED: Keeping for backward compatibility but will be phased out
-        self.sector_indices = self.sector_tokens.copy()
+        # REMOVED: Hardcoded sector mappings - now using actual sector definitions from JSON files
+        # All sector information is now dynamically loaded from the sector classifier
         
         logging.info("SectorBenchmarkingProvider initialized with hybrid caching strategy")
     
@@ -347,7 +311,8 @@ class SectorBenchmarkingProvider:
             days = timeframe_days.get(timeframe, 30)  # Default to 1M instead of 3M
             
             # OPTIMIZATION: Fetch NIFTY 50 data once and reuse for all sectors
-            logging.info(f"Fetching NIFTY 50 data once for {timeframe} timeframe (will be reused for all {len(self.sector_tokens)} sectors)")
+            all_sectors_data = self.sector_classifier.get_all_sectors()
+            logging.info(f"Fetching NIFTY 50 data once for {timeframe} timeframe (will be reused for all {len(all_sectors_data)} sectors)")
             nifty_data = self._get_nifty_data(days + 20)  # OPTIMIZED: Reduced buffer from 50 to 20 days
             nifty_return = None
             if nifty_data is not None and len(nifty_data) >= days:
@@ -357,18 +322,35 @@ class SectorBenchmarkingProvider:
             else:
                 logging.warning("Could not fetch NIFTY 50 data for sector rotation analysis")
             
+            # FIXED: Use actual sectors from sector classifier instead of hardcoded list
+            all_sectors_data = self.sector_classifier.get_all_sectors()
+            all_sectors = [s['code'] for s in all_sectors_data]  # Extract sector codes
+            logging.info(f"Using actual sectors from classifier for rotation: {len(all_sectors)} sectors found")
+            
             # Get sector performance data
             sector_performance = {}
             sector_momentum = {}
             sector_rankings = {}
             
-            for sector, token in self.sector_tokens.items():
+            for sector in all_sectors:
                 try:
+                    # Get sector index for data fetching
+                    sector_index = self.sector_classifier.get_primary_sector_index(sector)
+                    if not sector_index:
+                        logging.warning(f"No primary index found for sector: {sector}")
+                        continue
+                        
                     # Get historical data for sector index - OPTIMIZED timeframe
-                    sector_data = self._get_sector_data(sector, days + 20)  # OPTIMIZED: Reduced buffer from 50 to 20 days
+                    sector_data = self.zerodha_client.get_historical_data(
+                        symbol=sector_index,
+                        exchange="NSE",
+                        period=days + 20
+                    )
+                    
                     # More flexible data requirement for longer timeframes
                     min_required = days * 0.7 if days > 60 else days * 0.8  # OPTIMIZED: Adjusted thresholds
                     if sector_data is None or len(sector_data) < min_required:
+                        logging.warning(f"No sufficient data for {sector} ({sector_index}): got {len(sector_data) if sector_data is not None else 0} records, need at least {min_required:.0f}")
                         continue
                     
                     # Calculate sector performance
@@ -554,13 +536,31 @@ class SectorBenchmarkingProvider:
             }
             days = timeframe_days.get(timeframe, 60)  # Default to 3M instead of 6M
             
+            # FIXED: Use actual sectors from sector classifier instead of hardcoded list
+            all_sectors_data = self.sector_classifier.get_all_sectors()
+            all_sectors = [s['code'] for s in all_sectors_data]  # Extract sector codes
+            logging.info(f"Using actual sectors from classifier: {len(all_sectors)} sectors found")
+            logging.info(f"Sectors: {all_sectors}")
+            
             # Collect sector data
             sector_data = {}
             valid_sectors = []
             
-            for sector, token in self.sector_tokens.items():
+            for sector in all_sectors:
                 try:
-                    data = self._get_sector_data(sector, days + 20)  # OPTIMIZED: Reduced buffer from 50 to 20 days
+                    # Get sector index for data fetching
+                    sector_index = self.sector_classifier.get_primary_sector_index(sector)
+                    if not sector_index:
+                        logging.warning(f"No primary index found for sector: {sector}")
+                        continue
+                        
+                    # Fetch sector data using sector index
+                    data = self.zerodha_client.get_historical_data(
+                        symbol=sector_index,
+                        exchange="NSE",
+                        period=days + 20
+                    )
+                    
                     # More flexible data requirement for longer timeframes
                     min_required = days * 0.7 if days > 60 else days * 0.8  # OPTIMIZED: Adjusted thresholds
                     if data is not None and len(data) >= min_required:
@@ -568,9 +568,9 @@ class SectorBenchmarkingProvider:
                         returns = data['close'].pct_change().dropna()
                         sector_data[sector] = returns
                         valid_sectors.append(sector)
-                        # logging.info(f"Successfully got data for {sector}: {len(data)} records")
+                        logging.info(f"Successfully got data for {sector} ({sector_index}): {len(data)} records")
                     else:
-                        logging.warning(f"No sufficient data for {sector}: got {len(data) if data is not None else 0} records, need at least {min_required:.0f}")
+                        logging.warning(f"No sufficient data for {sector} ({sector_index}): got {len(data) if data is not None else 0} records, need at least {min_required:.0f}")
                 except Exception as e:
                     logging.warning(f"Error getting data for {sector}: {e}")
                     continue
@@ -610,6 +610,9 @@ class SectorBenchmarkingProvider:
                 volatility = sector_data[sector].std() * np.sqrt(252) * 100  # Annualized %
                 sector_volatility[sector] = round(volatility, 2)
             
+            # Calculate average sector volatility for frontend compatibility
+            avg_sector_volatility = sum(sector_volatility.values()) / len(sector_volatility) if sector_volatility else 0
+            
             # Convert numpy types to native Python types for JSON serialization
             def convert_numpy_types(obj):
                 if isinstance(obj, np.integer):
@@ -639,6 +642,8 @@ class SectorBenchmarkingProvider:
                 'timeframe': timeframe,
                 'correlation_matrix': correlation_matrix_clean,
                 'average_correlation': float(round(avg_correlation, 3)),
+                'sector_volatility': round(avg_sector_volatility, 2),  # FIXED: Single value for frontend
+                'sector_volatilities': sector_volatility_clean,  # Individual sector volatilities for reference
                 'high_correlation_pairs': high_correlation_pairs_clean,
                 'low_correlation_pairs': low_correlation_pairs_clean,
                 # ENHANCED: New correlation categories
@@ -651,7 +656,6 @@ class SectorBenchmarkingProvider:
                     'moderate_negative': convert_numpy_types(correlation_pairs['moderate_negative']),
                     'high_negative': convert_numpy_types(correlation_pairs['high_negative'])
                 },
-                'sector_volatility': sector_volatility_clean,
                 'diversification_insights': diversification_insights_clean,
                 'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'optimization_note': 'Enhanced correlation analysis with negative correlation support'
@@ -683,13 +687,30 @@ class SectorBenchmarkingProvider:
             }
             days = timeframe_days.get(timeframe, 60)  # Default to 3M instead of 6M
             
+            # FIXED: Use actual sectors from sector classifier instead of hardcoded list
+            all_sectors_data = self.sector_classifier.get_all_sectors()
+            all_sectors = [s['code'] for s in all_sectors_data]  # Extract sector codes
+            logging.info(f"Using actual sectors from classifier: {len(all_sectors)} sectors found")
+            
             # Collect sector data using async parallel fetching
             sector_data = {}
             valid_sectors = []
             
-            async def fetch_sector_data(sector, token):
+            async def fetch_sector_data(sector):
                 try:
-                    data = await self._get_sector_data_async(sector, days + 20)  # OPTIMIZED: Reduced buffer from 50 to 20 days
+                    # Get sector index for data fetching
+                    sector_index = self.sector_classifier.get_primary_sector_index(sector)
+                    if not sector_index:
+                        logging.warning(f"No primary index found for sector: {sector}")
+                        return None
+                        
+                    # Fetch sector data using sector index
+                    data = await self.zerodha_client.get_historical_data_async(
+                        symbol=sector_index,
+                        exchange="NSE",
+                        period=days + 20
+                    )
+                    
                     # More flexible data requirement for longer timeframes
                     min_required = days * 0.7 if days > 60 else days * 0.8  # OPTIMIZED: Adjusted thresholds
                     if data is not None and len(data) >= min_required:
@@ -697,14 +718,14 @@ class SectorBenchmarkingProvider:
                         returns = data['close'].pct_change().dropna()
                         return sector, returns
                     else:
-                        logging.warning(f"No sufficient data for {sector}: got {len(data) if data is not None else 0} records, need at least {min_required:.0f}")
+                        logging.warning(f"No sufficient data for {sector} ({sector_index}): got {len(data) if data is not None else 0} records, need at least {min_required:.0f}")
                         return None
                 except Exception as e:
                     logging.warning(f"Error getting data for {sector}: {e}")
                     return None
             
             # Fetch all sector data in parallel
-            tasks = [fetch_sector_data(sector, token) for sector, token in self.sector_tokens.items()]
+            tasks = [fetch_sector_data(sector) for sector in all_sectors]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
             # Process results
@@ -752,6 +773,9 @@ class SectorBenchmarkingProvider:
                 volatility = sector_data[sector].std() * np.sqrt(252) * 100  # Annualized %
                 sector_volatility[sector] = round(volatility, 2)
             
+            # Calculate average sector volatility for frontend compatibility
+            avg_sector_volatility = sum(sector_volatility.values()) / len(sector_volatility) if sector_volatility else 0
+            
             # Convert numpy types to native Python types for JSON serialization
             def convert_numpy_types(obj):
                 if isinstance(obj, np.integer):
@@ -781,6 +805,8 @@ class SectorBenchmarkingProvider:
                 'timeframe': timeframe,
                 'correlation_matrix': correlation_matrix_clean,
                 'average_correlation': float(round(avg_correlation, 3)),
+                'sector_volatility': round(avg_sector_volatility, 2),  # FIXED: Single value for frontend
+                'sector_volatilities': sector_volatility_clean,  # Individual sector volatilities for reference
                 'high_correlation_pairs': high_correlation_pairs_clean,
                 'low_correlation_pairs': low_correlation_pairs_clean,
                 # ENHANCED: New correlation categories
@@ -793,7 +819,6 @@ class SectorBenchmarkingProvider:
                     'moderate_negative': convert_numpy_types(correlation_pairs['moderate_negative']),
                     'high_negative': convert_numpy_types(correlation_pairs['high_negative'])
                 },
-                'sector_volatility': sector_volatility_clean,
                 'diversification_insights': diversification_insights_clean,
                 'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'optimization_note': 'Async enhanced correlation analysis with negative correlation support'
@@ -1868,10 +1893,8 @@ class SectorBenchmarkingProvider:
             sector_index = self.sector_classifier.get_primary_sector_index(sector)
             logging.info(f"Resolved sector index for {sector}: {sector_index}")
             
-            # FALLBACK: If classifier fails, use our hardcoded mappings
-            if not sector_index and sector in self.sector_indices:
-                sector_index = self.sector_indices[sector]
-                logging.info(f"Using fallback sector index mapping for {sector}: {sector_index}")
+            # No fallback needed - use only the classifier data
+            # All sector index mappings should be available in the JSON files
             
             if not sector_index:
                 logging.warning(f"No primary index found for sector: {sector} (checked both classifier and fallback mappings)")
@@ -1913,10 +1936,8 @@ class SectorBenchmarkingProvider:
             # Get sector index symbol
             sector_index = self.sector_classifier.get_primary_sector_index(sector)
             
-            # FALLBACK: If classifier fails, use our hardcoded mappings
-            if not sector_index and sector in self.sector_indices:
-                sector_index = self.sector_indices[sector]
-                logging.info(f"Using fallback sector index mapping for {sector}: {sector_index}")
+            # No fallback needed - use only the classifier data
+            # All sector index mappings should be available in the JSON files
             
             if not sector_index:
                 logging.warning(f"No primary index found for sector: {sector} (checked both classifier and fallback mappings)")
@@ -2675,8 +2696,9 @@ class SectorBenchmarkingProvider:
             # (This is a lightweight operation that doesn't fetch full data)
             sector_performance_sample = {}
             
-            # Sample only 5 sectors for quick ranking (instead of all 16)
-            sample_sectors = list(self.sector_tokens.keys())[:5]
+            # Sample only 5 sectors for quick ranking (instead of all sectors)
+            all_sectors_data = self.sector_classifier.get_all_sectors()
+            sample_sectors = [s['code'] for s in all_sectors_data[:5]]
             for sector in sample_sectors:
                 try:
                     # Get minimal data for ranking
@@ -2985,7 +3007,7 @@ class SectorBenchmarkingProvider:
                 'sector_performance_summary': {
                     'leading_sectors': [],
                     'lagging_sectors': [],
-                    'sector_count': len(self.sector_tokens)
+                    'sector_count': len(self.sector_classifier.get_all_sectors())
                 },
                 'market_volatility': {
                     'current_vix': 15.0,  # Default value
@@ -3007,7 +3029,7 @@ class SectorBenchmarkingProvider:
             logging.error(f"Error generating market overview: {e}")
             return {} 
 
-    async def get_optimized_comprehensive_sector_analysis(self, symbol: str, stock_data: pd.DataFrame, sector: str, requested_period: int = None) -> Dict[str, Any]:
+    async def get_optimized_comprehensive_sector_analysis(self, symbol: str, stock_data: pd.DataFrame, sector: str, requested_period: int = None, use_all_sectors: bool = True) -> Dict[str, Any]:
         """
         OPTIMIZED: Unified sector data fetcher that minimizes API calls and maximizes data reuse.
         
@@ -3021,149 +3043,205 @@ class SectorBenchmarkingProvider:
             symbol: Stock symbol
             stock_data: Historical stock data
             sector: Stock's sector
+            requested_period: Optional period for analysis (in days)
+            use_all_sectors: If True, analyze all sectors instead of optimized subset (default: True)
             
         Returns:
             Dict containing all sector analysis data (benchmarking, rotation, correlation)
         """
-        try:
-            logging.info(f"OPTIMIZED: Starting unified sector analysis for {symbol} in {sector} sector")
+        # Try comprehensive analysis first, fall back to optimized if it fails
+        max_attempts = 2
+        current_attempt = 1
+        last_error = None
+        
+        while current_attempt <= max_attempts:
+            current_use_all_sectors = use_all_sectors if current_attempt == 1 else False
+            analysis_type = "COMPREHENSIVE" if current_use_all_sectors else "OPTIMIZED (FALLBACK)"
             
-            # Calculate appropriate timeframes based on requested period
-            if requested_period:
-                # Use requested period with some buffer for analysis
-                base_days = min(requested_period, len(stock_data)) if stock_data is not None and not stock_data.empty else requested_period
-                days = max(30, base_days + 20)  # At least 30 days, add 20 day buffer
-                logging.info(f"OPTIMIZED: Using requested period of {requested_period} days, adjusted to {days} days for sector analysis")
-            else:
-                # Fallback to optimized timeframes
-                OPTIMIZED_TIMEFRAMES = {
-                    "sector_rotation": 30,    # 1M - sufficient for rotation analysis
-                    "correlation": 60,        # 3M - sufficient for correlation analysis
-                    "benchmarking": 180,      # 6M - sufficient for benchmarking metrics
-                    "comprehensive": 180      # 6M - unified timeframe for all analyses
-                }
-                days = OPTIMIZED_TIMEFRAMES["comprehensive"]
-                logging.info(f"OPTIMIZED: Using default comprehensive timeframe of {days} days")
+            try:
+                logging.info(f"{analysis_type}: Starting unified sector analysis for {symbol} in {sector} sector (attempt {current_attempt}/{max_attempts})")
             
-            # STEP 1: Fetch NIFTY 50 data once (reused for all analyses)
-            logging.info(f"OPTIMIZED: Fetching NIFTY 50 data once for {days} days (will be reused)")
-            nifty_data = await self._get_nifty_data_async(days + 20)
+                # Calculate appropriate timeframes based on requested period
+                if requested_period:
+                    # Use requested period with some buffer for analysis
+                    base_days = min(requested_period, len(stock_data)) if stock_data is not None and not stock_data.empty else requested_period
+                    days = max(30, base_days + 20)  # At least 30 days, add 20 day buffer
+                    logging.info(f"{analysis_type}: Using requested period of {requested_period} days, adjusted to {days} days for sector analysis")
+                else:
+                    # Fallback to optimized timeframes
+                    OPTIMIZED_TIMEFRAMES = {
+                        "sector_rotation": 30,    # 1M - sufficient for rotation analysis
+                        "correlation": 60,        # 3M - sufficient for correlation analysis
+                        "benchmarking": 180,      # 6M - sufficient for benchmarking metrics
+                        "comprehensive": 180      # 6M - unified timeframe for all analyses
+                    }
+                    days = OPTIMIZED_TIMEFRAMES["comprehensive"]
+                    logging.info(f"{analysis_type}: Using default comprehensive timeframe of {days} days")
             
-            # DEBUG: Log NIFTY data details
-            if nifty_data is not None:
-                logging.info(f"OPTIMIZED: NIFTY 50 data fetched - Length: {len(nifty_data)}, Required: {days}")
-                logging.info(f"OPTIMIZED: NIFTY 50 data date range: {nifty_data.index[0]} to {nifty_data.index[-1]}")
-            else:
-                logging.warning("OPTIMIZED: NIFTY 50 data is None")
+                # STEP 1: Fetch NIFTY 50 data once (reused for all analyses)
+                logging.info(f"{analysis_type}: Fetching NIFTY 50 data once for {days} days (will be reused)")
+                nifty_data = await self._get_nifty_data_async(days + 20)
+                
+                # DEBUG: Log NIFTY data details
+                if nifty_data is not None:
+                    logging.info(f"{analysis_type}: NIFTY 50 data fetched - Length: {len(nifty_data)}, Required: {days}")
+                    logging.info(f"{analysis_type}: NIFTY 50 data date range: {nifty_data.index[0]} to {nifty_data.index[-1]}")
+                else:
+                    logging.warning(f"{analysis_type}: NIFTY 50 data is None")
             
-            # Use more flexible data requirement - accept 60% of requested days, minimum 30 days
-            min_required_days = max(30, int(days * 0.6))  # At least 30 days, or 60% of requested (more lenient)
-            logging.info(f"DEBUG: Data requirement check - Days requested: {days}, Min required: {min_required_days}, NIFTY data available: {len(nifty_data) if nifty_data is not None else 'None'}")
-            
-            if nifty_data is None or len(nifty_data) < min_required_days:
-                logging.warning(f"Could not fetch sufficient NIFTY 50 data for optimized analysis. Got: {len(nifty_data) if nifty_data is not None else 'None'}, Required: {min_required_days}")
-                return self._get_fallback_optimized_analysis(symbol, sector)
-            
-            # STEP 2: Fetch stock's sector data once (reused for all analyses)
-            logging.info(f"OPTIMIZED: Fetching {sector} sector data once for {days} days")
-            sector_data = await self._get_sector_data_async(sector, days + 20)
-            
-            # DEBUG: Log sector data details
-            if sector_data is not None:
-                logging.info(f"OPTIMIZED: {sector} sector data fetched - Length: {len(sector_data)}, Required: {days}")
-                logging.info(f"OPTIMIZED: {sector} sector data date range: {sector_data.index[0]} to {sector_data.index[-1]}")
-            else:
-                logging.warning(f"OPTIMIZED: {sector} sector data is None")
-            
-            # Use same flexible requirement as NIFTY data
-            logging.info(f"DEBUG: Sector data requirement check - {sector} data available: {len(sector_data) if sector_data is not None else 'None'}, Min required: {min_required_days}")
-            
-            if sector_data is None or len(sector_data) < min_required_days:
-                logging.warning(f"Could not fetch sufficient {sector} sector data for optimized analysis. Got: {len(sector_data) if sector_data is not None else 'None'}, Required: {min_required_days}")
-                return self._get_fallback_optimized_analysis(symbol, sector)
-            
-            # STEP 3: Fetch top 8 sectors for rotation analysis (instead of all 16)
-            # Select sectors based on relevance and performance
-            relevant_sectors = self._get_relevant_sectors_for_analysis(sector)
-            logging.info(f"OPTIMIZED: Fetching {len(relevant_sectors)} relevant sectors instead of all 16")
-            
-            sector_data_dict = {}
-            async def fetch_relevant_sector_data(sector_name):
-                try:
-                    data = await self._get_sector_data_async(sector_name, days + 20)
-                    # CRITICAL FIX: Use same flexible requirement as main data validation
-                    # Use 60% of requested days, minimum 30 days (same as line 2968)
-                    min_required = max(30, int(days * 0.6))
-                    logging.info(f"DEBUG: Fetching {sector_name} - Available: {len(data) if data is not None else 'None'}, Required: {min_required}")
-                    if data is not None and len(data) >= min_required:
-                        logging.info(f"✅ {sector_name} data accepted: {len(data)} >= {min_required}")
-                        return sector_name, data
+                # Use more flexible data requirement - accept 60% of requested days, minimum 30 days
+                min_required_days = max(30, int(days * 0.6))  # At least 30 days, or 60% of requested (more lenient)
+                logging.info(f"DEBUG: Data requirement check - Days requested: {days}, Min required: {min_required_days}, NIFTY data available: {len(nifty_data) if nifty_data is not None else 'None'}")
+                
+                if nifty_data is None or len(nifty_data) < min_required_days:
+                    error_msg = f"Could not fetch sufficient NIFTY 50 data for {analysis_type.lower()} analysis. Got: {len(nifty_data) if nifty_data is not None else 'None'}, Required: {min_required_days}"
+                    logging.warning(error_msg)
+                    if current_attempt < max_attempts:
+                        logging.info(f"Insufficient data for {analysis_type.lower()}, will retry with fallback approach")
+                        raise Exception(error_msg)
                     else:
-                        logging.warning(f"❌ {sector_name} data rejected: {len(data) if data is not None else 'None'} < {min_required}")
+                        return self._get_fallback_optimized_analysis(symbol, sector)
+            
+                # STEP 2: Fetch stock's sector data once (reused for all analyses)
+                logging.info(f"{analysis_type}: Fetching {sector} sector data once for {days} days")
+                sector_data = await self._get_sector_data_async(sector, days + 20)
+                
+                # DEBUG: Log sector data details
+                if sector_data is not None:
+                    logging.info(f"{analysis_type}: {sector} sector data fetched - Length: {len(sector_data)}, Required: {days}")
+                    logging.info(f"{analysis_type}: {sector} sector data date range: {sector_data.index[0]} to {sector_data.index[-1]}")
+                else:
+                    logging.warning(f"{analysis_type}: {sector} sector data is None")
+                
+                # Use same flexible requirement as NIFTY data
+                logging.info(f"DEBUG: Sector data requirement check - {sector} data available: {len(sector_data) if sector_data is not None else 'None'}, Min required: {min_required_days}")
+                
+                if sector_data is None or len(sector_data) < min_required_days:
+                    error_msg = f"Could not fetch sufficient {sector} sector data for {analysis_type.lower()} analysis. Got: {len(sector_data) if sector_data is not None else 'None'}, Required: {min_required_days}"
+                    logging.warning(error_msg)
+                    if current_attempt < max_attempts:
+                        logging.info(f"Insufficient sector data for {analysis_type.lower()}, will retry with fallback approach")
+                        raise Exception(error_msg)
+                    else:
+                        return self._get_fallback_optimized_analysis(symbol, sector)
+            
+                # STEP 3: Fetch sectors for analysis (optimized subset or all sectors)
+                # Select sectors based on relevance, performance, or comprehensive analysis flag
+                relevant_sectors = self._get_relevant_sectors_for_analysis(sector, current_use_all_sectors)
+                sector_type = "all sectors" if current_use_all_sectors else "relevant sectors"
+                logging.info(f"{analysis_type}: Fetching {len(relevant_sectors)} {sector_type}")
+            
+                sector_data_dict = {}
+                async def fetch_relevant_sector_data(sector_name):
+                    try:
+                        data = await self._get_sector_data_async(sector_name, days + 20)
+                        # CRITICAL FIX: Use same flexible requirement as main data validation
+                        # Use 60% of requested days, minimum 30 days (same as line 2968)
+                        min_required = max(30, int(days * 0.6))
+                        logging.info(f"DEBUG: Fetching {sector_name} - Available: {len(data) if data is not None else 'None'}, Required: {min_required}")
+                        if data is not None and len(data) >= min_required:
+                            logging.info(f"✅ {sector_name} data accepted: {len(data)} >= {min_required}")
+                            return sector_name, data
+                        else:
+                            logging.warning(f"❌ {sector_name} data rejected: {len(data) if data is not None else 'None'} < {min_required}")
+                            return None
+                    except Exception as e:
+                        logging.warning(f"Error fetching {sector_name}: {e}")
                         return None
-                except Exception as e:
-                    logging.warning(f"Error fetching {sector_name}: {e}")
-                    return None
-            
-            # Fetch relevant sectors in parallel
-            tasks = [fetch_relevant_sector_data(s) for s in relevant_sectors]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            for result in results:
-                if result is not None and not isinstance(result, Exception):
-                    sector_name, data = result
-                    sector_data_dict[sector_name] = data
-            
-            # STEP 4: Calculate all metrics using fetched data
-            logging.info("OPTIMIZED: Calculating comprehensive sector metrics")
-            
-            # Calculate benchmarking metrics
-            benchmarking = self._calculate_optimized_benchmarking(symbol, stock_data, sector, sector_data, nifty_data)
-            
-            # Calculate rotation metrics using relevant sectors
-            rotation_days = min(30, days // 2) if requested_period else 30  # Use half of sector analysis period, capped at 30 days
-            rotation = self._calculate_optimized_rotation(sector_data_dict, nifty_data, rotation_days)
-            
-            # Calculate correlation metrics using relevant sectors
-            correlation_days = min(60, days) if requested_period else 60  # Use sector analysis period, capped at 60 days
-            correlation = self._calculate_optimized_correlation(sector_data_dict, correlation_days, sector)
-            
-            # STEP 5: Build comprehensive result
-            comprehensive_result = {
-                'sector_benchmarking': benchmarking,
-                'sector_rotation': rotation,
-                'sector_correlation': correlation,
-                'optimization_metrics': {
-                    'api_calls_reduced': f"35 → {len(relevant_sectors) + 2}",  # +2 for NIFTY and stock's sector
-                    'data_points_reduced': f"6,790 → {len(relevant_sectors) * days + days * 2}",
-                    'timeframes_optimized': '3M,6M,1Y → 1M,3M,6M',
-                    'cache_duration': '1 hour (increased from 15 min)',
-                    'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Fetch relevant sectors in parallel
+                tasks = [fetch_relevant_sector_data(s) for s in relevant_sectors]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                for result in results:
+                    if result is not None and not isinstance(result, Exception):
+                        sector_name, data = result
+                        sector_data_dict[sector_name] = data
+                
+                # Check if we have sufficient sectors for analysis
+                if len(sector_data_dict) < 3 and current_use_all_sectors and current_attempt < max_attempts:
+                    error_msg = f"Insufficient sectors for {analysis_type.lower()} analysis. Got {len(sector_data_dict)} sectors, expected at least 3."
+                    logging.warning(error_msg)
+                    logging.info(f"Insufficient sectors for {analysis_type.lower()}, will retry with fallback approach")
+                    raise Exception(error_msg)
+                
+                # STEP 4: Calculate all metrics using fetched data
+                logging.info(f"{analysis_type}: Calculating comprehensive sector metrics")
+                
+                # Calculate benchmarking metrics
+                benchmarking = self._calculate_optimized_benchmarking(symbol, stock_data, sector, sector_data, nifty_data)
+                
+                # Calculate rotation metrics using relevant sectors
+                rotation_days = min(30, days // 2) if requested_period else 30  # Use half of sector analysis period, capped at 30 days
+                rotation = self._calculate_optimized_rotation(sector_data_dict, nifty_data, rotation_days)
+                
+                # Calculate correlation metrics using relevant sectors
+                correlation_days = min(60, days) if requested_period else 60  # Use sector analysis period, capped at 60 days
+                correlation = self._calculate_optimized_correlation(sector_data_dict, correlation_days, sector)
+                
+                # STEP 5: Build comprehensive result
+                comprehensive_result = {
+                    'sector_benchmarking': benchmarking,
+                    'sector_rotation': rotation,
+                    'sector_correlation': correlation,
+                    'optimization_metrics': {
+                        'api_calls_reduced': f"35 → {len(relevant_sectors) + 2}",  # +2 for NIFTY and stock's sector
+                        'data_points_reduced': f"6,790 → {len(relevant_sectors) * days + days * 2}",
+                        'timeframes_optimized': '3M,6M,1Y → 1M,3M,6M',
+                        'cache_duration': '1 hour (increased from 15 min)',
+                        'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'analysis_type': analysis_type.lower(),
+                        'sectors_analyzed': len(sector_data_dict),
+                        'attempt': current_attempt
+                    }
                 }
-            }
+                
+                logging.info(f"{analysis_type}: Unified sector analysis completed for {symbol} with {len(sector_data_dict)} sectors")
+                return comprehensive_result
             
-            logging.info(f"OPTIMIZED: Unified sector analysis completed for {symbol}")
-            return comprehensive_result
-            
-        except Exception as e:
-            logging.error(f"Error in optimized comprehensive sector analysis: {e}")
-            return self._get_fallback_optimized_analysis(symbol, sector)
+            except Exception as e:
+                last_error = e
+                if current_attempt < max_attempts:
+                    logging.warning(f"{analysis_type} failed (attempt {current_attempt}/{max_attempts}): {e}")
+                    logging.info(f"Retrying with optimized fallback approach...")
+                    current_attempt += 1
+                    continue
+                else:
+                    logging.error(f"All attempts failed for sector analysis. Last error: {e}")
+                    return self._get_fallback_optimized_analysis(symbol, sector)
+                    
+        # If we reach here, all attempts failed
+        logging.error(f"Failed to complete sector analysis after {max_attempts} attempts. Last error: {last_error}")
+        return self._get_fallback_optimized_analysis(symbol, sector)
     
-    def _get_relevant_sectors_for_analysis(self, stock_sector: str) -> List[str]:
+    def _get_relevant_sectors_for_analysis(self, stock_sector: str, use_all_sectors: bool = False) -> List[str]:
         """
-        OPTIMIZED: Select relevant sectors for analysis instead of fetching all 16.
+        OPTIMIZED: Select relevant sectors for analysis instead of fetching all sectors.
         
         Args:
             stock_sector: The stock's sector
+            use_all_sectors: If True, returns all available sectors for comprehensive analysis
             
         Returns:
             List of relevant sectors to analyze
         """
+        # If comprehensive analysis is requested, return all available sectors
+        if use_all_sectors:
+            try:
+                all_sectors_data = self.sector_classifier.get_all_sectors()
+                # Extract just the sector codes from the dictionary list
+                all_sectors = [sector_info['code'] for sector_info in all_sectors_data]
+                logging.info(f"COMPREHENSIVE: Using all {len(all_sectors)} sectors for full analysis: {all_sectors}")
+                return all_sectors
+            except Exception as e:
+                logging.warning(f"Failed to get all sectors, falling back to optimized selection: {e}")
+                # Fall back to optimized selection if getting all sectors fails
+        
         # Always include the stock's sector
         relevant_sectors = [stock_sector]
         
-        # Add high-impact sectors that are commonly correlated
-        high_impact_sectors = ['BANKING', 'IT', 'PHARMA', 'AUTO', 'FMCG', 'ENERGY']
+        # Add high-impact sectors that are commonly correlated (using actual JSON sector codes)
+        high_impact_sectors = ['NIFTY_BANK', 'NIFTY_IT', 'NIFTY_PHARMA', 'NIFTY_AUTO', 'NIFTY_FMCG', 'NIFTY_OIL_AND_GAS']
         
         # Add stock's sector if not already included
         if stock_sector not in high_impact_sectors:
@@ -3176,7 +3254,7 @@ class SectorBenchmarkingProvider:
         
         # Ensure we have at least 6 sectors for meaningful analysis
         if len(relevant_sectors) < 6:
-            additional_sectors = ['METAL', 'REALTY', 'HEALTHCARE', 'CONSUMER_DURABLES']
+            additional_sectors = ['NIFTY_METAL', 'NIFTY_REALTY', 'NIFTY_HEALTHCARE', 'NIFTY_CONSUMER_DURABLES']
             for sector in additional_sectors:
                 if sector not in relevant_sectors and len(relevant_sectors) < 8:
                     relevant_sectors.append(sector)
