@@ -2,9 +2,9 @@
   "sector_code": "NIFTY_FINANCIAL_SERVICES_EX_BANK",
   "display_name": "Nifty Financial Services Ex Bank",
   "indices": [
-    "NIFTY FIN SERVICE EX BANK"
+    "NIFTY FINSEREXBNK"
   ],
-  "primary_index": "NIFTY FIN SERVICE EX BANK",
+  "primary_index": "NIFTY FINSEREXBNK",
   "stocks": [
     "BAJFINANCE",
     "BAJAJFINSV",

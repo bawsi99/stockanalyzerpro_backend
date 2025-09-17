@@ -2,9 +2,9 @@
   "sector_code": "NIFTY_MIDSMALL_IT_TELECOM",
   "display_name": "Nifty MidSmall IT & Telecom",
   "indices": [
-    "NIFTY MIDSMALL IT & TELECOM"
+    "NIFTY MS IT TELCM"
   ],
-  "primary_index": "NIFTY MIDSMALL IT & TELECOM",
+  "primary_index": "NIFTY MS IT TELCM",
   "stocks": [
     "LTTS",
     "MINDTREE",

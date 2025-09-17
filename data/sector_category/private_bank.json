@@ -2,9 +2,9 @@
   "sector_code": "NIFTY_PRIVATE_BANK",
   "display_name": "Nifty Private Bank",
   "indices": [
-    "NIFTY PRIVATE BANK"
+    "NIFTY PVT BANK"
   ],
-  "primary_index": "NIFTY PRIVATE BANK",
+  "primary_index": "NIFTY PVT BANK",
   "stocks": [
     "HDFCBANK",
     "ICICIBANK",

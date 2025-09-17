@@ -2,9 +2,9 @@
   "sector_code": "NIFTY_FINANCIAL_SERVICES",
   "display_name": "Nifty Financial Services",
   "indices": [
-    "NIFTY FINANCIAL SERVICES"
+    "NIFTY FIN SERVICE"
   ],
-  "primary_index": "NIFTY FINANCIAL SERVICES",
+  "primary_index": "NIFTY FIN SERVICE",
   "stocks": [
     "BAJFINANCE",
     "BAJAJFINSV",

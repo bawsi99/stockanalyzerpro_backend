@@ -2,9 +2,9 @@
   "sector_code": "NIFTY_FINANCIAL_SERVICES_25_50",
   "display_name": "Nifty Financial Services 25/50",
   "indices": [
-    "NIFTY FIN SERVICE 25/50"
+    "NIFTY FINSRV25 50"
   ],
-  "primary_index": "NIFTY FIN SERVICE 25/50",
+  "primary_index": "NIFTY FINSRV25 50",
   "stocks": [
     "HDFCBANK",
     "ICICIBANK", 

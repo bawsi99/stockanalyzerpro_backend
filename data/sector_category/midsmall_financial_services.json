@@ -2,9 +2,9 @@
   "sector_code": "NIFTY_MIDSMALL_FINANCIAL_SERVICES",
   "display_name": "Nifty MidSmall Financial Services",
   "indices": [
-    "NIFTY MIDSMALL FIN SERVICES"
+    "NIFTY MS FIN SERV"
   ],
-  "primary_index": "NIFTY MIDSMALL FIN SERVICES",
+  "primary_index": "NIFTY MS FIN SERV",
   "stocks": [
     "FEDERALBNK",
     "BANDHANBNK",
