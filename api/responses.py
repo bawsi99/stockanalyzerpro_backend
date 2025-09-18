@@ -195,6 +195,14 @@ class FrontendResponseBuilder:
                         "risk_level": _calculate_risk_level(ai_analysis.get('confidence_pct', 0)),
                         "recommendation": _calculate_recommendation(ai_analysis.get('confidence_pct', 0), ai_analysis.get('trend', 'Unknown'))
                     },
+                    "decision_story": FrontendResponseBuilder._build_decision_story(
+                        ai_analysis, 
+                        ai_analysis.get('trend', 'Unknown'), 
+                        ai_analysis.get('confidence_pct', 0),
+                        ai_analysis.get('short_term', {}),
+                        ai_analysis.get('medium_term', {}),
+                        ai_analysis.get('long_term', {})
+                    ),
                     "support_levels": FrontendResponseBuilder._extract_support_levels(data, indicators, latest_price),
                     "resistance_levels": FrontendResponseBuilder._extract_resistance_levels(data, indicators, latest_price),
                     "triangle_patterns": [],
@@ -697,6 +705,11 @@ class FrontendResponseBuilder:
             # Infer a more appropriate trend duration from data and interval
             inferred_duration = FrontendResponseBuilder._infer_trend_duration(data, interval)
             
+            # Extract rationale fields from AI analysis
+            short_term_data = ai_analysis.get('short_term', {})
+            medium_term_data = ai_analysis.get('medium_term', {})
+            long_term_data = ai_analysis.get('long_term', {})
+            
             return {
                 "meta": {
                     "symbol": ai_analysis.get('symbol', ''),
@@ -758,7 +771,7 @@ class FrontendResponseBuilder:
                             "max_position_size": "10%",
                             "atr_multiplier": 2.0
                         },
-                        "rationale": "Strong technical setup with clear entry and exit levels"
+                        "rationale": short_term_data.get('rationale', 'Strong technical setup with clear entry and exit levels')
                     },
                     "medium_term": {
                         "horizon_days": 30,
@@ -789,7 +802,7 @@ class FrontendResponseBuilder:
                             "max_position_size": "15%",
                             "atr_multiplier": 2.5
                         },
-                        "rationale": "Medium-term consolidation expected with breakout potential"
+                        "rationale": medium_term_data.get('rationale', 'Medium-term consolidation expected with breakout potential')
                     },
                     "long_term": {
                         "horizon_days": 365,
@@ -799,7 +812,7 @@ class FrontendResponseBuilder:
                             "accumulation_zone": [float(latest_price * 0.93), float(latest_price)],
                             "distribution_zone": [float(latest_price * 1.13), float(latest_price * 1.20)]
                         },
-                        "rationale": "Strong fundamentals with technical support"
+                        "rationale": long_term_data.get('rationale', 'Strong fundamentals with technical support')
                     }
                 },
                 "risk_management": {
@@ -865,11 +878,100 @@ class FrontendResponseBuilder:
                     "Risk management through proper stop-loss placement"
                 ],
                 "indicator_summary": ai_analysis.get('indicator_summary', ''),
-                "chart_insights": ai_analysis.get('chart_insights', '')
+                "chart_insights": ai_analysis.get('chart_insights', ''),
+                "decision_story": FrontendResponseBuilder._build_decision_story(ai_analysis, trend, confidence, short_term_data, medium_term_data, long_term_data)
             }
         except Exception as e:
             logger.error(f"Error building AI analysis: {e}")
             return {}
+    
+    @staticmethod
+    def _build_decision_story(ai_analysis: dict, trend: str, confidence: float, short_term: dict, medium_term: dict, long_term: dict) -> dict:
+        """Build a comprehensive decision story explaining the analysis chain."""
+        try:
+            # Extract key risks and must-watch levels
+            risks = ai_analysis.get('risks', [])
+            must_watch_levels = ai_analysis.get('must_watch_levels', [])
+            
+            # Build the narrative story
+            story_parts = []
+            
+            # Opening statement
+            confidence_desc = "high" if confidence >= 80 else "moderate" if confidence >= 60 else "low"
+            story_parts.append(f"Our analysis indicates a {trend.lower()} trend with {confidence_desc} confidence ({confidence:.0f}%).")
+            
+            # Short-term analysis
+            if short_term and short_term.get('rationale'):
+                story_parts.append(f"In the short term: {short_term.get('rationale')}")
+            
+            # Medium-term analysis  
+            if medium_term and medium_term.get('rationale'):
+                story_parts.append(f"For the medium term: {medium_term.get('rationale')}")
+                
+            # Long-term analysis
+            if long_term and long_term.get('rationale'):
+                story_parts.append(f"Looking at the long term: {long_term.get('rationale')}")
+            
+            # Risk considerations
+            if risks:
+                risk_list = risks[:3] if len(risks) > 3 else risks  # Limit to top 3 risks
+                if len(risk_list) == 1:
+                    story_parts.append(f"Key risk to monitor: {risk_list[0]}")
+                else:
+                    story_parts.append(f"Key risks to monitor include: {', '.join(risk_list[:-1])} and {risk_list[-1]}")
+            
+            # Must-watch levels
+            if must_watch_levels:
+                level_list = must_watch_levels[:2] if len(must_watch_levels) > 2 else must_watch_levels
+                story_parts.append(f"Critical levels to watch: {', '.join(map(str, level_list))}")
+            
+            # Join all parts into a coherent narrative
+            narrative = " ".join(story_parts)
+            
+            return {
+                "narrative": narrative,
+                "decision_chain": {
+                    "overall_assessment": {
+                        "trend": trend,
+                        "confidence": confidence,
+                        "confidence_level": confidence_desc
+                    },
+                    "timeframe_analysis": {
+                        "short_term": {
+                            "horizon": short_term.get('horizon_days', 'N/A'),
+                            "rationale": short_term.get('rationale', 'No short-term analysis available'),
+                            "entry_range": short_term.get('entry_range', []),
+                            "targets": short_term.get('targets', [])
+                        },
+                        "medium_term": {
+                            "horizon": medium_term.get('horizon_days', 'N/A'),
+                            "rationale": medium_term.get('rationale', 'No medium-term analysis available'),
+                            "entry_range": medium_term.get('entry_range', []),
+                            "targets": medium_term.get('targets', [])
+                        },
+                        "long_term": {
+                            "horizon": long_term.get('horizon_days', 'N/A'),
+                            "rationale": long_term.get('rationale', 'No long-term analysis available'),
+                            "technical_rating": long_term.get('technical_rating', 'Unknown'),
+                            "fair_value_range": long_term.get('fair_value_range', [])
+                        }
+                    },
+                    "risk_assessment": {
+                        "primary_risks": risks,
+                        "critical_levels": must_watch_levels
+                    }
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error building decision story: {e}")
+            return {
+                "narrative": "Analysis completed with standard technical indicators.",
+                "decision_chain": {
+                    "overall_assessment": {"trend": "Unknown", "confidence": 0, "confidence_level": "low"},
+                    "timeframe_analysis": {},
+                    "risk_assessment": {}
+                }
+            }
     
     @staticmethod
     def _infer_trend_duration(data: pd.DataFrame, interval: str) -> str:
