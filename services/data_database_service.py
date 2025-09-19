@@ -28,16 +28,58 @@ dotenv.load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', 'co
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 
 # Import both service applications from the same directory
 from database_service import app as database_app, db_manager
 from data_service import app as data_app
 
+# Define lifespan event handler
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    print("🚀 Starting StockAnalyzer Pro Unified Backend...")
+    print("📊 Database Service mounted at /database")
+    print("🔌 Data Service mounted at /data")
+    
+    # Manually trigger the startup events of sub-applications
+    print("🔌 Initializing Data Service startup events...")
+    
+    # Import and trigger data service startup logic
+    try:
+        from data_service import initialize_websocket_service
+        await initialize_websocket_service()
+        print("✅ Data Service startup completed - WebSocket client initialized")
+    except Exception as e:
+        print(f"❌ Error during Data Service startup: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # Import and trigger database service startup logic if it exists
+    try:
+        from database_service import startup_event as db_startup
+        if hasattr(db_startup, '__call__'):
+            await db_startup()
+            print("✅ Database Service startup completed")
+    except (ImportError, AttributeError):
+        print("📊 Database Service has no startup event")
+    except Exception as e:
+        print(f"❌ Error during Database Service startup: {e}")
+    
+    print("🌐 WebSocket streaming available at /data/ws/stream")
+    print("✅ Unified backend ready!")
+    
+    yield
+    
+    # Shutdown (if needed)
+    print("🔄 Shutting down StockAnalyzer Pro Backend...")
+
 # Create main application
 app = FastAPI(
     title="StockAnalyzer Pro Backend",
     description="Unified backend service providing database operations and real-time data streaming",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Configure CORS for the main app
@@ -128,39 +170,6 @@ async def health_check():
             }
         )
 
-@app.on_event("startup")
-async def startup_event():
-    """Startup event for the unified application."""
-    print("🚀 Starting StockAnalyzer Pro Unified Backend...")
-    print("📊 Database Service mounted at /database")
-    print("🔌 Data Service mounted at /data")
-    
-    # Manually trigger the startup events of sub-applications
-    print("🔌 Initializing Data Service startup events...")
-    
-    # Import and trigger data service startup logic
-    try:
-        from data_service import initialize_websocket_service
-        await initialize_websocket_service()
-        print("✅ Data Service startup completed - WebSocket client initialized")
-    except Exception as e:
-        print(f"❌ Error during Data Service startup: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    # Import and trigger database service startup logic if it exists
-    try:
-        from database_service import startup_event as db_startup
-        if hasattr(db_startup, '__call__'):
-            await db_startup()
-            print("✅ Database Service startup completed")
-    except (ImportError, AttributeError):
-        print("📊 Database Service has no startup event")
-    except Exception as e:
-        print(f"❌ Error during Database Service startup: {e}")
-    
-    print("🌐 WebSocket streaming available at /data/ws/stream")
-    print("✅ Unified backend ready!")
 
 @app.get("/ws/diagnostics")
 async def websocket_diagnostics():
@@ -195,7 +204,7 @@ if __name__ == "__main__":
     
     # Run with uvicorn
     uvicorn.run(
-        "data_database:app",
+        "data_database_service:app",
         host=host,
         port=port,
         reload=False,  # Disable reload in production
