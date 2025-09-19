@@ -66,8 +66,8 @@ from config.storage_config import StorageConfig
 app = FastAPI(title="Stock Analysis Service", version="1.0.0")
 logger = logging.getLogger(__name__)
 
-# Database service URL
-DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://localhost:8003")
+# Database service URL - Updated for unified backend
+DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://localhost:8000/database")
 print(f"🔗 Database Service URL: {DATABASE_SERVICE_URL}")
 
 async def _make_database_request_with_retry(
@@ -2226,7 +2226,7 @@ async def root():
             "analyze": "/analyze",
             "sector_list": "/sector/list",
             "stock_sector": "/stock/{symbol}/sector",
-            "analyses_user": f"{DATABASE_SERVICE_URL}/analyses/user/{{user_id}}" # Updated to point to new service
+            "analyses_user": f"{DATABASE_SERVICE_URL}/analyses/user/{{user_id}}" # Points to unified backend
         },
         "timestamp": datetime.now().isoformat()
     }

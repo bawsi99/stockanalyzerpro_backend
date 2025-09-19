@@ -589,9 +589,9 @@ def candle_forward_hook(token, timeframe, candle):
 candle_aggregator.register_callback(candle_forward_hook)
 zerodha_ws_client.register_tick_hook(tick_forward_hook)
 
-# --- FastAPI Startup Event ---
-@app.on_event("startup")
-async def startup_event():
+# --- WebSocket Initialization Function (can be called from unified app) ---
+async def initialize_websocket_service():
+    """Initialize WebSocket service - can be called from unified app startup."""
     global MAIN_EVENT_LOOP
     MAIN_EVENT_LOOP = asyncio.get_running_loop()
     
@@ -629,6 +629,12 @@ async def startup_event():
     
     print("🔧 WebSocket mode will be set to 'quote' for OHLCV data when symbols are subscribed")
     print("🎯 Data service is ready to handle requests")
+
+# --- FastAPI Startup Event ---
+@app.on_event("startup")
+async def startup_event():
+    """Startup event for data service - calls the initialization function."""
+    await initialize_websocket_service()
 
 # --- Pydantic Models ---
 class HistoricalDataRequest(BaseModel):

@@ -622,21 +622,12 @@ async def root():
         "timestamp": datetime.now().isoformat()
     }
 
-# Self-ping function to keep the service alive
-@aiocron.crontab(os.getenv("DATABASE_SERVICE_PING_CRON", "*/5 * * * *")) # Default every 5 minutes
-async def self_ping():
-    # Build URL deterministically to avoid duplicate ports (e.g., http://0.0.0.0:8003:8003)
-    port = int(os.getenv("DATABASE_PORT", 8003))
-    host = os.getenv("SERVICE_HOST", "0.0.0.0")
-    full_url = f"http://{host}:{port}/health"
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(full_url, timeout=5.0)
-            print(f"[Self-Ping] Health check to {full_url} responded with status: {response.status_code}")
-    except httpx.RequestError as e:
-        print(f"[Self-Ping] Request error to {full_url}: {e}")
-    except Exception as e:
-        print(f"[Self-Ping] Unexpected error during self-ping to {full_url}: {e}")
+# Self-ping function disabled - no longer needed in unified backend
+# The unified backend handles health checks at the main level
+# @aiocron.crontab(os.getenv("DATABASE_SERVICE_PING_CRON", "*/5 * * * *"))
+# async def self_ping():
+#     # This function is disabled since database service is now part of unified backend
+#     pass
 
 if __name__ == "__main__":
     import uvicorn
