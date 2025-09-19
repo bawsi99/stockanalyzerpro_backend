@@ -1,6 +1,0 @@
-
-python-dotenv
-fastapi
-uvicorn
-supabase
-aiocron==1.8
