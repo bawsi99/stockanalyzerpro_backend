@@ -134,8 +134,56 @@ async def startup_event():
     print("🚀 Starting StockAnalyzer Pro Unified Backend...")
     print("📊 Database Service mounted at /database")
     print("🔌 Data Service mounted at /data")
+    
+    # Manually trigger the startup events of sub-applications
+    print("🔌 Initializing Data Service startup events...")
+    
+    # Import and trigger data service startup logic
+    try:
+        from data_service import initialize_websocket_service
+        await initialize_websocket_service()
+        print("✅ Data Service startup completed - WebSocket client initialized")
+    except Exception as e:
+        print(f"❌ Error during Data Service startup: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # Import and trigger database service startup logic if it exists
+    try:
+        from database_service import startup_event as db_startup
+        if hasattr(db_startup, '__call__'):
+            await db_startup()
+            print("✅ Database Service startup completed")
+    except (ImportError, AttributeError):
+        print("📊 Database Service has no startup event")
+    except Exception as e:
+        print(f"❌ Error during Database Service startup: {e}")
+    
     print("🌐 WebSocket streaming available at /data/ws/stream")
     print("✅ Unified backend ready!")
+
+@app.get("/ws/diagnostics")
+async def websocket_diagnostics():
+    """Diagnostic endpoint to check WebSocket client status."""
+    try:
+        # Import zerodha client to check status
+        from zerodha.ws_client import zerodha_ws_client
+        
+        return {
+            "websocket_client_running": zerodha_ws_client.running,
+            "api_key_configured": bool(zerodha_ws_client.api_key and zerodha_ws_client.api_key != 'your_api_key'),
+            "access_token_configured": bool(zerodha_ws_client.access_token and zerodha_ws_client.access_token != 'your_access_token'),
+            "subscribed_tokens": list(zerodha_ws_client.subscribed_tokens),
+            "api_key_preview": zerodha_ws_client.api_key[:10] + "..." if zerodha_ws_client.api_key else "None",
+            "access_token_preview": zerodha_ws_client.access_token[:20] + "..." if zerodha_ws_client.access_token else "None",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "websocket_client_running": False,
+            "timestamp": datetime.now().isoformat()
+        }
 
 if __name__ == "__main__":
     # Get port from environment (Render provides PORT env var)
