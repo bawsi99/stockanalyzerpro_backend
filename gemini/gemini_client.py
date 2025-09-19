@@ -230,6 +230,120 @@ class GeminiClient:
             print(f"Error enhancing with calculations: {e}")
             return parsed_result
 
+    def _build_comprehensive_context(self, enhanced_ind_json: dict, chart_insights: str, knowledge_context: str) -> str:
+        """
+        Build comprehensive context for the optimized final decision template.
+        This combines all analysis data into a structured format.
+        """
+        try:
+            context_sections = []
+            
+            # 1. Technical Indicators Analysis
+            context_sections.append("## Technical Indicators Analysis")
+            context_sections.append(json.dumps(clean_for_json(self.convert_numpy_types(enhanced_ind_json)), indent=2))
+            
+            # 2. Chart Pattern Insights
+            if chart_insights and chart_insights.strip():
+                context_sections.append("\n## Chart Pattern Insights")
+                context_sections.append(chart_insights)
+            
+            # 3. Multi-Timeframe Context
+            mtf_context = self._extract_labeled_json_block(knowledge_context or "", label="MultiTimeframeContext:")
+            if mtf_context:
+                context_sections.append("\n## Multi-Timeframe Analysis Context")
+                context_sections.append(json.dumps(clean_for_json(mtf_context), indent=2))
+            
+            # 4. Sector Context
+            if "SECTOR CONTEXT" in (knowledge_context or ""):
+                context_sections.append("\n## Sector Analysis Context")
+                sector_lines = [line for line in (knowledge_context or "").split('\n') if 'SECTOR' in line or 'Market Outperformance:' in line or 'Sector Outperformance:' in line or 'Sector Beta:' in line]
+                context_sections.append('\n'.join(sector_lines))
+            
+            # 5. Advanced Analysis Context
+            adv_context = self._extract_labeled_json_block(knowledge_context or "", label="AdvancedAnalysisDigest:")
+            if adv_context:
+                context_sections.append("\n## Advanced Analysis Context")
+                context_sections.append(json.dumps(clean_for_json(adv_context), indent=2))
+            
+            # 6. ML System Context
+            ml_context = self._extract_labeled_json_block(knowledge_context or "", label="MLSystemValidation:")
+            if ml_context:
+                context_sections.append("\n## ML System Context")
+                context_sections.append(json.dumps(clean_for_json(ml_context), indent=2))
+            
+            # 7. Existing Trading Strategy (for consistency)
+            existing_strategy = enhanced_ind_json.get('existing_trading_strategy', {})
+            if existing_strategy:
+                context_sections.append("\n## EXISTING TRADING STRATEGY (Use as Foundation)")
+                context_sections.append("The following targets and stop losses were calculated in the previous analysis phase:")
+                context_sections.append(json.dumps(clean_for_json(existing_strategy), indent=2))
+                context_sections.append("IMPORTANT: Use these values as your foundation and only modify them if you have strong technical reasons based on the comprehensive analysis above.")
+            
+            comprehensive_context = '\n'.join(context_sections)
+            
+            print(f"[DEBUG] Built comprehensive context with {len(context_sections)} sections, total length: {len(comprehensive_context)}")
+            return comprehensive_context
+            
+        except Exception as e:
+            print(f"[DEBUG] Error building comprehensive context: {e}")
+            # Fallback to basic context
+            return f"## Technical Analysis\n{json.dumps(enhanced_ind_json, indent=2)}\n\n## Chart Insights\n{chart_insights}"
+    
+    def _extract_existing_trading_strategy(self, ind_json: dict) -> dict:
+        """
+        Extract existing trading strategy data from indicator JSON for consistency in final decision.
+        """
+        try:
+            if not isinstance(ind_json, dict):
+                return {}
+            
+            trading_strategy = ind_json.get('trading_strategy', {})
+            if not trading_strategy:
+                return {}
+            
+            # Extract key trading data for each timeframe
+            existing_strategy = {}
+            
+            # Short term
+            short_term = trading_strategy.get('short_term', {})
+            if short_term:
+                existing_strategy['short_term'] = {
+                    'entry_range': short_term.get('entry_strategy', {}).get('entry_range', []),
+                    'stop_loss': short_term.get('exit_strategy', {}).get('stop_loss'),
+                    'targets': [t.get('price') if isinstance(t, dict) else t for t in short_term.get('exit_strategy', {}).get('targets', [])],
+                    'bias': short_term.get('bias'),
+                    'confidence': short_term.get('confidence')
+                }
+            
+            # Medium term
+            medium_term = trading_strategy.get('medium_term', {})
+            if medium_term:
+                existing_strategy['medium_term'] = {
+                    'entry_range': medium_term.get('entry_strategy', {}).get('entry_range', []),
+                    'stop_loss': medium_term.get('exit_strategy', {}).get('stop_loss'),
+                    'targets': [t.get('price') if isinstance(t, dict) else t for t in medium_term.get('exit_strategy', {}).get('targets', [])],
+                    'bias': medium_term.get('bias'),
+                    'confidence': medium_term.get('confidence')
+                }
+            
+            # Long term
+            long_term = trading_strategy.get('long_term', {})
+            if long_term:
+                existing_strategy['long_term'] = {
+                    'fair_value_range': long_term.get('fair_value_range', []),
+                    'investment_rating': long_term.get('investment_rating'),
+                    'accumulation_zone': long_term.get('key_levels', {}).get('accumulation_zone', []),
+                    'bias': long_term.get('bias'),
+                    'confidence': long_term.get('confidence')
+                }
+            
+            print(f"[DEBUG] Extracted trading strategy for timeframes: {list(existing_strategy.keys())}")
+            return existing_strategy
+            
+        except Exception as e:
+            print(f"[DEBUG] Error extracting existing trading strategy: {e}")
+            return {}
+    
     def _build_ml_guidance_text(self, ml_block: dict) -> str:
         """
         Convert compact ML block into short guidance text for prompts with clear weighting rules.
@@ -258,7 +372,7 @@ class GeminiClient:
             # Guardrails
             lines.append("- Prefer higher-timeframe consensus when ML conflicts with MTF/indicators.")
             lines.append("- If volatility regime is 'high', reflect elevated risk and down-weight aggressive entries.")
-            lines.append("- Explicitly explain any ML vs indicator/MTF disagreements.")
+            lines.append("- When ML confidence is low (<60%), defer to technical analysis consensus.")
             return "\n".join(lines)
         except Exception:
             return ""
@@ -848,10 +962,18 @@ JSON:
         print("[ASYNC-OPTIMIZED-ENHANCED] Starting enhanced final decision analysis...")
         decision_start_time = time.time()
         
+        # Extract existing trading strategy data for consistency
+        existing_trading_strategy = self._extract_existing_trading_strategy(ind_json)
+        
+        # Add existing trading strategy context to indicator JSON for final decision
+        enhanced_ind_json = ind_json.copy() if isinstance(ind_json, dict) else {}
+        if existing_trading_strategy:
+            enhanced_ind_json['existing_trading_strategy'] = existing_trading_strategy
+            print(f"[DEBUG] Added existing trading strategy to final decision context: {list(existing_trading_strategy.keys())}")
+        
         decision_prompt = self.prompt_manager.format_prompt(
-            "final_stock_decision",
-            indicator_json=json.dumps(clean_for_json(self.convert_numpy_types(ind_json)), indent=2),
-            chart_insights=chart_insights_md
+            "optimized_final_decision",
+            context=self._build_comprehensive_context(enhanced_ind_json, chart_insights_md, knowledge_context)
         )
         # Append ML guidance to final decision prompt if present in knowledge context
         try:
@@ -923,12 +1045,29 @@ JSON:
         
         return result, ind_summary_md, chart_insights_md
 
-    async def analyze_comprehensive_overview(self, image: bytes) -> str:
+    async def analyze_comprehensive_overview(self, image: bytes, indicators: dict = None) -> str:
         """Analyze the comprehensive comparison chart that shows all major indicators."""
-        prompt = self.prompt_manager.format_prompt("image_analysis_comprehensive_overview")
-        # Add the solving line at the very end
-        prompt += self.prompt_manager.SOLVING_LINE
-        return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+        try:
+            # Use context engineering for comprehensive overview analysis
+            if indicators:
+                curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.TECHNICAL_OVERVIEW)
+                context = self.context_engineer.structure_context(curated_indicators, AnalysisType.TECHNICAL_OVERVIEW, "", "", "")
+                prompt = self.prompt_manager.format_prompt("optimized_comprehensive_overview", context=context)
+            else:
+                # Fallback with minimal context
+                context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
+                prompt = self.prompt_manager.format_prompt("optimized_comprehensive_overview", context=context)
+            
+            # Add the solving line at the very end
+            prompt += self.prompt_manager.SOLVING_LINE
+            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+        except Exception as ex:
+            print(f"[DEBUG-ERROR] Exception during comprehensive overview context engineering: {ex}")
+            # Fallback with minimal context
+            context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
+            prompt = self.prompt_manager.format_prompt("optimized_comprehensive_overview", context=context)
+            prompt += self.prompt_manager.SOLVING_LINE
+            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
 
     async def analyze_volume_comprehensive(self, images: list, indicators: dict = None) -> str:
         """Analyze all volume-related charts together for complete volume story."""
@@ -939,7 +1078,9 @@ JSON:
                 context = self.context_engineer.structure_context(curated_indicators, AnalysisType.VOLUME_ANALYSIS, "", "", "")
                 prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=context)
             else:
-                prompt = self.prompt_manager.format_prompt("image_analysis_volume_comprehensive")
+                # Use optimized template with minimal context
+                context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and volume indicators."
+                prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=context)
             
             # Add the solving line at the very end
             prompt += self.prompt_manager.SOLVING_LINE
@@ -947,8 +1088,9 @@ JSON:
             return await self.core.call_llm_with_images(prompt, pil_images)
         except Exception as ex:
             print(f"[DEBUG-ERROR] Exception during volume analysis context engineering: {ex}")
-            # Fallback to original method
-            prompt = self.prompt_manager.format_prompt("image_analysis_volume_comprehensive")
+            # Fallback with minimal context
+            context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and volume indicators."
+            prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=context)
             prompt += self.prompt_manager.SOLVING_LINE
             pil_images = [self.image_utils.bytes_to_image(img) for img in images]
             return await self.core.call_llm_with_images(prompt, pil_images)
@@ -962,7 +1104,9 @@ JSON:
                 context = self.context_engineer.structure_context(curated_indicators, AnalysisType.REVERSAL_PATTERNS, "", "", "")
                 prompt = self.prompt_manager.format_prompt("optimized_reversal_patterns", context=context)
             else:
-                prompt = self.prompt_manager.format_prompt("image_analysis_reversal_patterns")
+                # Use optimized template with minimal context
+                context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and reversal indicators."
+                prompt = self.prompt_manager.format_prompt("optimized_reversal_patterns", context=context)
             
             # Add the solving line at the very end
             prompt += self.prompt_manager.SOLVING_LINE
@@ -970,8 +1114,9 @@ JSON:
             return await self.core.call_llm_with_images(prompt, pil_images)
         except Exception as ex:
             print(f"[DEBUG-ERROR] Exception during reversal pattern analysis context engineering: {ex}")
-            # Fallback to original method
-            prompt = self.prompt_manager.format_prompt("image_analysis_reversal_patterns")
+            # Fallback with minimal context
+            context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and reversal indicators."
+            prompt = self.prompt_manager.format_prompt("optimized_reversal_patterns", context=context)
             prompt += self.prompt_manager.SOLVING_LINE
             pil_images = [self.image_utils.bytes_to_image(img) for img in images]
             return await self.core.call_llm_with_images(prompt, pil_images)
@@ -985,7 +1130,9 @@ JSON:
                 context = self.context_engineer.structure_context(curated_indicators, AnalysisType.CONTINUATION_LEVELS, "", "", "")
                 prompt = self.prompt_manager.format_prompt("optimized_continuation_levels", context=context)
             else:
-                prompt = self.prompt_manager.format_prompt("image_analysis_continuation_levels")
+                # Use optimized template with minimal context
+                context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and continuation indicators."
+                prompt = self.prompt_manager.format_prompt("optimized_continuation_levels", context=context)
             
             # Add the solving line at the very end
             prompt += self.prompt_manager.SOLVING_LINE
@@ -993,15 +1140,18 @@ JSON:
             return await self.core.call_llm_with_images(prompt, pil_images)
         except Exception as ex:
             print(f"[DEBUG-ERROR] Exception during continuation level analysis context engineering: {ex}")
-            # Fallback to original method
-            prompt = self.prompt_manager.format_prompt("image_analysis_continuation_levels")
+            # Fallback with minimal context
+            context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and continuation indicators."
+            prompt = self.prompt_manager.format_prompt("optimized_continuation_levels", context=context)
             prompt += self.prompt_manager.SOLVING_LINE
             pil_images = [self.image_utils.bytes_to_image(img) for img in images]
             return await self.core.call_llm_with_images(prompt, pil_images)
 
     async def analyze_comprehensive_overview_with_calculations(self, image: bytes, indicators: dict) -> str:
         """Analyze the comprehensive comparison chart with mathematical validation."""
-        enhanced_prompt = self.prompt_manager.format_prompt("image_analysis_comprehensive_overview")
+        # Use optimized template with minimal context
+        context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and comprehensive indicators."
+        enhanced_prompt = self.prompt_manager.format_prompt("optimized_comprehensive_overview", context=context)
         enhanced_prompt += f"""
 
 MATHEMATICAL VALIDATION REQUIRED:
@@ -1025,7 +1175,9 @@ Use Python code for all calculations and include the results in your analysis.
 
     async def analyze_volume_comprehensive_with_calculations(self, images: list, indicators: dict) -> str:
         """Analyze all volume-related charts with statistical validation."""
-        enhanced_prompt = self.prompt_manager.format_prompt("image_analysis_volume_comprehensive")
+        # Use optimized template with minimal context
+        context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and volume indicators."
+        enhanced_prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=context)
         enhanced_prompt += f"""
 
 STATISTICAL VALIDATION REQUIRED:
@@ -1050,7 +1202,9 @@ Use Python code for all calculations and include the results in your analysis.
 
     async def analyze_reversal_patterns_with_calculations(self, images: list, indicators: dict) -> str:
         """Analyze reversal patterns with enhanced mathematical validation."""
-        enhanced_prompt = self.prompt_manager.format_prompt("image_analysis_reversal_patterns")
+        # Use optimized template with minimal context
+        context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and reversal indicators."
+        enhanced_prompt = self.prompt_manager.format_prompt("optimized_reversal_patterns", context=context)
         enhanced_prompt += f"""
 
 MATHEMATICAL VALIDATION REQUIRED:
@@ -1075,7 +1229,9 @@ Use Python code for all calculations and include the results in your analysis.
 
     async def analyze_continuation_levels_with_calculations(self, images: list, indicators: dict) -> str:
         """Analyze continuation patterns and support/resistance levels with enhanced calculations."""
-        enhanced_prompt = self.prompt_manager.format_prompt("image_analysis_continuation_levels")
+        # Use optimized template with minimal context
+        context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and continuation indicators."
+        enhanced_prompt = self.prompt_manager.format_prompt("optimized_continuation_levels", context=context)
         enhanced_prompt += f"""
 
 MATHEMATICAL VALIDATION REQUIRED:

@@ -6,18 +6,27 @@ Technical-indicator JSON:
 Chart-pattern insights:
 {chart_insights}
 
+EXISTING ANALYSIS CONTEXT:
+The technical-indicator JSON above contains comprehensive analysis including trading strategies with entry ranges, stop losses, and targets for different timeframes. If present, look for "existing_trading_strategy" in the JSON which contains the previously calculated values:
+- Short term: entry_range, stop_loss, targets
+- Medium term: entry_range, stop_loss, targets  
+- Long term: fair_value_range, investment_rating
+
+USE THESE EXISTING VALUES AS YOUR FOUNDATION and only modify them if you have strong technical reasons based on the chart patterns and indicators. This ensures consistency between the overview analysis and the final decision.
+
 IMPORTANT: Current Price Context
 The current price provided is from the last available trading data. During market hours (9:15 AM - 3:30 PM IST, Mon-Fri), this may be real-time. Outside market hours, this is the last closing price. This is normal and expected behavior for stock analysis systems.
 
 Instructions:
 Step 1: Carefully review the technical-indicator JSON and chart-pattern insights provided.
-Step 2: Note the current price data freshness and market status - this is NOT missing data, but normal market timing behavior.
-Step 3: Identify any truly missing, ambiguous, or contradictory data. If any, mention them in the rationale fields and in "risks".
-Step 4: For each recommendation (entry, stop, targets), provide a brief rationale, referencing indicators and chart patterns.
-Step 5: Use all available data, and highlight any contradictions or uncertainties.
-Step 6: Focus on technical patterns and indicators for your analysis.
-step 7: You may use python for making calculations and comparisons, but you MUST still return the final JSON as plain text in the model's response body; do not rely on printing from code execution or tool outputs.
-Step 8: CRITICAL: Output ONLY a valid JSON object with the following schema. NO PROSE, NO NARRATIVE TEXT, NO EXPLANATIONS OUTSIDE THE JSON. The response must be parseable JSON.
+Step 2: Extract existing trading strategy data from the technical-indicator JSON, including entry ranges, stop losses, and targets if present.
+Step 3: Note the current price data freshness and market status - this is NOT missing data, but normal market timing behavior.
+Step 4: Identify any truly missing, ambiguous, or contradictory data. If any, mention them in the rationale fields and in "risks".
+Step 5: For each recommendation (entry, stop, targets), start with the existing values from the indicator JSON, then provide a brief rationale for keeping or modifying them based on chart patterns and technical analysis.
+Step 6: Use all available data, prioritize consistency with the existing analysis unless chart patterns strongly contradict.
+Step 7: Focus on technical patterns and indicators for your analysis.
+Step 8: You may use python for making calculations and comparisons, but you MUST still return the final JSON as plain text in the model's response body; do not rely on printing from code execution or tool outputs.
+Step 9: CRITICAL: Output ONLY a valid JSON object with the following schema. NO PROSE, NO NARRATIVE TEXT, NO EXPLANATIONS OUTSIDE THE JSON. The response must be parseable JSON.
 
 {{
 "trend": "Bullish | Bearish | Neutral | Unknown",
