@@ -66,8 +66,8 @@ from config.storage_config import StorageConfig
 app = FastAPI(title="Stock Analysis Service", version="1.0.0")
 logger = logging.getLogger(__name__)
 
-# Database service URL - Updated for unified backend
-DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://localhost:8000/database")
+# Database service URL - Updated for distributed services architecture
+DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://localhost:8003")
 print(f"🔗 Database Service URL: {DATABASE_SERVICE_URL}")
 
 async def _make_database_request_with_retry(

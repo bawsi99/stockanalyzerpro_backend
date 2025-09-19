@@ -1,16 +1,15 @@
-# Environment Configuration Guide for Unified Backend Service
+# Environment Configuration Guide for Distributed Services Architecture
 
 ## Overview
-The unified backend service (`data_database_service.py`) combines both data and database services into a single service. It requires a comprehensive set of environment variables defined in `/backend/config/.env`.
+The distributed services architecture uses separate services for different functionalities. Each service runs on its own port and requires specific environment variables defined in `/backend/config/.env`.
 
 ### Service Architecture
-The unified backend consists of:
-- **Main Service**: Runs on port 8000 (`http://localhost:8000`)
-- **Database Endpoints**: Mounted at `/database` (`http://localhost:8000/database/*`)
-- **Data Endpoints**: Mounted at `/data` (`http://localhost:8000/data/*`)
-- **WebSocket Streaming**: Available at `/data/ws/stream`
+The distributed backend consists of:
+- **Data Service**: Runs on port 8001 (`http://localhost:8001`) - Handles data fetching, WebSocket streaming
+- **Analysis Service**: Runs on port 8002 (`http://localhost:8002`) - Handles analysis, AI processing, charts
+- **Database Service**: Runs on port 8003 (`http://localhost:8003`) - Handles database operations
 
-The analysis service communicates with the database endpoints through the `DATABASE_SERVICE_URL` environment variable.
+Services communicate with each other through HTTP requests using environment-configured URLs.
 
 ## Required Environment Variables
 
@@ -27,10 +26,12 @@ API_KEYS=test-api-key-1,test-api-key-2  # Comma-separated API keys
 ### 🌐 **Server Configuration**
 ```bash
 # Server binding
-HOST=0.0.0.0          # Host address (0.0.0.0 for all interfaces)
-PORT=8000             # Main service port
-DATA_PORT=8001        # Internal data service port
-SERVICE_HOST=0.0.0.0  # Service host binding
+SERVICE_HOST=0.0.0.0  # Host address (0.0.0.0 for all interfaces)
+
+# Service ports (distributed architecture)
+DATA_PORT=8001        # Data service port (includes WebSocket)
+ANALYSIS_PORT=8002    # Analysis service port
+DATABASE_PORT=8003    # Database service port
 
 # CORS Configuration (comma-separated origins)
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173,https://your-frontend-domain.com
@@ -100,9 +101,9 @@ ENVIRONMENT=development  # or 'production'
 DEBUG=true              # Enable debug mode
 LOG_LEVEL=INFO          # Logging level
 
-# Service Communication
-DATABASE_SERVICE_URL=http://localhost:8000/database  # URL for analysis service to reach database endpoints
-DATABASE_SERVICE_PING_CRON=*/5 * * * *               # Cron schedule for database health checks
+# Service Communication (distributed architecture)
+DATABASE_SERVICE_URL=http://localhost:8003  # URL for analysis service to reach database service
+DATA_SERVICE_URL=http://localhost:8001      # URL for inter-service data requests
 
 # Scheduled tasks
 ENABLE_SCHEDULED_CALIBRATION=0
@@ -117,10 +118,21 @@ The environment file must be located at:
 
 ## Usage Examples
 
-### Starting the Unified Service
+### Starting the Distributed Services
 ```bash
+# Start each service separately in different terminals
+
+# Terminal 1 - Data Service (port 8001)
 cd /path/to/backend/services
-python data_database_service.py
+python data_service.py
+
+# Terminal 2 - Analysis Service (port 8002) 
+cd /path/to/backend/services
+python analysis_service.py
+
+# Terminal 3 - Database Service (port 8003)
+cd /path/to/backend/services
+python database_service.py
 ```
 
 ### Testing Configuration
@@ -173,21 +185,37 @@ For production deployments:
 python -c "import os; import dotenv; dotenv.load_dotenv('../config/.env'); print('PORT:', os.getenv('PORT'))"
 
 # Test service compilation
-python -m py_compile data_database_service.py
+python -m py_compile data_service.py
+python -m py_compile analysis_service.py
+python -m py_compile database_service.py
 
 # Check service health after startup
-curl http://localhost:8000/health
+curl http://localhost:8001/health  # Data Service
+curl http://localhost:8002/health  # Analysis Service
+curl http://localhost:8003/health  # Database Service
 ```
 
 ## API Endpoints
 
-Once configured and running, the service provides:
+Once configured and running, the distributed services provide:
 
+**Data Service (Port 8001):**
 - **Health Check**: `GET /health`
-- **Stock Data**: `GET /data/stock/{symbol}/history`
-- **Database Operations**: `POST /database/analyses/store`
-- **WebSocket Stream**: `WS /data/ws/stream`
-- **Market Status**: `GET /data/market/status`
+- **Stock Data**: `GET /stock/{symbol}/history`
+- **WebSocket Stream**: `WS /ws/stream`
+- **Market Status**: `GET /market/status`
+- **Authentication**: `POST /auth/token`
+
+**Analysis Service (Port 8002):**
+- **Health Check**: `GET /health`
+- **Stock Analysis**: `POST /analyze`
+- **Enhanced Analysis**: `POST /analyze/enhanced`
+- **Sector Analysis**: `GET /sector/list`
+
+**Database Service (Port 8003):**
+- **Health Check**: `GET /health`
+- **Store Analysis**: `POST /analyses/store`
+- **User Analyses**: `GET /analyses/user/{user_id}`
 
 ## Backup and Recovery
 
