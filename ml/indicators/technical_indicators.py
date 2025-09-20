@@ -267,45 +267,132 @@ class TechnicalIndicators:
     def detect_support_resistance(data: pd.DataFrame, window: int = 20, 
                                  threshold: float = 0.02) -> Tuple[List[float], List[float]]:
         """
-        Detect support and resistance levels using price action.
+        Detect support and resistance levels using improved swing point analysis.
         
         Args:
             data: DataFrame containing price data
-            window: Window size for detecting local extrema
+            window: Window size for detecting local extrema (not used with scipy method)
             threshold: Percentage threshold for level proximity
             
         Returns:
-            Tuple[List[float], List[float]]: Support and resistance levels
+            Tuple[List[float], List[float]]: Support and resistance levels (up to 3 each)
         """
-        # Find local minima and maxima
-        local_min = []
-        local_max = []
+        from scipy.signal import argrelextrema
         
-        for i in range(window, len(data) - window):
-            # Check if this point is a local minimum
-            if all(data['low'].iloc[i] <= data['low'].iloc[i-j] for j in range(1, window+1)) and \
-               all(data['low'].iloc[i] <= data['low'].iloc[i+j] for j in range(1, window+1)):
-                local_min.append(data['low'].iloc[i])
+        # Use multiple order values to find different significance levels
+        support_candidates = set()
+        resistance_candidates = set()
+        
+        # Try different order values to capture swing points of varying significance
+        for order in [3, 5, 8, 12]:
+            if len(data) < order * 2 + 1:
+                continue
+                
+            try:
+                # Find local minima (support) and maxima (resistance)
+                lows_idx = argrelextrema(data['low'].values, np.less, order=order)[0]
+                highs_idx = argrelextrema(data['high'].values, np.greater, order=order)[0]
+                
+                # Add support levels
+                for idx in lows_idx:
+                    support_candidates.add(float(data['low'].iloc[idx]))
+                
+                # Add resistance levels
+                for idx in highs_idx:
+                    resistance_candidates.add(float(data['high'].iloc[idx]))
+                    
+            except Exception:
+                continue
+        
+        # If still no levels found, use fallback method
+        if len(support_candidates) == 0 or len(resistance_candidates) == 0:
+            # Fallback: use recent price range for basic levels
+            recent_data = data.tail(50) if len(data) > 50 else data
+            current_price = float(data['close'].iloc[-1])
             
-            # Check if this point is a local maximum
-            if all(data['high'].iloc[i] >= data['high'].iloc[i-j] for j in range(1, window+1)) and \
-               all(data['high'].iloc[i] >= data['high'].iloc[i+j] for j in range(1, window+1)):
-                local_max.append(data['high'].iloc[i])
+            if len(support_candidates) == 0:
+                low_price = float(recent_data['low'].min())
+                mid_low = current_price - (current_price - low_price) * 0.382
+                support_candidates.update([low_price, mid_low])
+            
+            if len(resistance_candidates) == 0:
+                high_price = float(recent_data['high'].max())
+                mid_high = current_price + (high_price - current_price) * 0.382
+                resistance_candidates.update([high_price, mid_high])
         
-        # Cluster similar levels
-        support_levels = []
-        for level in local_min:
-            # Check if this level is close to any existing level
-            if not any(abs(level - s) / s < threshold for s in support_levels):
-                support_levels.append(level)
+        # Convert to sorted lists
+        support_list = sorted(list(support_candidates))
+        resistance_list = sorted(list(resistance_candidates), reverse=True)
         
-        resistance_levels = []
-        for level in local_max:
-            # Check if this level is close to any existing level
-            if not any(abs(level - r) / r < threshold for r in resistance_levels):
-                resistance_levels.append(level)
+        # Cluster similar levels using threshold
+        def cluster_levels(levels: List[float], threshold: float) -> List[float]:
+            if not levels:
+                return []
+            
+            clustered = []
+            for level in levels:
+                # Check if this level is close to any existing level
+                is_similar = False
+                for existing in clustered:
+                    if abs(level - existing) / existing < threshold:
+                        is_similar = True
+                        break
+                
+                if not is_similar:
+                    clustered.append(level)
+            
+            return clustered
         
-        return support_levels, resistance_levels
+        # Apply clustering
+        clustered_support = cluster_levels(support_list, threshold)
+        clustered_resistance = cluster_levels(resistance_list, threshold)
+        
+        # Ensure we have meaningful levels relative to current price
+        current_price = float(data['close'].iloc[-1])
+        
+        # Filter support levels (should be below current price)
+        filtered_support = [s for s in clustered_support if s < current_price * 0.98]
+        
+        # Filter resistance levels (should be above current price)
+        filtered_resistance = [r for r in clustered_resistance if r > current_price * 1.02]
+        
+        # Sort and limit to top 3 most significant levels
+        # For support: closest to current price first (descending order)
+        final_support = sorted(filtered_support, reverse=True)[:3]
+        
+        # For resistance: closest to current price first (ascending order) 
+        final_resistance = sorted(filtered_resistance)[:3]
+        
+        # Ensure we have at least some levels
+        if len(final_support) == 0:
+            # Add basic support levels based on recent range
+            recent_low = float(data['low'].tail(50).min()) if len(data) > 50 else float(data['low'].min())
+            final_support = [recent_low]
+            
+            # Add additional levels using percentage drops
+            if len(final_support) < 3:
+                level_2 = current_price * 0.95  # 5% below current
+                level_3 = current_price * 0.90  # 10% below current
+                if level_2 > recent_low:
+                    final_support.append(level_2)
+                if level_3 > recent_low and len(final_support) < 3:
+                    final_support.append(level_3)
+        
+        if len(final_resistance) == 0:
+            # Add basic resistance levels based on recent range
+            recent_high = float(data['high'].tail(50).max()) if len(data) > 50 else float(data['high'].max())
+            final_resistance = [recent_high]
+            
+            # Add additional levels using percentage increases
+            if len(final_resistance) < 3:
+                level_2 = current_price * 1.05  # 5% above current
+                level_3 = current_price * 1.10  # 10% above current
+                if level_2 < recent_high:
+                    final_resistance.append(level_2)
+                if level_3 < recent_high and len(final_resistance) < 3:
+                    final_resistance.append(level_3)
+        
+        return final_support, final_resistance
     
     @staticmethod
     def calculate_obv(data: pd.DataFrame) -> pd.Series:
@@ -627,45 +714,132 @@ class TechnicalIndicators:
     def detect_support_resistance(data: pd.DataFrame, window: int = 20, 
                                  threshold: float = 0.02) -> Tuple[List[float], List[float]]:
         """
-        Detect support and resistance levels using price action.
+        Detect support and resistance levels using improved swing point analysis.
         
         Args:
             data: DataFrame containing price data
-            window: Window size for detecting local extrema
+            window: Window size for detecting local extrema (not used with scipy method)
             threshold: Percentage threshold for level proximity
             
         Returns:
-            Tuple[List[float], List[float]]: Support and resistance levels
+            Tuple[List[float], List[float]]: Support and resistance levels (up to 3 each)
         """
-        # Find local minima and maxima
-        local_min = []
-        local_max = []
+        from scipy.signal import argrelextrema
         
-        for i in range(window, len(data) - window):
-            # Check if this point is a local minimum
-            if all(data['low'].iloc[i] <= data['low'].iloc[i-j] for j in range(1, window+1)) and \
-               all(data['low'].iloc[i] <= data['low'].iloc[i+j] for j in range(1, window+1)):
-                local_min.append(data['low'].iloc[i])
+        # Use multiple order values to find different significance levels
+        support_candidates = set()
+        resistance_candidates = set()
+        
+        # Try different order values to capture swing points of varying significance
+        for order in [3, 5, 8, 12]:
+            if len(data) < order * 2 + 1:
+                continue
+                
+            try:
+                # Find local minima (support) and maxima (resistance)
+                lows_idx = argrelextrema(data['low'].values, np.less, order=order)[0]
+                highs_idx = argrelextrema(data['high'].values, np.greater, order=order)[0]
+                
+                # Add support levels
+                for idx in lows_idx:
+                    support_candidates.add(float(data['low'].iloc[idx]))
+                
+                # Add resistance levels
+                for idx in highs_idx:
+                    resistance_candidates.add(float(data['high'].iloc[idx]))
+                    
+            except Exception:
+                continue
+        
+        # If still no levels found, use fallback method
+        if len(support_candidates) == 0 or len(resistance_candidates) == 0:
+            # Fallback: use recent price range for basic levels
+            recent_data = data.tail(50) if len(data) > 50 else data
+            current_price = float(data['close'].iloc[-1])
             
-            # Check if this point is a local maximum
-            if all(data['high'].iloc[i] >= data['high'].iloc[i-j] for j in range(1, window+1)) and \
-               all(data['high'].iloc[i] >= data['high'].iloc[i+j] for j in range(1, window+1)):
-                local_max.append(data['high'].iloc[i])
+            if len(support_candidates) == 0:
+                low_price = float(recent_data['low'].min())
+                mid_low = current_price - (current_price - low_price) * 0.382
+                support_candidates.update([low_price, mid_low])
+            
+            if len(resistance_candidates) == 0:
+                high_price = float(recent_data['high'].max())
+                mid_high = current_price + (high_price - current_price) * 0.382
+                resistance_candidates.update([high_price, mid_high])
         
-        # Cluster similar levels
-        support_levels = []
-        for level in local_min:
-            # Check if this level is close to any existing level
-            if not any(abs(level - s) / s < threshold for s in support_levels):
-                support_levels.append(level)
+        # Convert to sorted lists
+        support_list = sorted(list(support_candidates))
+        resistance_list = sorted(list(resistance_candidates), reverse=True)
         
-        resistance_levels = []
-        for level in local_max:
-            # Check if this level is close to any existing level
-            if not any(abs(level - r) / r < threshold for r in resistance_levels):
-                resistance_levels.append(level)
+        # Cluster similar levels using threshold
+        def cluster_levels(levels: List[float], threshold: float) -> List[float]:
+            if not levels:
+                return []
+            
+            clustered = []
+            for level in levels:
+                # Check if this level is close to any existing level
+                is_similar = False
+                for existing in clustered:
+                    if abs(level - existing) / existing < threshold:
+                        is_similar = True
+                        break
+                
+                if not is_similar:
+                    clustered.append(level)
+            
+            return clustered
         
-        return support_levels, resistance_levels
+        # Apply clustering
+        clustered_support = cluster_levels(support_list, threshold)
+        clustered_resistance = cluster_levels(resistance_list, threshold)
+        
+        # Ensure we have meaningful levels relative to current price
+        current_price = float(data['close'].iloc[-1])
+        
+        # Filter support levels (should be below current price)
+        filtered_support = [s for s in clustered_support if s < current_price * 0.98]
+        
+        # Filter resistance levels (should be above current price)
+        filtered_resistance = [r for r in clustered_resistance if r > current_price * 1.02]
+        
+        # Sort and limit to top 3 most significant levels
+        # For support: closest to current price first (descending order)
+        final_support = sorted(filtered_support, reverse=True)[:3]
+        
+        # For resistance: closest to current price first (ascending order) 
+        final_resistance = sorted(filtered_resistance)[:3]
+        
+        # Ensure we have at least some levels
+        if len(final_support) == 0:
+            # Add basic support levels based on recent range
+            recent_low = float(data['low'].tail(50).min()) if len(data) > 50 else float(data['low'].min())
+            final_support = [recent_low]
+            
+            # Add additional levels using percentage drops
+            if len(final_support) < 3:
+                level_2 = current_price * 0.95  # 5% below current
+                level_3 = current_price * 0.90  # 10% below current
+                if level_2 > recent_low:
+                    final_support.append(level_2)
+                if level_3 > recent_low and len(final_support) < 3:
+                    final_support.append(level_3)
+        
+        if len(final_resistance) == 0:
+            # Add basic resistance levels based on recent range
+            recent_high = float(data['high'].tail(50).max()) if len(data) > 50 else float(data['high'].max())
+            final_resistance = [recent_high]
+            
+            # Add additional levels using percentage increases
+            if len(final_resistance) < 3:
+                level_2 = current_price * 1.05  # 5% above current
+                level_3 = current_price * 1.10  # 10% above current
+                if level_2 < recent_high:
+                    final_resistance.append(level_2)
+                if level_3 < recent_high and len(final_resistance) < 3:
+                    final_resistance.append(level_3)
+        
+        return final_support, final_resistance
     
     @staticmethod
     def calculate_vwap(data: pd.DataFrame) -> pd.Series:
@@ -977,26 +1151,13 @@ class TechnicalIndicators:
         # Pivot points
         pivot_points = TechnicalIndicators.calculate_pivot_points(data)
         
-        # Psychological levels (round numbers)
-        current_price = data['close'].iloc[-1]
-        psychological_levels = []
-        
-        # Check if current_price is valid (not NaN or infinite)
-        if pd.notna(current_price) and np.isfinite(current_price) and current_price > 0:
-            for i in range(-5, 6):
-                level = round(current_price / 100) * 100 + (i * 100)
-                if 0 < level < current_price * 2:  # Reasonable range
-                    psychological_levels.append(level)
-        else:
-            # If current_price is invalid, provide default levels
-            psychological_levels = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+        # NOTE: Psychological levels removed to reduce complexity and improve stock-specific analysis
         
         return {
             "dynamic_support": support_levels[:3] if len(support_levels) >= 3 else support_levels,
             "dynamic_resistance": resistance_levels[:3] if len(resistance_levels) >= 3 else resistance_levels,
             "fibonacci_levels": fibonacci_levels,
-            "pivot_points": pivot_points,
-            "psychological_levels": psychological_levels
+            "pivot_points": pivot_points
         }
     
     @staticmethod
