@@ -10,16 +10,16 @@ import logging
 import asyncio
 
 # Add new imports for pattern modules
-from patterns.recognition import PatternRecognition
-from patterns.visualization import PatternVisualizer
+from backend.patterns.recognition import PatternRecognition
+from backend.patterns.visualization import PatternVisualizer
 
 # Add new imports for configuration and optimization
-from core.config import Config
+from backend.core.config import Config
 # Redis cache functionality will be used instead of local cache
-from zerodha.client import ZerodhaDataClient
+from backend.zerodha.client import ZerodhaDataClient
 
 # Add to existing IndianMarketMetricsProvider class
-from ml.sector.classifier import SectorClassifier
+from backend.ml.sector.classifier import SectorClassifier
 
 
 class TechnicalIndicators:

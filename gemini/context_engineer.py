@@ -9,7 +9,6 @@ class AnalysisType(Enum):
     VOLUME_ANALYSIS = "volume_analysis"
     REVERSAL_PATTERNS = "reversal_patterns"
     CONTINUATION_LEVELS = "continuation_levels"
-    COMPREHENSIVE_OVERVIEW = "comprehensive_overview"
     FINAL_DECISION = "final_decision"
 
 @dataclass

@@ -14,7 +14,7 @@ import asyncio
 import time
 
 # --- Import clean_for_json ---
-from core.utils import clean_for_json
+from backend.core.utils import clean_for_json
 
 
 class GeminiClient:
@@ -482,14 +482,13 @@ class GeminiClient:
         """Single-purpose: Summarize MTF JSON into 5-8 bullet insights."""
         try:
             prompt = self.prompt_manager.format_prompt(
-                "optimized_indicators_summary",
+                "mtf_synthesis_template",
                 context=f"""
 [Source: MultiTimeframeContext]
-Summarize the following MTF JSON into 5-8 bullets focusing on consensus, conflicts, high-importance timeframes, and confidence.
-Return plain text bullets.
+Analyze the following multi-timeframe JSON data and provide synthesis focusing on consensus, conflicts, high-importance timeframes, and confidence levels.
 
-JSON:
-{json.dumps(mtf_json)[:8000]}
+MTF Analysis Data:
+{json.dumps(mtf_json, indent=2)[:8000]}
 """
             ) + self.prompt_manager.SOLVING_LINE
             text = await self.core.call_llm(prompt)
@@ -501,13 +500,13 @@ JSON:
         """Single-purpose: Summarize risk/stress/scenario digest in 5 bullets."""
         try:
             prompt = self.prompt_manager.format_prompt(
-                "optimized_indicators_summary",
+                "risk_synthesis_template",
                 context=f"""
 [Source: AdvancedAnalysisDigest]
-Summarize the risk/stress/scenario highlights (5 bullets max). Keep it concise.
+Analyze the following risk/stress/scenario analysis data and provide focused risk synthesis.
 
-JSON:
-{json.dumps(adv_json)[:4000]}
+Risk Analysis Data:
+{json.dumps(adv_json, indent=2)[:4000]}
 """
             ) + self.prompt_manager.SOLVING_LINE
             text = await self.core.call_llm(prompt)
@@ -520,12 +519,16 @@ JSON:
         try:
             lines = "\n".join([l for l in (knowledge_context or "").splitlines() if l.strip().startswith(("- Market Outperformance:", "- Sector Outperformance:", "- Sector Beta:"))])
             prompt = self.prompt_manager.format_prompt(
-                "optimized_indicators_summary",
+                "sector_synthesis_template",
                 context=f"""
 [Source: SectorContext]
-Summarize the following sector metrics into 4 bullets: outperformance, beta, key implication.
+Analyze the following sector performance metrics and provide focused sector-based insights.
 
+Sector Metrics:
 {lines}
+
+Additional Context (if available):
+{knowledge_context[:2000] if 'SECTOR CONTEXT' in knowledge_context else 'No additional sector context available'}
 """
             ) + self.prompt_manager.SOLVING_LINE
             text = await self.core.call_llm(prompt)
@@ -1045,29 +1048,6 @@ JSON:
         
         return result, ind_summary_md, chart_insights_md
 
-    async def analyze_comprehensive_overview(self, image: bytes, indicators: dict = None) -> str:
-        """Analyze the comprehensive comparison chart that shows all major indicators."""
-        try:
-            # Use context engineering for comprehensive overview analysis
-            if indicators:
-                curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.TECHNICAL_OVERVIEW)
-                context = self.context_engineer.structure_context(curated_indicators, AnalysisType.TECHNICAL_OVERVIEW, "", "", "")
-                prompt = self.prompt_manager.format_prompt("optimized_comprehensive_overview", context=context)
-            else:
-                # Fallback with minimal context
-                context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
-                prompt = self.prompt_manager.format_prompt("optimized_comprehensive_overview", context=context)
-            
-            # Add the solving line at the very end
-            prompt += self.prompt_manager.SOLVING_LINE
-            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
-        except Exception as ex:
-            print(f"[DEBUG-ERROR] Exception during comprehensive overview context engineering: {ex}")
-            # Fallback with minimal context
-            context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
-            prompt = self.prompt_manager.format_prompt("optimized_comprehensive_overview", context=context)
-            prompt += self.prompt_manager.SOLVING_LINE
-            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
 
     async def analyze_volume_comprehensive(self, images: list, indicators: dict = None) -> str:
         """Analyze all volume-related charts together for complete volume story."""
@@ -1147,31 +1127,6 @@ JSON:
             pil_images = [self.image_utils.bytes_to_image(img) for img in images]
             return await self.core.call_llm_with_images(prompt, pil_images)
 
-    async def analyze_comprehensive_overview_with_calculations(self, image: bytes, indicators: dict) -> str:
-        """Analyze the comprehensive comparison chart with mathematical validation."""
-        # Use optimized template with minimal context
-        context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and comprehensive indicators."
-        enhanced_prompt = self.prompt_manager.format_prompt("optimized_comprehensive_overview", context=context)
-        enhanced_prompt += f"""
-
-MATHEMATICAL VALIDATION REQUIRED:
-Analyze the chart and perform the following calculations using Python code:
-
-1. Calculate the correlation between price movements and volume changes
-2. Verify RSI levels and count oversold/overbought periods
-3. Calculate MACD signal strength and histogram analysis
-4. Determine trend strength using linear regression
-5. Calculate volatility metrics (standard deviation, coefficient of variation)
-6. Validate support/resistance levels using statistical methods
-
-Technical Indicators Data: {json.dumps(clean_for_json(self.convert_numpy_types(indicators)), indent=2)}
-
-Use Python code for all calculations and include the results in your analysis.
-"""
-        
-        # Add the solving line at the very end
-        enhanced_prompt += self.prompt_manager.SOLVING_LINE
-        return await self.core.call_llm_with_image(enhanced_prompt, self.image_utils.bytes_to_image(image), enable_code_execution=True)
 
     async def analyze_volume_comprehensive_with_calculations(self, images: list, indicators: dict) -> str:
         """Analyze all volume-related charts with statistical validation."""
