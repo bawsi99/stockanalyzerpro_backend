@@ -1,0 +1,68 @@
+LLM ANALYSIS RESULTS
+================================================================================
+
+Stock Symbol: HDFCBANK
+Response Time: 2025-09-26T18:06:32.630950
+Response Length: 2634 characters
+
+COMPLETE LLM RESPONSE:
+----------------------------------------
+```json
+{
+  "trend_analysis": {
+    "direction": "bearish",
+    "strength": "moderate",
+    "confidence": 68.33,
+    "key_signals": [
+      "SMA 20 (960.89) is below SMA 50 (980.46) indicating bearish short-term trend.",
+      "EMA 20 (963.15) is below EMA 50 (971.96) confirming bearish short-term momentum.",
+      "Price is above SMA 200 (930.16) indicating potential long-term support despite short-term weakness."
+    ]
+  },
+  "momentum": {
+    "rsi_signal": "oversold",
+    "macd_signal": "bearish",
+    "momentum_strength": "strong"
+  },
+  "critical_levels": {
+    "nearest_support": 887.5,
+    "nearest_resistance": 975.0,
+    "key_levels": [
+      {
+        "price": 887.5,
+        "type": "support"
+      },
+      {
+        "price": 869.1,
+        "type": "support"
+      },
+      {
+        "price": 849.0,
+        "type": "support"
+      },
+      {
+        "price": 975.0,
+        "type": "resistance"
+      },
+      {
+        "price": 998.2,
+        "type": "resistance"
+      },
+      {
+        "price": 1018.8,
+        "type": "resistance"
+      }
+    ]
+  },
+  "trading_recommendation": {
+    "bias": "neutral",
+    "confidence": 70,
+    "entry_price": 0.0,
+    "target_price": 0.0,
+    "stop_loss": 0.0,
+    "rationale": "The market presents high-severity conflicting signals, making a clear directional trade uncertain. While both short-term moving averages (SMA 20/50, EMA 20/50) and MACD (histogram -1.12) confirm a bearish trend and strong selling momentum, the Relative Strength Index (RSI) at 27.65 is deeply oversold, suggesting a potential for a short-term bounce or reversal. Furthermore, the price is currently trading above the long-term SMA 200 (930.16), which could act as significant support. Given these contradictions, the most prudent approach is to remain neutral and refrain from initiating new positions. Investors should wait for clearer signals, such as a confirmed bullish reversal from the oversold RSI combined with positive MACD momentum, or a decisive break below critical support levels (e.g., 887.5) to confirm further bearish continuation, before re-evaluating."
+  },
+  "conflicts_resolved": "The 'Mixed moving average alignment signals' (short-term MAs bearish, but price above long-term SMA 200) and 'RSI oversold while MACD bearish' (momentum divergence) create significant uncertainty. These high-severity conflicts are resolved by adopting a neutral stance, recommending to 'Wait for clearer signals' rather than taking a premature directional trade. This approach mitigates risk by avoiding entry into a volatile and contradictory market environment.",
+  "confidence_score": 65
+}
+```

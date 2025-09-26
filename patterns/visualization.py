@@ -1416,6 +1416,278 @@ class ChartVisualizer:
         Returns matplotlib figure object. Optionally saves to file if save_path is provided.
         """
         fig, axes = plt.subplots(3, 1, figsize=(16, 12), gridspec_kw={'height_ratios': [2, 1, 1]})
+    
+    @staticmethod
+    def plot_enhanced_volume_chart_with_agents(data: pd.DataFrame, 
+                                             indicators: Dict[str, Any], 
+                                             volume_agents_result: Dict[str, Any] = None,
+                                             save_path: str = None, 
+                                             stock_symbol: str = 'Stock'):
+        """
+        Create enhanced volume analysis chart that integrates volume agents insights with robust fallback.
+        
+        Args:
+            data: Stock price and volume data
+            indicators: Technical indicators
+            volume_agents_result: Result from volume agents analysis (optional)
+            save_path: Path to save chart (optional)
+            stock_symbol: Stock symbol for chart title
+            
+        Returns:
+            matplotlib figure object
+        """
+        try:
+            # Determine chart complexity based on volume agents availability
+            has_volume_agents = (
+                volume_agents_result is not None and 
+                volume_agents_result.get('success', False) and
+                volume_agents_result.get('volume_analysis') is not None
+            )
+            
+            if has_volume_agents:
+                return ChartVisualizer._create_agent_enhanced_volume_chart(
+                    data, indicators, volume_agents_result, save_path, stock_symbol
+                )
+            else:
+                # Fall back to traditional comprehensive volume chart
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Volume agents unavailable for {stock_symbol}, using traditional volume chart")
+                return ChartVisualizer.plot_comprehensive_volume_chart(
+                    data, indicators, save_path, stock_symbol
+                )
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Enhanced volume chart generation failed for {stock_symbol}: {e}")
+            
+            # Ultimate fallback to basic volume chart
+            return ChartVisualizer._create_basic_volume_chart(data, save_path, stock_symbol)
+    
+    @staticmethod
+    def _create_agent_enhanced_volume_chart(data: pd.DataFrame, 
+                                          indicators: Dict[str, Any],
+                                          volume_agents_result: Dict[str, Any],
+                                          save_path: str = None, 
+                                          stock_symbol: str = 'Stock'):
+        """
+        Create volume chart enhanced with volume agents insights
+        """
+        fig, axes = plt.subplots(4, 1, figsize=(16, 14), gridspec_kw={'height_ratios': [2, 1, 1, 1]})
+        
+        volume_analysis = volume_agents_result.get('volume_analysis', {})
+        consensus_analysis = volume_agents_result.get('consensus_analysis', {})
+        
+        # Main price and volume chart with agent insights
+        ax1 = axes[0]
+        ax1_twin = ax1.twinx()
+        
+        # Price line
+        ax1.plot(data.index, data['close'], label='Price', color='blue', linewidth=1.5)
+        ax1.set_ylabel('Price', color='blue')
+        ax1.tick_params(axis='y', labelcolor='blue')
+        
+        # Volume bars with agent-specific coloring
+        volume_colors = ChartVisualizer._get_agent_volume_colors(data, volume_analysis)
+        ax1_twin.bar(data.index, data['volume'], color=volume_colors, alpha=0.7, label='Volume')
+        ax1_twin.set_ylabel('Volume', color='lightblue')
+        ax1_twin.tick_params(axis='y', labelcolor='lightblue')
+        
+        # Add agent-specific annotations
+        ChartVisualizer._add_volume_agent_annotations(ax1, ax1_twin, data, volume_analysis)
+        
+        ax1.set_title(f'{stock_symbol} - Volume Analysis with AI Agents', fontsize=14, fontweight='bold')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(loc='upper left')
+        
+        # Volume trend analysis from agents
+        ax2 = axes[1]
+        volume_ma = data['volume'].rolling(window=20).mean()
+        ax2.plot(data.index, data['volume'], label='Volume', color='lightblue', alpha=0.7, linewidth=1)
+        ax2.plot(data.index, volume_ma, label='Volume MA 20', color='red', linewidth=1.5)
+        
+        # Add agent consensus signals
+        consensus_signals = consensus_analysis.get('consensus_signals', {})
+        if consensus_signals.get('primary_signal') != 'neutral':
+            signal = consensus_signals['primary_signal']
+            confidence = consensus_analysis.get('overall_confidence', 0)
+            ax2.axhline(y=volume_ma.iloc[-1], color='green' if signal == 'bullish' else 'red', 
+                       linestyle='--', alpha=0.8, 
+                       label=f'Agent Signal: {signal.title()} ({confidence:.1%} confidence)')
+        
+        ax2.set_ylabel('Volume')
+        ax2.legend(loc='upper left')
+        ax2.grid(True, alpha=0.3)
+        
+        # Volume ratio with agent thresholds
+        ax3 = axes[2]
+        volume_ratio = data['volume'] / volume_ma
+        ax3.plot(data.index, volume_ratio, label='Volume Ratio', color='green', linewidth=1.5)
+        ax3.axhline(y=1, color='black', linestyle='-', alpha=0.5, label='Average')
+        
+        # Add agent-specific thresholds if available
+        agent_status = volume_analysis.get('agent_status', {})
+        if agent_status.get('successful_agents', 0) > 0:
+            ax3.axhline(y=1.5, color='orange', linestyle='--', alpha=0.6, label='High Volume (Agents)')
+            ax3.axhline(y=2.5, color='red', linestyle='--', alpha=0.6, label='Anomaly Threshold')
+        else:
+            # Fallback to traditional thresholds
+            ax3.axhline(y=1.5, color='red', linestyle='--', alpha=0.6, label='High Volume')
+            ax3.axhline(y=0.5, color='orange', linestyle='--', alpha=0.6, label='Low Volume')
+        
+        ax3.set_ylabel('Volume Ratio')
+        ax3.legend(loc='upper left')
+        ax3.grid(True, alpha=0.3)
+        
+        # Agent performance and reliability indicator
+        ax4 = axes[3]
+        
+        # Show agent success rates and confidence over time (simplified visualization)
+        agent_details = agent_status.get('agent_details', {})
+        successful_agents = [name for name, details in agent_details.items() if details.get('success', False)]
+        failed_agents = [name for name, details in agent_details.items() if not details.get('success', False)]
+        
+        # Create a simple bar chart showing agent performance
+        if successful_agents or failed_agents:
+            agents = successful_agents + failed_agents
+            success_values = [1] * len(successful_agents) + [0] * len(failed_agents)
+            colors = ['green'] * len(successful_agents) + ['red'] * len(failed_agents)
+            
+            bars = ax4.bar(range(len(agents)), success_values, color=colors, alpha=0.7)
+            ax4.set_xticks(range(len(agents)))
+            ax4.set_xticklabels([agent.replace('_', ' ').title() for agent in agents], rotation=45)
+            ax4.set_ylabel('Agent Status')
+            ax4.set_ylim(0, 1.2)
+            ax4.set_title('Volume Agents Performance')
+            
+            # Add success rate annotation
+            success_rate = len(successful_agents) / len(agents) if agents else 0
+            ax4.text(0.02, 0.95, f'Success Rate: {success_rate:.1%}', 
+                    transform=ax4.transAxes, fontsize=10, 
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        else:
+            ax4.text(0.5, 0.5, 'No Volume Agents Data Available\nUsing Traditional Analysis', 
+                    ha='center', va='center', transform=ax4.transAxes, fontsize=12,
+                    bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.7))
+            ax4.set_xlim(0, 1)
+            ax4.set_ylim(0, 1)
+        
+        ax4.set_xlabel('Volume Analysis Agents')
+        ax4.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        # Save to file only if save_path is provided
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        return fig
+    
+    @staticmethod
+    def _create_basic_volume_chart(data: pd.DataFrame, save_path: str = None, stock_symbol: str = 'Stock'):
+        """
+        Create a basic volume chart as ultimate fallback
+        """
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10), gridspec_kw={'height_ratios': [2, 1]})
+        
+        # Basic price chart
+        ax1.plot(data.index, data['close'], label='Close Price', color='blue', linewidth=1.5)
+        ax1.set_title(f'{stock_symbol} - Basic Volume Analysis (Fallback Mode)', fontsize=14, fontweight='bold')
+        ax1.set_ylabel('Price')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # Basic volume chart
+        ax2.bar(data.index, data['volume'], color='lightblue', alpha=0.7, label='Volume')
+        try:
+            volume_ma = data['volume'].rolling(window=20).mean()
+            ax2.plot(data.index, volume_ma, color='red', linewidth=1.5, label='20-day MA')
+        except:
+            pass  # Skip moving average if calculation fails
+        
+        ax2.set_ylabel('Volume')
+        ax2.set_xlabel('Date')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        return fig
+    
+    @staticmethod
+    def _get_agent_volume_colors(data: pd.DataFrame, volume_analysis: Dict[str, Any]) -> list:
+        """
+        Get volume bar colors based on volume agents analysis
+        """
+        try:
+            volume_summary = volume_analysis.get('volume_summary', {})
+            key_findings = volume_analysis.get('key_findings', [])
+            
+            # Default color scheme
+            colors = ['lightblue'] * len(data)
+            
+            # Color based on volume analysis insights
+            if 'anomalies' in str(key_findings).lower():
+                # Highlight potential anomaly periods in red
+                volume_ma = data['volume'].rolling(window=20).mean()
+                volume_ratio = data['volume'] / volume_ma
+                
+                for i, ratio in enumerate(volume_ratio):
+                    if ratio > 2.5:  # High volume anomaly
+                        colors[i] = 'red'
+                    elif ratio > 1.8:  # Elevated volume
+                        colors[i] = 'orange'
+                    elif ratio < 0.3:  # Low volume
+                        colors[i] = 'gray'
+            
+            return colors
+            
+        except Exception as e:
+            # Fallback to default coloring
+            return ['lightblue'] * len(data)
+    
+    @staticmethod
+    def _add_volume_agent_annotations(ax1, ax1_twin, data: pd.DataFrame, volume_analysis: Dict[str, Any]):
+        """
+        Add annotations based on volume agents insights
+        """
+        try:
+            key_findings = volume_analysis.get('key_findings', [])
+            
+            # Add annotations for significant findings
+            for i, finding in enumerate(key_findings[:3]):  # Limit to top 3 findings
+                if 'anomaly' in finding.lower() or 'institutional' in finding.lower():
+                    # Find the most recent high volume point to annotate
+                    volume_ma = data['volume'].rolling(window=20).mean()
+                    volume_ratio = data['volume'] / volume_ma
+                    
+                    # Find recent high volume points
+                    high_volume_indices = volume_ratio[volume_ratio > 2.0].index
+                    if len(high_volume_indices) > 0:
+                        # Use the most recent high volume point
+                        annotation_date = high_volume_indices[-1]
+                        annotation_volume = data.loc[annotation_date, 'volume']
+                        annotation_price = data.loc[annotation_date, 'close']
+                        
+                        # Add annotation
+                        ax1.annotate(
+                            finding[:30] + '...' if len(finding) > 30 else finding,
+                            xy=(annotation_date, annotation_price),
+                            xytext=(10, 20 + i * 15),
+                            textcoords='offset points',
+                            bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7),
+                            arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0.1'),
+                            fontsize=8
+                        )
+                        break  # Only add one annotation to avoid clutter
+                        
+        except Exception as e:
+            # Skip annotations if they fail
+            pass
         
         # Price and volume correlation
         ax1 = axes[0]

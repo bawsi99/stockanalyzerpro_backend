@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import json
 import numpy as np
 from .gemini_core import GeminiCore
@@ -54,7 +54,7 @@ class GeminiClient:
         self.error_utils = ErrorUtils()
         self.context_engineer = ContextEngineer(context_config)
 
-    async def build_indicators_summary(self, symbol, indicators, period, interval, knowledge_context=None, token_tracker=None, mtf_context=None):
+    async def build_indicators_summary(self, symbol, indicators, period, interval, knowledge_context=None, token_tracker=None, mtf_context=None, curated_indicators: Optional[dict] = None):
         """
         Build comprehensive indicator summary with multi-timeframe and sector analysis support.
         
@@ -68,8 +68,9 @@ class GeminiClient:
             mtf_context: Multi-timeframe context data
         """
         try:
-            # Use context engineering to curate and structure indicators
-            curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.INDICATOR_SUMMARY)
+            # NEW: Require curated indicators provided by the new indicator agents path
+            if curated_indicators is None:
+                raise ValueError("curated_indicators must be provided (from new IndicatorAgentsOrchestrator). Old curator is removed.")
             timeframe = f"{period} days, {interval}"
             
             # Enhance context with MTF data if available
@@ -1049,31 +1050,11 @@ JSON:
         return result, ind_summary_md, chart_insights_md
 
 
-    async def analyze_volume_comprehensive(self, images: list, indicators: dict = None) -> str:
-        """Analyze all volume-related charts together for complete volume story."""
-        try:
-            # Use context engineering for volume analysis
-            if indicators:
-                curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.VOLUME_ANALYSIS)
-                context = self.context_engineer.structure_context(curated_indicators, AnalysisType.VOLUME_ANALYSIS, "", "", "")
-                prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=context)
-            else:
-                # Use optimized template with minimal context
-                context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and volume indicators."
-                prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=context)
-            
-            # Add the solving line at the very end
-            prompt += self.prompt_manager.SOLVING_LINE
-            pil_images = [self.image_utils.bytes_to_image(img) for img in images]
-            return await self.core.call_llm_with_images(prompt, pil_images)
-        except Exception as ex:
-            print(f"[DEBUG-ERROR] Exception during volume analysis context engineering: {ex}")
-            # Fallback with minimal context
-            context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and volume indicators."
-            prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=context)
-            prompt += self.prompt_manager.SOLVING_LINE
-            pil_images = [self.image_utils.bytes_to_image(img) for img in images]
-            return await self.core.call_llm_with_images(prompt, pil_images)
+    # DEPRECATED: This method has been replaced by the distributed volume agents system
+    # The new system provides more specialized and accurate analysis through 5 coordinated agents
+    # async def analyze_volume_comprehensive(self, images: list, indicators: dict = None) -> str:
+    #     """DEPRECATED: Use volume agents system instead"""
+    #     pass
 
     async def analyze_reversal_patterns(self, images: list, indicators: dict = None) -> str:
         """Analyze divergence and double tops/bottoms charts together for reversal signals."""
@@ -1128,32 +1109,11 @@ JSON:
             return await self.core.call_llm_with_images(prompt, pil_images)
 
 
-    async def analyze_volume_comprehensive_with_calculations(self, images: list, indicators: dict) -> str:
-        """Analyze all volume-related charts with statistical validation."""
-        # Use optimized template with minimal context
-        context = "## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and volume indicators."
-        enhanced_prompt = self.prompt_manager.format_prompt("optimized_volume_analysis", context=context)
-        enhanced_prompt += f"""
-
-STATISTICAL VALIDATION REQUIRED:
-Analyze the volume charts and perform the following calculations using Python code:
-
-1. Calculate price-volume correlation coefficient and p-value
-2. Identify volume anomalies using statistical methods (z-score analysis)
-3. Calculate volume-weighted average price (VWAP)
-4. Determine volume trend strength using linear regression
-5. Calculate volume-based support/resistance levels
-6. Validate volume confirmation of price movements
-
-Technical Indicators Data: {json.dumps(clean_for_json(self.convert_numpy_types(indicators)), indent=2)}
-
-Use Python code for all calculations and include the results in your analysis.
-"""
-        
-        # Add the solving line at the very end
-        enhanced_prompt += self.prompt_manager.SOLVING_LINE
-        pil_images = [self.image_utils.bytes_to_image(img) for img in images]
-        return await self.core.call_llm_with_images(enhanced_prompt, pil_images, enable_code_execution=True)
+    # DEPRECATED: This method has been replaced by the distributed volume agents system
+    # The volume agents provide specialized statistical validation through individual processors
+    # async def analyze_volume_comprehensive_with_calculations(self, images: list, indicators: dict) -> str:
+    #     """DEPRECATED: Use volume agents system instead"""
+    #     pass
 
     async def analyze_reversal_patterns_with_calculations(self, images: list, indicators: dict) -> str:
         """Analyze reversal patterns with enhanced mathematical validation."""
@@ -1255,9 +1215,14 @@ Use Python code for all calculations and include the results in your analysis.
             return f"Pattern analysis failed: {str(e)}"
 
     async def analyze_volume_analysis(self, image: bytes, indicators: dict = None) -> str:
-        """Analyze the comprehensive volume analysis chart showing all volume patterns and correlations."""
+        """
+        Analyze the comprehensive volume analysis chart.
+        UPDATED: Now provides fallback to old method while volume agents system is the primary approach.
+        """
         try:
-            # Use context engineering for volume analysis
+            # FALLBACK: Use the old single volume analysis method for chart analysis
+            # The distributed volume agents system is used in the main orchestrator workflow
+            # This method remains for backward compatibility with chart analysis
             if indicators:
                 curated_indicators = self.context_engineer.curate_indicators(indicators, AnalysisType.VOLUME_ANALYSIS)
                 context = self.context_engineer.structure_context(curated_indicators, AnalysisType.VOLUME_ANALYSIS, "", "", "")

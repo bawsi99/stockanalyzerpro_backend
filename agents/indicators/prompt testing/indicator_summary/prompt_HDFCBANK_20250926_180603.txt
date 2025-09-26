@@ -1,0 +1,142 @@
+PROMPT ANALYSIS FOR LLM
+================================================================================
+
+Stock Symbol: HDFCBANK
+Company: HDFC Bank
+Sector: Banking
+Expected Behavior: large_cap_stable
+Generated: 2025-09-26T18:06:03.612124
+Prompt Length: 2560 characters
+Context Length: 2455 characters
+
+KEY TECHNICAL INDICATORS SUMMARY:
+----------------------------------------
+{
+  "current_price": 944.9,
+  "rsi_14": 27.6483050847457,
+  "rsi_status": "near_oversold",
+  "macd_signal": "bearish",
+  "sma_20": 960.8875,
+  "sma_50": 980.465,
+  "sma_200": 930.15575,
+  "price_vs_sma200_pct": 0.015851377578432357,
+  "volume_ratio": 0.8144748022270836,
+  "death_cross": false,
+  "golden_cross": false,
+  "enhanced_levels_available": true,
+  "support_levels_count": 3,
+  "resistance_levels_count": 3
+}
+
+FINAL PROMPT SENT TO LLM:
+----------------------------------------
+You are a technical analyst. Analyze the provided indicators and generate actionable trading insights.
+
+## Analysis Context:
+**Symbol**: HDFCBANK | **Timeframe**: 1yr, daily
+
+## Technical Data:
+{
+ "trend_indicators": {
+  "direction": "bearish",
+  "strength": "moderate",
+  "confidence": "68.33%",
+  "sma_20": 960.8875,
+  "sma_50": 980.465,
+  "sma_200": 930.15575,
+  "ema_20": 963.1528196171747,
+  "ema_50": 971.9580758488165,
+  "price_to_sma_200": 0.015851377578432357,
+  "sma_20_to_sma_50": -0.019967566409815785,
+  "golden_cross": false,
+  "death_cross": false
+ },
+ "momentum_indicators": {
+  "rsi_status": "oversold",
+  "direction": "bearish",
+  "strength": "strong",
+  "confidence": "75.00%",
+  "rsi_current": 27.65,
+  "macd": {
+   "histogram": -1.12,
+   "trend": "bearish"
+  }
+ },
+ "volume_indicators": {
+  "volume_ratio": 0.81,
+  "volume_trend": "neutral"
+ }
+}
+
+## Levels:
+{
+ "support": [
+  887.5,
+  869.1,
+  849.0
+ ],
+ "resistance": [
+  975.0,
+  998.2,
+  1018.8
+ ]
+}
+
+## Signal Conflicts (3 detected, HIGH severity):
+
+**Timeframe Conflicts:**
+- Mixed moving average alignment signals
+
+**Momentum Vs Trend:**
+- RSI oversold while MACD bearish
+
+**Resolution:** Wait for clearer signals or reduce position size
+
+
+
+
+## Required JSON Output:
+
+```json
+{
+  "trend_analysis": {
+    "direction": "bullish|bearish|neutral",
+    "strength": "strong|moderate|weak",
+    "confidence": 0-100,
+    "key_signals": ["primary trend indicators"]
+  },
+  "momentum": {
+    "rsi_signal": "overbought|oversold|neutral",
+    "macd_signal": "bullish|bearish|neutral",
+    "momentum_strength": "strong|moderate|weak"
+  },
+  "critical_levels": {
+    "nearest_support": 0.0,
+    "nearest_resistance": 0.0,
+    "key_levels": [{ "price": 0.0, "type": "support|resistance" }]
+  },
+  "trading_recommendation": {
+    "bias": "bullish|bearish|neutral",
+    "confidence": 0-100,
+    "entry_price": 0.0,
+    "target_price": 0.0,
+    "stop_loss": 0.0,
+    "rationale": "Clear reasoning for recommendation"
+  },
+  "conflicts_resolved": "How any indicator conflicts were resolved",
+  "confidence_score": 0-100
+}
+```
+
+## Instructions:
+1. Analyze trend using both SMA (stability) and EMA (responsiveness)
+2. Use EMA for entry signals, SMA for trend confirmation
+3. Assess momentum using RSI and MACD signals
+4. Identify critical support/resistance levels
+5. Provide one clear trading recommendation
+6. Resolve any conflicts between indicators
+
+**Output Requirements:**
+- Return ONLY valid JSON
+- Use provided data to populate specific price levels
+- Include clear rationale for recommendations
