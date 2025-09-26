@@ -15,6 +15,7 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 import traceback
+import matplotlib.pyplot as plt
 
 # Import all volume agents
 from .volume_anomaly import VolumeAnomalyProcessor, VolumeAnomalyCharts
@@ -448,35 +449,47 @@ class VolumeAgentsOrchestrator:
         charts = config['charts']
         
         try:
-            # Process data with the specific agent
+            # Process data with the specific agent (call concrete processor methods)
             if agent_name == 'volume_anomaly':
-                analysis_data = processor.process_volume_anomalies(stock_data, symbol)
+                analysis_data = processor.process_volume_anomaly_data(stock_data)
             elif agent_name == 'institutional_activity':
-                analysis_data = processor.process_institutional_activity(stock_data, symbol)
+                analysis_data = processor.process_institutional_activity_data(stock_data)
             elif agent_name == 'volume_confirmation':
-                analysis_data = processor.process_volume_confirmation(stock_data, symbol)
+                analysis_data = processor.process_volume_confirmation_data(stock_data)
             elif agent_name == 'support_resistance':
-                analysis_data = processor.process_support_resistance_volume(stock_data, symbol)
+                analysis_data = processor.process_support_resistance_data(stock_data)
             elif agent_name == 'volume_momentum':
-                analysis_data = processor.process_volume_momentum(stock_data, symbol)
+                analysis_data = processor.process_volume_trend_momentum_data(stock_data)
             else:
                 raise ValueError(f"Unknown agent: {agent_name}")
             
             # Generate chart
             chart_image = None
             try:
+                print(f"[VOLUME_AGENT_DEBUG] {agent_name} chart generation starting for {symbol}")
                 if agent_name == 'volume_anomaly':
-                    chart_image = charts.create_volume_anomaly_chart(stock_data, analysis_data, symbol)
+                    chart_image = charts.generate_volume_anomaly_chart(stock_data, analysis_data, symbol)
                 elif agent_name == 'institutional_activity':
-                    chart_image = charts.create_institutional_activity_chart(stock_data, analysis_data, symbol)
+                    chart_image = charts.generate_institutional_activity_chart(stock_data, analysis_data, symbol)
                 elif agent_name == 'volume_confirmation':
-                    chart_image = charts.create_volume_confirmation_chart(stock_data, analysis_data, symbol)
+                    chart_image = charts.generate_volume_confirmation_chart(stock_data, analysis_data, symbol)
                 elif agent_name == 'support_resistance':
-                    chart_image = charts.create_support_resistance_chart(stock_data, analysis_data, symbol)
+                    # Support resistance uses create_comprehensive_chart method
+                    chart_fig = charts.create_comprehensive_chart(stock_data, analysis_data, symbol)
+                    if chart_fig:
+                        import io
+                        buf = io.BytesIO()
+                        chart_fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+                        buf.seek(0)
+                        chart_image = buf.getvalue()
+                        buf.close()
+                        plt.close(chart_fig)
                 elif agent_name == 'volume_momentum':
-                    chart_image = charts.create_volume_momentum_chart(stock_data, analysis_data, symbol)
+                    chart_image = charts.generate_volume_momentum_chart(stock_data, analysis_data, symbol)
+                print(f"[VOLUME_AGENT_DEBUG] {agent_name} chart generation completed for {symbol} - has_image={chart_image is not None} size={(len(chart_image) if chart_image else 0)} bytes")
             except Exception as chart_error:
                 logger.warning(f"Chart generation failed for {agent_name}: {chart_error}")
+                print(f"[VOLUME_AGENT_DEBUG] {agent_name} chart generation failed for {symbol}: {chart_error}")
             
             # Generate AI analysis if Gemini client is available
             llm_response = None
@@ -485,11 +498,19 @@ class VolumeAgentsOrchestrator:
             if self.gemini_client and chart_image:
                 try:
                     prompt_text = self._build_agent_prompt(agent_name, analysis_data, symbol)
+                    # Debug: log when a volume agent LLM request is sent
+                    print(f"{agent_name.replace('_', ' ')} agent request sent")
                     llm_response = await self.gemini_client.analyze_volume_agent_specific(
                         chart_image, prompt_text, agent_name
                     )
                 except Exception as llm_error:
                     logger.warning(f"LLM analysis failed for {agent_name}: {llm_error}")
+                    print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM call failed for {symbol}: {llm_error}")
+            else:
+                if not self.gemini_client:
+                    print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM skipped for {symbol}: gemini_client unavailable")
+                elif not chart_image:
+                    print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM skipped for {symbol}: no chart image")
             
             # Extract confidence score
             confidence_score = self._extract_confidence_score(analysis_data, llm_response)
@@ -627,7 +648,12 @@ Please analyze this volume momentum data and provide insights on:
         # Handle complete failure scenario
         if not successful_results:
             aggregated['error'] = "No agents completed successfully"
-            aggregated['fallback_analysis'] = self._create_fallback_volume_analysis(stock_data, symbol)
+            # Provide orchestrator-level fallback when all agents fail
+            try:
+                aggregated['fallback_analysis'] = self._create_fallback_volume_analysis(stock_data, symbol)
+            except Exception as _fb_ex:
+                logger.warning(f"Fallback volume analysis failed: {_fb_ex}")
+                aggregated['fallback_analysis'] = {}
             aggregated['partial_analysis_warning'] = "Analysis based on fallback methods only due to agent failures"
             return aggregated
         
@@ -677,6 +703,44 @@ Please analyze this volume momentum data and provide insights on:
         aggregated['trading_implications'] = self._aggregate_trading_implications(successful_results)
         
         return aggregated
+
+    def _create_fallback_volume_analysis(self, stock_data: pd.DataFrame, symbol: str) -> Dict[str, Any]:
+        """Create basic volume analysis when all agents fail (orchestrator-level)."""
+        try:
+            current_volume = stock_data['volume'].iloc[-1]
+            volume_ma_20 = stock_data['volume'].rolling(window=20).mean().iloc[-1]
+
+            # Basic volume metrics
+            volume_ratio = current_volume / volume_ma_20 if volume_ma_20 > 0 else 1.0
+            volume_percentile = self._calculate_volume_percentile(stock_data)
+            volume_trend = self._determine_volume_trend(stock_data)
+
+            return {
+                'analysis_method': 'fallback',
+                'current_volume': int(current_volume),
+                'volume_ma_20': int(volume_ma_20) if not pd.isna(volume_ma_20) else 0,
+                'volume_ratio': round(volume_ratio, 2),
+                'volume_percentile': round(volume_percentile, 1),
+                'volume_trend': volume_trend,
+                'basic_signals': {
+                    'high_volume': volume_ratio > 2.0,
+                    'above_average': volume_ratio > 1.5,
+                    'low_volume': volume_ratio < 0.5
+                },
+                'confidence': 0.3,  # Low confidence for fallback analysis
+                'limitations': [
+                    'Basic volume metrics only',
+                    'No advanced pattern recognition',
+                    'No institutional analysis',
+                    'Limited signal reliability'
+                ]
+            }
+        except Exception as e:
+            logger.error(f"Fallback volume analysis failed: {e}")
+            return {
+                'analysis_method': 'fallback',
+                'error': str(e)
+            }
 
     def _calculate_overall_confidence(self, results: Dict[str, VolumeAgentResult]) -> float:
         """Enhanced confidence calculation with dynamic weight adjustments and performance optimization"""
@@ -2698,11 +2762,14 @@ class VolumeAgentIntegrationManager:
         analysis_start_time = time.time()
         
         try:
+            print(f"[VOLUME_AGENT_DEBUG] Integration start for {symbol}: data_len={(len(stock_data) if stock_data is not None else 'None')}")
             # ENHANCED: Comprehensive pre-flight health check
             should_use_agents, health_reason = self.should_use_volume_agents()
+            print(f"[VOLUME_AGENT_DEBUG] Health check for {symbol}: should_use={should_use_agents} reason='{health_reason}'")
             
             if not should_use_agents:
                 logger.warning(f"Volume agents unavailable: {health_reason}")
+                print(f"[VOLUME_AGENT_DEBUG] Integration short-circuit for {symbol}: {health_reason}")
                 return self._create_degraded_analysis_result(symbol, health_reason, time.time() - analysis_start_time)
             
             logger.info(f"Volume agents health check passed: {health_reason}")
@@ -2727,6 +2794,7 @@ class VolumeAgentIntegrationManager:
             except asyncio.TimeoutError:
                 processing_time = time.time() - analysis_start_time
                 logger.error(f"Volume agents analysis timed out after {timeout_seconds} seconds for {symbol}")
+                print(f"[VOLUME_AGENT_DEBUG] Integration timeout for {symbol} after {timeout_seconds}s")
                 return self._create_degraded_analysis_result(
                     symbol, 
                     f"Analysis timed out after {timeout_seconds} seconds",
@@ -2737,6 +2805,7 @@ class VolumeAgentIntegrationManager:
                 logger.error(f"Orchestrator execution failed for {symbol}: {orchestrator_error}")
                 import traceback
                 logger.error(f"Orchestrator error traceback: {traceback.format_exc()}")
+                print(f"[VOLUME_AGENT_DEBUG] Integration error for {symbol}: {orchestrator_error}")
                 return self._create_degraded_analysis_result(
                     symbol, 
                     f"Orchestrator execution failed: {str(orchestrator_error)}",
@@ -2746,6 +2815,7 @@ class VolumeAgentIntegrationManager:
             # ENHANCED: Check for minimum acceptable results
             if result.successful_agents == 0:
                 logger.warning(f"All volume agents failed for {symbol}, providing fallback analysis")
+                print(f"[VOLUME_AGENT_DEBUG] Integration result for {symbol}: all agents failed")
                 return self._create_degraded_analysis_result(
                     symbol, 
                     "All volume agents failed during execution",
@@ -2759,6 +2829,7 @@ class VolumeAgentIntegrationManager:
             
             if failure_rate > 0.6:  # More than 60% failed
                 logger.warning(f"High failure rate ({failure_rate:.1%}) for {symbol} volume agents")
+                print(f"[VOLUME_AGENT_DEBUG] High failure rate for {symbol}: {failure_rate:.1%}")
             
             # Format result for main system compatibility
             formatted_result = {
@@ -2786,6 +2857,13 @@ class VolumeAgentIntegrationManager:
                 }
             }
             
+            # Debug: Integration completed summary
+            try:
+                ca = formatted_result.get('consensus_analysis', {})
+                print(f"[VOLUME_AGENT_DEBUG] Integration complete for {symbol}: success={formatted_result.get('success')} successful_agents={ca.get('successful_agents')} failed_agents={ca.get('failed_agents')} overall_confidence={ca.get('overall_confidence')}")
+            except Exception:
+                print(f"[VOLUME_AGENT_DEBUG] Integration complete for {symbol}: summary unavailable")
+            
             return formatted_result
             
         except Exception as e:
@@ -2793,6 +2871,7 @@ class VolumeAgentIntegrationManager:
             logger.error(f"Volume agent integration failed: {e}")
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
+            print(f"[VOLUME_AGENT_DEBUG] Integration crashed for {symbol}: {e}")
             
             return self._create_degraded_analysis_result(
                 symbol, 
@@ -2935,7 +3014,8 @@ class VolumeAgentIntegrationManager:
                     # Additional health checks if agent exists
                     diagnostics = {
                         'initialized': is_healthy,
-                        'gemini_client_available': hasattr(agent, 'gemini_client') and agent.gemini_client is not None if is_healthy else False,
+                        # Health depends on orchestrator-wide Gemini client, not per-processor
+                        'gemini_client_available': (self.orchestrator.gemini_client is not None) if is_healthy else False,
                         'last_check': datetime.now().isoformat()
                     }
                     

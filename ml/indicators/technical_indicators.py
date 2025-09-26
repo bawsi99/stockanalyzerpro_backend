@@ -10,16 +10,16 @@ import logging
 import asyncio
 
 # Add new imports for pattern modules
-from backend.patterns.recognition import PatternRecognition
-from backend.patterns.visualization import PatternVisualizer
+from patterns.recognition import PatternRecognition
+from patterns.visualization import PatternVisualizer
 
 # Add new imports for configuration and optimization
-from backend.core.config import Config
+from core.config import Config
 # Redis cache functionality will be used instead of local cache
-from backend.zerodha.client import ZerodhaDataClient
+from zerodha.client import ZerodhaDataClient
 
 # Add to existing IndianMarketMetricsProvider class
-from backend.ml.sector.classifier import SectorClassifier
+from ml.sector.classifier import SectorClassifier
 
 
 class TechnicalIndicators:
@@ -1806,6 +1806,7 @@ class TechnicalIndicators:
             print(f"DEBUG: Volume data available - avg_volume: {avg_volume}, volume_volatility: {volume_volatility}, liquidity_score: {liquidity_score}")
         else:
             liquidity_score = 50  # Neutral if no volume data
+            volume_volatility = None  # Explicitly set to None when no volume data
             print(f"DEBUG: No volume data available in columns: {data.columns.tolist()}")
         
         # Overall risk score (0-100, higher = more risky)
@@ -1904,7 +1905,7 @@ class TechnicalIndicators:
             },
             "liquidity_analysis": {
                 "liquidity_score": safe_float(liquidity_score, 50.0),
-                "volume_volatility": safe_float(volume_volatility if 'volume' in data.columns else 0.5, 0.5)
+                "volume_volatility": safe_float(volume_volatility, 0.0) if volume_volatility is not None else None
             },
             "correlation_analysis": {
                 "market_correlation": safe_float(market_correlation, 0.6),

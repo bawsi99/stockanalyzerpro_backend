@@ -168,9 +168,9 @@ class FrontendResponseBuilder:
                         "code_execution_enabled": True,
                         "statistical_analysis": True,
                         "calculation_timestamp": int(datetime.now().timestamp() * 1000),
-                        "advanced_risk_metrics": advanced_analysis.get("advanced_risk", {}),
-                        "stress_testing_metrics": advanced_analysis.get("stress_testing", {}),
-                        "scenario_analysis_metrics": advanced_analysis.get("scenario_analysis", {})
+                        "advanced_risk_metrics": indicators.get("advanced_risk", advanced_analysis.get("advanced_risk", {})),
+                        "stress_testing_metrics": indicators.get("stress_testing", advanced_analysis.get("stress_testing", {})),
+                        "scenario_analysis_metrics": indicators.get("scenario_analysis", advanced_analysis.get("scenario_analysis", {}))
                     },
                     "charts": {}, # Empty charts - frontend uses dedicated /charts endpoint
                     # Unified ML predictions surfaced for frontend (if available)

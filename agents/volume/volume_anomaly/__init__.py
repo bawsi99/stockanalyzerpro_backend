@@ -6,7 +6,7 @@ Focuses on identifying statistical outliers rather than institutional activity.
 """
 
 from .processor import VolumeAnomalyProcessor
-from .charts import VolumeAnomalyCharts
+from .charts import VolumeAnomalyChartGenerator as VolumeAnomalyCharts
 
 __all__ = [
     'VolumeAnomalyProcessor',

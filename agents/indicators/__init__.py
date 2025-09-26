@@ -15,12 +15,15 @@ Agents:
 from .trend import TrendIndicatorsProcessor
 from .momentum import MomentumIndicatorsProcessor
 from .indicators_agents import IndicatorAgentsOrchestrator, indicators_orchestrator
+from .integration_manager import IndicatorAgentIntegrationManager, indicator_agent_integration_manager
 
 __all__ = [
     'TrendIndicatorsProcessor',
     'MomentumIndicatorsProcessor',
     'IndicatorAgentsOrchestrator',
-    'indicators_orchestrator'
+    'indicators_orchestrator',
+    'IndicatorAgentIntegrationManager',
+    'indicator_agent_integration_manager'
 ]
 
 __version__ = "1.0.0"

@@ -711,6 +711,20 @@ class ZerodhaDataClient:
             if df.empty:
                 logger.warning(f"No data returned for {symbol}")
                 return None
+            # Normalize to datetime index named 'date' for downstream consumers
+            try:
+                if 'date' in df.columns:
+                    df['date'] = pd.to_datetime(df['date'])
+                    df.set_index('date', inplace=True)
+                    df.index.name = 'date'
+                elif df.index.name == 'date' or pd.api.types.is_datetime64_any_dtype(df.index):
+                    # Already has a datetime-like index
+                    if df.index.name is None:
+                        df.index.name = 'date'
+                else:
+                    logger.warning("Historical data has no 'date' column; downstream date formatting may fail.")
+            except Exception as norm_ex:
+                logger.warning(f"Failed to normalize date index: {norm_ex}")
 
             # If not aggregating, return as is
             if not (aggregate_week or aggregate_month):
@@ -722,12 +736,10 @@ class ZerodhaDataClient:
                 return df
 
             # --- Aggregation for week/month ---
-            # Ensure 'date' is datetime and set as index
-            if 'date' not in df.columns:
-                logger.error("No 'date' column in returned data for aggregation.")
+            # df is already indexed by datetime 'date' from normalization above
+            if not pd.api.types.is_datetime64_any_dtype(df.index):
+                logger.error("Historical data is not indexed by datetime; cannot aggregate.")
                 return None
-            df['date'] = pd.to_datetime(df['date'])
-            df.set_index('date', inplace=True)
 
             rule = 'W' if aggregate_week else 'M'
             agg_dict = {
@@ -740,7 +752,8 @@ class ZerodhaDataClient:
             # Only aggregate columns that exist
             agg_dict = {k: v for k, v in agg_dict.items() if k in df.columns}
             resampled = df.resample(rule).agg(agg_dict).dropna()
-            resampled.reset_index(inplace=True)
+            # Ensure index has proper name for CSV and consumers
+            resampled.index.name = 'date'
             logger.info(f"Aggregated {len(resampled)} {interval} records for {symbol}")
             # Save to caches
             self._lru_put(cache_key, resampled)

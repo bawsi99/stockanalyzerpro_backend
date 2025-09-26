@@ -63,7 +63,7 @@ except ImportError:
     HAS_SKLEARN = False
     logging.warning("scikit-learn not available. Traditional ML models will not work.")
 
-from ..core import BaseMLEngine, UnifiedMLConfig
+from ..core import BaseMLEngine, UnifiedMLConfig, global_registry
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,10 @@ class RawDataFeatureEngineer:
     
     def __init__(self, config: UnifiedMLConfig = None):
         self.config = config or UnifiedMLConfig()
-        self.scaler = StandardScaler()
+        if HAS_SKLEARN:
+            self.scaler = StandardScaler()
+        else:
+            self.scaler = None
         self.feature_columns = []
     
     def create_technical_features(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -285,13 +288,15 @@ class RawDataMLEngine(BaseMLEngine):
     
     def __init__(self, config: UnifiedMLConfig = None):
         super().__init__(config)
-        self.feature_engineer = RawDataFeatureEngineer(config)
+        self.config = config or UnifiedMLConfig()  # Ensure config is never None
+        self.feature_engineer = RawDataFeatureEngineer(self.config)
         self.direction_model = None
         self.magnitude_model = None
         self.volatility_model = None
         self.regime_model = None
         self.scaler = StandardScaler()
         self.feature_columns = []
+        self.registry = global_registry  # Initialize registry
         
     def train(self, data: pd.DataFrame, target_horizon: int = 1) -> bool:
         """Train price prediction model."""

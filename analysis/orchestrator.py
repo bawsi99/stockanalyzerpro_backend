@@ -18,7 +18,7 @@ import asyncio
 from ml.analysis.mtf_utils import multi_timeframe_analysis
 from ml.analysis.mtf_analysis import EnhancedMultiTimeframeAnalyzer
 from agents.volume import VolumeAgentIntegrationManager
-from agents.indicators import indicators_orchestrator
+from agents.indicators import indicators_orchestrator, indicator_agent_integration_manager
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -63,6 +63,8 @@ class StockAnalysisOrchestrator:
         self.sector_benchmarking_provider = SectorBenchmarkingProvider()
         # Initialize volume agents integration manager
         self.volume_agents_manager = VolumeAgentIntegrationManager(self.gemini_client)
+        # Initialize indicator agents integration manager
+        self.indicator_agents_manager = indicator_agent_integration_manager
     
     def authenticate(self) -> bool:
         """
@@ -544,16 +546,46 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             curated_for_llm = None
             try:
                 if stock_data is not None:
-                    agent_res = await indicators_orchestrator.analyze_indicators_comprehensive(
+                    print(f"[INDICATOR_AGENTS] Using integration manager for curated indicators analysis for {symbol}...")
+                    success, curated_for_llm = await self.indicator_agents_manager.get_curated_indicators_analysis(
                         symbol=symbol, stock_data=stock_data, indicators=indicators, context=knowledge_context or ""
                     )
-                    curated_for_llm = self._curate_indicators_from_agents(agent_res.unified_analysis, raw_indicators=indicators, stock_data=stock_data)
-            except Exception as _e:
-                curated_for_llm = None
+                    if success:
+                        print(f"[INDICATOR_AGENTS] Successfully obtained curated indicators for {symbol}")
+                    else:
+                        print(f"[INDICATOR_AGENTS] Using fallback curated indicators for {symbol}")
+                else:
+                    print(f"[INDICATOR_AGENTS] No stock data available, creating minimal fallback for {symbol}")
+                    # Create minimal fallback when no stock data is available
+                    curated_for_llm = {
+                        "analysis_focus": "technical_indicators_summary",
+                        "key_indicators": {},
+                        "critical_levels": {},
+                        "conflict_analysis_needed": False,
+                        "detected_conflicts": {"has_conflicts": False, "conflict_count": 0, "conflict_list": []},
+                        "fallback_used": True,
+                        "reason": "No stock data available"
+                    }
+            except Exception as e:
+                print(f"[INDICATOR_AGENTS] Error in integration manager: {e}")
+                # Create minimal fallback
+                curated_for_llm = {
+                    "analysis_focus": "technical_indicators_summary",
+                    "key_indicators": {},
+                    "critical_levels": {},
+                    "conflict_analysis_needed": False,
+                    "detected_conflicts": {"has_conflicts": False, "conflict_count": 0, "conflict_list": []},
+                    "fallback_used": True,
+                    "error": str(e)
+                }
 
             ind_summary_md, ind_json = await self.gemini_client.build_indicators_summary(
                 symbol, indicators, period, interval, knowledge_context, token_tracker, mtf_context, curated_indicators=curated_for_llm
             )
+            
+            # REMOVED: Another duplicate volume agents call - already handled in enhanced_analyze_stock
+            # Volume agents integration is now handled upstream in the main analysis flow
+            logger.info("[VOLUME AGENTS] Volume agents integration handled upstream in enhanced_analyze_stock - skipping MTF path duplicate call")
             
             # 2. Chart analysis (already optimized for MTF)
             print(f"[LLM-ANALYSIS] Starting enhanced chart analysis for {symbol}...")
@@ -1123,7 +1155,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 symbol, indicators, chart_paths, period, interval, knowledge_context, sector_context,
                 mtf_context=mtf_context,
                 advanced_analysis=advanced_digest,
-                stock_data=data
+                stock_data=data,
+                volume_agents_result=volume_agents_result
             )
             
             # Step 7: Build enhanced result with mathematical validation
@@ -1156,7 +1189,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
     async def enhanced_analyze_with_ai(self, symbol: str, indicators: dict, chart_paths: dict, 
                                      period: int, interval: str, knowledge_context: str = "", 
                                      sector_context: dict = None, mtf_context: dict | None = None,
-                                     advanced_analysis: dict | None = None, stock_data: pd.DataFrame | None = None) -> tuple:
+                                     advanced_analysis: dict | None = None, stock_data: pd.DataFrame | None = None,
+                                     volume_agents_result: dict | None = None) -> tuple:
         """
         Enhanced AI analysis with code execution for mathematical validation.
         Now includes ML system feedback to enhance LLM analysis.
@@ -1278,42 +1312,26 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 from core.utils import clean_for_json
                 supplemental_blocks.append("AdvancedAnalysisDigest:\n" + json.dumps(clean_for_json(adv_digest)))
 
-            # NEW: Add distributed volume agents analysis
+            # Use volume agents result passed from enhanced_analyze_stock method
             volume_agents_context = {}
-            try:
-                logger.info(f"[VOLUME AGENTS] Starting distributed volume agents analysis for {symbol}")
-                if stock_data is not None and not stock_data.empty:
-                    # Check if volume agents system is healthy
-                    if self.volume_agents_manager.is_volume_agents_healthy():
-                        volume_agents_result = await self.volume_agents_manager.get_comprehensive_volume_analysis(
-                            stock_data, symbol, indicators
-                        )
-                        
-                        if volume_agents_result.get('success', False):
-                            # Add volume agents context to supplemental blocks
-                            volume_context = {
-                                'volume_agents_analysis': volume_agents_result.get('volume_analysis', {}),
-                                'consensus_analysis': volume_agents_result.get('consensus_analysis', {}),
-                                'individual_agents_summary': {
-                                    agent_name: {
-                                        'success': agent_data.get('success', False),
-                                        'confidence': agent_data.get('confidence', 0.0)
-                                    }
-                                    for agent_name, agent_data in volume_agents_result.get('individual_agents', {}).items()
-                                }
-                            }
-                            supplemental_blocks.append("VolumeAgentsAnalysis:\n" + json.dumps(clean_for_json(volume_context)))
-                            volume_agents_context = volume_agents_result
-                            logger.info(f"[VOLUME AGENTS] Successfully integrated {volume_agents_result.get('consensus_analysis', {}).get('successful_agents', 0)} volume agents")
-                        else:
-                            logger.warning(f"[VOLUME AGENTS] Volume agents analysis failed: {volume_agents_result.get('error', 'Unknown error')}")
-                    else:
-                        logger.warning("[VOLUME AGENTS] Volume agents system not healthy, skipping distributed analysis")
-                else:
-                    logger.warning("[VOLUME AGENTS] No stock data available for volume agents analysis")
-            except Exception as volume_ex:
-                logger.error(f"[VOLUME AGENTS] Volume agents analysis failed: {volume_ex}")
-                # Continue without volume agents analysis
+            if volume_agents_result and volume_agents_result.get('success', False):
+                # Add volume agents context to supplemental blocks
+                volume_context = {
+                    'volume_agents_analysis': volume_agents_result.get('volume_analysis', {}),
+                    'consensus_analysis': volume_agents_result.get('consensus_analysis', {}),
+                    'individual_agents_summary': {
+                        agent_name: {
+                            'success': agent_data.get('success', False),
+                            'confidence': agent_data.get('confidence', 0.0)
+                        }
+                        for agent_name, agent_data in volume_agents_result.get('individual_agents', {}).items()
+                    }
+                }
+                supplemental_blocks.append("VolumeAgentsAnalysis:\n" + json.dumps(clean_for_json(volume_context)))
+                volume_agents_context = volume_agents_result
+                logger.info(f"[VOLUME AGENTS] Successfully integrated volume agents result from enhanced_analyze_stock method - {volume_agents_result.get('consensus_analysis', {}).get('successful_agents', 0)} agents")
+            else:
+                logger.info(f"[VOLUME AGENTS] No volume agents result available from enhanced_analyze_stock method")
             
             # NEW: Build compact ML system context before LLM analysis
             try:

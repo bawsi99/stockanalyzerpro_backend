@@ -6,7 +6,7 @@ Focuses on volume confirmation signals, divergences, and price-volume relationsh
 """
 
 from .processor import VolumeConfirmationProcessor
-from .charts import VolumeConfirmationCharts
+from .charts import VolumeConfirmationChartGenerator as VolumeConfirmationCharts
 from .context import VolumeConfirmationContext
 
 __all__ = [

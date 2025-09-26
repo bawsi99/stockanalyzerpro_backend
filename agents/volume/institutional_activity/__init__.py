@@ -6,7 +6,7 @@ Focuses on detecting large order flows, block trades, and institutional accumula
 """
 
 from .processor import InstitutionalActivityProcessor
-from .charts import InstitutionalActivityCharts
+from .charts import InstitutionalActivityChartGenerator as InstitutionalActivityCharts
 from .integration import InstitutionalActivityIntegration
 
 __all__ = [

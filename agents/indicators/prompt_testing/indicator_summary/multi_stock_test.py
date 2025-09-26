@@ -33,7 +33,7 @@ from typing import Tuple, Dict, Any, List
 # Ensure backend/ is on sys.path so imports like `gemini.*` resolve
 # File path is backend/agents/indicators/prompt testing/indicator_summary/multi_stock_test.py
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-BACKEND_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "../../../../.."))  # up to backend/
+BACKEND_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "../../../../"))  # up to backend/
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 

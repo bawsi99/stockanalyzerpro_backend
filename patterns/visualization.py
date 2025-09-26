@@ -1416,6 +1416,60 @@ class ChartVisualizer:
         Returns matplotlib figure object. Optionally saves to file if save_path is provided.
         """
         fig, axes = plt.subplots(3, 1, figsize=(16, 12), gridspec_kw={'height_ratios': [2, 1, 1]})
+        
+        try:
+            # Main price and volume chart
+            ax1 = axes[0]
+            ax1_twin = ax1.twinx()
+            
+            # Price line
+            ax1.plot(data.index, data['close'], label='Close Price', color='blue', linewidth=1.5)
+            ax1.set_ylabel('Price', color='blue')
+            ax1.tick_params(axis='y', labelcolor='blue')
+            
+            # Volume bars
+            colors = ['green' if close >= open else 'red' for close, open in zip(data['close'], data['open'])]
+            ax1_twin.bar(data.index, data['volume'], color=colors, alpha=0.7, width=0.8, label='Volume')
+            ax1_twin.set_ylabel('Volume', color='lightblue')
+            ax1_twin.tick_params(axis='y', labelcolor='lightblue')
+            
+            ax1.set_title(f'{stock_symbol} - Comprehensive Volume Analysis', fontsize=14, fontweight='bold')
+            ax1.grid(True, alpha=0.3)
+            ax1.legend(loc='upper left')
+            
+            # Volume analysis
+            ax2 = axes[1]
+            volume_ma = data['volume'].rolling(window=20).mean()
+            ax2.plot(data.index, data['volume'], label='Volume', color='lightblue', alpha=0.7, linewidth=1)
+            ax2.plot(data.index, volume_ma, label='Volume MA 20', color='red', linewidth=1.5)
+            ax2.set_ylabel('Volume')
+            ax2.legend(loc='upper left')
+            ax2.grid(True, alpha=0.3)
+            
+            # Volume ratio analysis
+            ax3 = axes[2]
+            volume_ratio = data['volume'] / volume_ma
+            ax3.plot(data.index, volume_ratio, label='Volume Ratio', color='green', linewidth=1.5)
+            ax3.axhline(y=1, color='black', linestyle='-', alpha=0.5, label='Average')
+            ax3.axhline(y=1.5, color='red', linestyle='--', alpha=0.6, label='High Volume')
+            ax3.axhline(y=0.5, color='orange', linestyle='--', alpha=0.6, label='Low Volume')
+            ax3.set_ylabel('Volume Ratio')
+            ax3.set_xlabel('Date')
+            ax3.legend(loc='upper left')
+            ax3.grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            
+            # Save to file only if save_path is provided
+            if save_path:
+                plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            
+            return fig
+            
+        except Exception as e:
+            # If anything fails, create a basic fallback chart
+            plt.close(fig)
+            return ChartVisualizer._create_basic_volume_chart(data, save_path, stock_symbol)
     
     @staticmethod
     def plot_enhanced_volume_chart_with_agents(data: pd.DataFrame, 

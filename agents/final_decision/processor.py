@@ -13,7 +13,7 @@ from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from backend.gemini.gemini_client import GeminiClient
+from gemini.gemini_client import GeminiClient
 
 logger = logging.getLogger(__name__)
 

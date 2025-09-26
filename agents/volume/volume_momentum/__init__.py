@@ -6,7 +6,7 @@ Focuses on volume momentum patterns, trend strength, and volume-based momentum i
 """
 
 from .processor import VolumeTrendMomentumProcessor
-from .charts import VolumeTrendMomentumCharts
+from .charts import VolumeTrendMomentumChartGenerator as VolumeTrendMomentumCharts
 
 __all__ = [
     'VolumeTrendMomentumProcessor',

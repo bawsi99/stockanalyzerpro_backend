@@ -14,7 +14,7 @@ import asyncio
 import time
 
 # --- Import clean_for_json ---
-from backend.core.utils import clean_for_json
+from core.utils import clean_for_json
 
 
 class GeminiClient:
@@ -79,7 +79,7 @@ class GeminiClient:
                 enhanced_context += self._build_mtf_context_for_indicators(mtf_context)
             
             # Extract and enhance sector context if available
-            if "SECTOR CONTEXT" in knowledge_context:
+            if knowledge_context and "SECTOR CONTEXT" in knowledge_context:
                 enhanced_context += self._build_sector_context_for_indicators(knowledge_context)
             
             # Extract ML guidance if present
@@ -111,6 +111,7 @@ class GeminiClient:
             raise
         
         loop = asyncio.get_event_loop()
+        print("indicator summary agent request sent")
         try:
             try:
                 # Use code execution for enhanced mathematical analysis
@@ -714,6 +715,109 @@ JSON:
         except Exception as e:
             print(f"Error determining entry strategy: {e}")
             return "breakout"
+    
+    def _create_basic_key_indicators_from_raw(self, indicators: dict) -> dict:
+        """Create basic key indicators structure from raw indicators for fallback."""
+        try:
+            key_indicators = {}
+            
+            # Create basic trend indicators from raw data
+            if isinstance(indicators, dict):
+                # Moving averages
+                mov = indicators.get('moving_averages', {})
+                if isinstance(mov, dict):
+                    trend_indicators = {
+                        "direction": "neutral",
+                        "strength": "weak", 
+                        "confidence": 0.3  # Low confidence for fallback
+                    }
+                    
+                    # Add numeric values if available
+                    for key in ['sma_20', 'sma_50', 'sma_200', 'ema_20', 'ema_50']:
+                        if key in mov:
+                            try:
+                                trend_indicators[key] = round(float(mov[key]), 2)
+                            except:
+                                pass
+                    
+                    # Add percentage values if available
+                    for key in ['price_to_sma_200', 'sma_20_to_sma_50']:
+                        if key in mov:
+                            try:
+                                trend_indicators[key] = round(float(mov[key]), 2)
+                            except:
+                                pass
+                    
+                    # Add boolean values if available
+                    for key in ['golden_cross', 'death_cross']:
+                        if key in mov:
+                            try:
+                                trend_indicators[key] = bool(mov[key])
+                            except:
+                                trend_indicators[key] = False
+                    
+                    key_indicators["trend_indicators"] = trend_indicators
+                
+                # Momentum indicators
+                momentum_indicators = {
+                    "direction": "neutral",
+                    "strength": "weak",
+                    "confidence": 0.3,
+                    "rsi_status": "neutral"
+                }
+                
+                # RSI
+                rsi = indicators.get('rsi')
+                if isinstance(rsi, dict) and 'rsi_14' in rsi:
+                    try:
+                        rsi_val = float(rsi['rsi_14'])
+                        momentum_indicators["rsi_current"] = round(rsi_val, 2)
+                        
+                        if rsi_val > 70:
+                            momentum_indicators["rsi_status"] = "overbought"
+                        elif rsi_val < 30:
+                            momentum_indicators["rsi_status"] = "oversold"
+                        else:
+                            momentum_indicators["rsi_status"] = "neutral"
+                    except:
+                        pass
+                
+                # MACD  
+                macd = indicators.get('macd')
+                if isinstance(macd, dict) and 'histogram' in macd:
+                    try:
+                        hist_val = float(macd['histogram'])
+                        momentum_indicators["macd"] = {
+                            "histogram": round(hist_val, 2),
+                            "trend": "bullish" if hist_val > 0 else "bearish"
+                        }
+                        
+                        if hist_val > 0:
+                            momentum_indicators["direction"] = "bullish"
+                        elif hist_val < 0:
+                            momentum_indicators["direction"] = "bearish"
+                    except:
+                        pass
+                
+                key_indicators["momentum_indicators"] = momentum_indicators
+                
+                # Volume indicators
+                vol = indicators.get('volume', {})
+                if isinstance(vol, dict) and 'volume_ratio' in vol:
+                    try:
+                        vol_ratio = float(vol['volume_ratio'])
+                        key_indicators["volume_indicators"] = {
+                            "volume_ratio": round(vol_ratio, 2),
+                            "volume_trend": "high" if vol_ratio > 1.5 else "low" if vol_ratio < 0.8 else "neutral"
+                        }
+                    except:
+                        pass
+            
+            return key_indicators
+            
+        except Exception as e:
+            print(f"Error creating basic key indicators from raw: {e}")
+            return {}
 
     async def analyze_stock_with_enhanced_calculations(self, symbol, indicators, chart_paths, period, interval, knowledge_context="", exchange: str = "NSE"):
         """
@@ -746,12 +850,25 @@ JSON:
         # START ALL INDEPENDENT LLM CALLS IMMEDIATELY
         # 1. Enhanced indicator summary with mathematical validation (no dependencies)
         print("[ASYNC-OPTIMIZED-ENHANCED] Starting enhanced indicator summary analysis...")
+        
+        # Create fallback curated indicators since this path doesn't have access to the integration manager
+        fallback_curated_indicators = {
+            "analysis_focus": "technical_indicators_summary",
+            "key_indicators": self._create_basic_key_indicators_from_raw(indicators),
+            "critical_levels": {},
+            "conflict_analysis_needed": False,
+            "detected_conflicts": {"has_conflicts": False, "conflict_count": 0, "conflict_list": []},
+            "fallback_used": True,
+            "source": "analyze_stock_with_enhanced_calculations_fallback"
+        }
+        
         indicator_task = self.build_indicators_summary(
             symbol=symbol,
             indicators=indicators,
             period=period,
             interval=interval,
-            knowledge_context=knowledge_context
+            knowledge_context=knowledge_context,
+            curated_indicators=fallback_curated_indicators
         )
 
         # 2. Enhanced chart analysis with code execution - START ALL CHART TASKS IMMEDIATELY
@@ -788,20 +905,9 @@ JSON:
         else:
             print("[ASYNC-OPTIMIZED-ENHANCED] pattern_analysis not found or not in image_bytes format")
         
-        # GROUP 3: Volume Analysis (complete volume story)
-        # print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for volume_analysis: {chart_paths.get('volume_analysis')}")
-        if chart_paths.get('volume_analysis') and chart_paths['volume_analysis'].get('type') == 'image_bytes':
-            try:
-                # Load image bytes directly from chart data
-                volume_chart = chart_paths['volume_analysis']['data']
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read volume_analysis: {len(volume_chart)} bytes")
-                task = self.analyze_volume_analysis(volume_chart, indicators)
-                chart_analysis_tasks.append(("volume_analysis_enhanced", task))
-                print("[ASYNC-OPTIMIZED-ENHANCED] Added volume_analysis_enhanced task")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading volume_analysis: {e}")
-        else:
-            print("[ASYNC-OPTIMIZED-ENHANCED] volume_analysis not found or not in image_bytes format")
+        # GROUP 3: Volume Analysis
+        # Replaced by distributed volume agents system handled in the orchestrator.
+        print("[ASYNC-OPTIMIZED-ENHANCED] Skipping legacy volume_analysis_enhanced task (using distributed volume agents instead)")
         
         # GROUP 4: Multi-Timeframe Comparison (MTF validation)
         # print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for mtf_comparison: {chart_paths.get('mtf_comparison')}")
@@ -856,6 +962,10 @@ JSON:
                 print("[ASYNC-OPTIMIZED-ENHANCED] Skipping pattern_detection task due to missing data")
         except Exception as e:
             print(f"[ASYNC-OPTIMIZED-ENHANCED] Error adding pattern detection task: {e}")
+
+        # REMOVED: Duplicate volume agents call - this is now handled in orchestrator.py
+        # to avoid running volume agents multiple times for the same analysis
+        print("[VOLUME_AGENT_DEBUG] Volume agents analysis handled by orchestrator - skipping duplicate call")
 
         # EXECUTE ALL INDEPENDENT TASKS IN PARALLEL
         total_independent = 1 + len(chart_analysis_tasks) + len(aux_tasks)
@@ -955,12 +1065,16 @@ JSON:
                 continue
             title_map = {
                 "mtf_synthesis": "Multi-Timeframe Synthesis",
-                "risk_synthesis": "Risk and Scenario Synthesis",
+                "risk_synthesis": "Risk and Scenario Synthesis", 
                 "sector_synthesis": "Sector Context Synthesis",
             }
             aux_insights.append(f"**{title_map.get(aux_name, aux_name)}:**\n" + str(result))
 
         chart_insights_md = "\n\n".join(chart_insights_list + aux_insights) if (chart_insights_list or aux_insights) else ""
+
+        # Volume agents context is now handled in orchestrator.py - no need to inject here
+        final_knowledge_context = knowledge_context
+        print("[VOLUME_AGENT_DEBUG] Volume agents context handled by orchestrator - using original knowledge context")
 
         # 3. Final decision prompt with enhanced mathematical validation (depends on all previous results)
         print("[ASYNC-OPTIMIZED-ENHANCED] Starting enhanced final decision analysis...")
@@ -977,7 +1091,7 @@ JSON:
         
         decision_prompt = self.prompt_manager.format_prompt(
             "optimized_final_decision",
-            context=self._build_comprehensive_context(enhanced_ind_json, chart_insights_md, knowledge_context)
+            context=self._build_comprehensive_context(enhanced_ind_json, chart_insights_md, final_knowledge_context)
         )
         # Append ML guidance to final decision prompt if present in knowledge context
         try:
@@ -1272,6 +1386,62 @@ Use Python code for all calculations and include the results in your analysis.
             prompt = self.prompt_manager.format_prompt("optimized_mtf_comparison", context=default_context)
             prompt += self.prompt_manager.SOLVING_LINE
             return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+
+    async def analyze_volume_agent_specific(self, chart_image: bytes, prompt_text: str, agent_name: str) -> str:
+        """
+        Analyze volume agent chart using agent-specific prompt and chart image.
+        This method is called by individual volume agents for LLM analysis.
+        
+        Args:
+            chart_image: Chart image bytes generated by the volume agent
+            prompt_text: Agent-specific prompt text with analysis context
+            agent_name: Name of the volume agent (for template mapping)
+        
+        Returns:
+            LLM analysis response as string
+        """
+        try:
+            # Map agent names to their corresponding prompt templates
+            agent_template_map = {
+                'volume_anomaly': 'volume_anomaly_detection',
+                'institutional_activity': 'institutional_activity_analysis', 
+                'volume_confirmation': 'volume_confirmation_analysis',
+                'support_resistance': 'volume_support_resistance',
+                'volume_momentum': 'volume_trend_momentum'
+            }
+            
+            # Get the appropriate template for this agent
+            template_name = agent_template_map.get(agent_name)
+            if not template_name:
+                # Fallback: use the prompt text directly if no template mapping found
+                print(f"[VOLUME_AGENT_DEBUG] No template mapping found for {agent_name}, using provided prompt text")
+                final_prompt = prompt_text
+            else:
+                # Use the agent-specific template with the provided context
+                try:
+                    final_prompt = self.prompt_manager.format_prompt(template_name, context=prompt_text)
+                except Exception as template_error:
+                    print(f"[VOLUME_AGENT_DEBUG] Template formatting failed for {agent_name}: {template_error}, using provided prompt text")
+                    final_prompt = prompt_text
+            
+            # Add the solving line at the end
+            final_prompt += self.prompt_manager.SOLVING_LINE
+            
+            # Convert bytes to PIL Image and call LLM
+            pil_image = self.image_utils.bytes_to_image(chart_image)
+            response = await self.core.call_llm_with_image(final_prompt, pil_image, enable_code_execution=True)
+            
+            print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM analysis completed successfully")
+            return response
+            
+        except Exception as e:
+            error_msg = f"Volume agent {agent_name} LLM analysis failed: {str(e)}"
+            print(f"[VOLUME_AGENT_DEBUG] {error_msg}")
+            import traceback
+            print(f"[VOLUME_AGENT_DEBUG] Traceback: {traceback.format_exc()}")
+            
+            # Return a structured error response that won't break the volume agent
+            return f"{{\"error\": \"{error_msg}\", \"agent\": \"{agent_name}\", \"status\": \"failed\"}}"
 
     def _build_mtf_context_for_indicators(self, mtf_context):
         """

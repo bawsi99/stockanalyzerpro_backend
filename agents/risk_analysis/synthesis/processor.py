@@ -11,7 +11,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict
 
-from backend.gemini.gemini_client import GeminiClient
+from gemini.gemini_client import GeminiClient
 
 logger = logging.getLogger(__name__)
 
