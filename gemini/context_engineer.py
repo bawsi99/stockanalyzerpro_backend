@@ -631,11 +631,39 @@ class ContextEngineer:
         critical_levels = curated_data.get('critical_levels', {})
         detected_conflicts = curated_data.get('detected_conflicts', {})
         
+        # Clone and format confidence values as percentages for prompt rendering only
+        def _to_pct_str(val):
+            try:
+                f = float(val)
+                if 0.0 <= f <= 1.0:
+                    f = f * 100.0
+                return f"{f:.2f}%"
+            except Exception:
+                return val
+        
+        def _format_confidence_blocks(ki: Dict[str, Any]) -> Dict[str, Any]:
+            try:
+                import copy
+                ki2 = copy.deepcopy(ki)
+                # trend_indicators.confidence
+                ti = ki2.get('trend_indicators')
+                if isinstance(ti, dict) and 'confidence' in ti:
+                    ti['confidence'] = _to_pct_str(ti.get('confidence'))
+                # momentum_indicators.confidence
+                mi = ki2.get('momentum_indicators')
+                if isinstance(mi, dict) and 'confidence' in mi:
+                    mi['confidence'] = _to_pct_str(mi.get('confidence'))
+                return ki2
+            except Exception:
+                return ki
+        
+        key_indicators_fmt = _format_confidence_blocks(key_indicators)
+        
         # Build ultra-concise context
         context = f"""**Symbol**: {symbol} | **Timeframe**: {timeframe}
 
 ## Technical Data:
-{json.dumps(key_indicators, indent=1)}
+{json.dumps(key_indicators_fmt, indent=1)}
 
 ## Levels:
 {json.dumps(critical_levels, indent=1)}

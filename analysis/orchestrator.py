@@ -17,6 +17,8 @@ from patterns.visualization import PatternVisualizer, ChartVisualizer
 import asyncio
 from ml.analysis.mtf_utils import multi_timeframe_analysis
 from ml.analysis.mtf_analysis import EnhancedMultiTimeframeAnalyzer
+from agents.volume import VolumeAgentIntegrationManager
+from agents.indicators import indicators_orchestrator
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -59,6 +61,8 @@ class StockAnalysisOrchestrator:
         self.visualizer = PatternVisualizer()
         from ml.sector.benchmarking import SectorBenchmarkingProvider
         self.sector_benchmarking_provider = SectorBenchmarkingProvider()
+        # Initialize volume agents integration manager
+        self.volume_agents_manager = VolumeAgentIntegrationManager(self.gemini_client)
     
     def authenticate(self) -> bool:
         """
@@ -191,10 +195,11 @@ class StockAnalysisOrchestrator:
         return indicators
     
     def create_visualizations(self, data: pd.DataFrame, indicators: Dict[str, Any], 
-                             symbol: str, output_dir: str = None, interval: str = "day") -> Dict[str, Any]:
+                             symbol: str, output_dir: str = None, interval: str = "day",
+                             volume_agents_result: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Create optimized visualization charts for AI analysis and return them as image bytes.
-        No storage needed - charts are generated in memory and returned directly.
+        Enhanced with volume agents integration and robust error handling.
         
         Args:
             data: DataFrame containing price data
@@ -202,6 +207,7 @@ class StockAnalysisOrchestrator:
             symbol: Stock symbol
             output_dir: Directory to save chart images (deprecated, kept for backward compatibility)
             interval: Time interval for the data (default: "day")
+            volume_agents_result: Results from volume agents analysis (optional)
         Returns:
             Dict[str, Any]: Dictionary containing chart image bytes and metadata
         """
@@ -268,8 +274,12 @@ class StockAnalysisOrchestrator:
             raise
         
         try:
-            # 3. COMPREHENSIVE VOLUME ANALYSIS CHART - Generate in memory
-            fig3 = ChartVisualizer.plot_comprehensive_volume_chart(data, indicators, None, symbol)
+            # 3. ENHANCED VOLUME ANALYSIS CHART - Generate with volume agents integration
+            logger.info(f"Generating enhanced volume chart for {symbol} (agents available: {volume_agents_result is not None})")
+            
+            fig3 = ChartVisualizer.plot_enhanced_volume_chart_with_agents(
+                data, indicators, volume_agents_result, None, symbol
+            )
             
             # Convert figure to image bytes
             buf = io.BytesIO()
@@ -282,17 +292,46 @@ class StockAnalysisOrchestrator:
                 'data': img_bytes,
                 'format': 'png',
                 'size_bytes': len(img_bytes),
-                'chart_type': 'volume_analysis',
+                'chart_type': 'volume_analysis_enhanced',
                 'symbol': symbol,
-                'interval': interval
+                'interval': interval,
+                'volume_agents_integrated': volume_agents_result is not None,
+                'chart_version': 'enhanced'
             }
             
-            logger.info(f"✅ Generated volume_analysis chart: {len(img_bytes)} bytes")
+            logger.info(f"✅ Generated enhanced volume_analysis chart: {len(img_bytes)} bytes")
             plt.close(fig3)
             
         except Exception as e:
-            logger.error(f"Failed to create volume analysis chart for {symbol}: {e}")
-            raise
+            logger.error(f"Enhanced volume chart generation failed for {symbol}: {e}")
+            
+            # Fallback to basic volume chart
+            try:
+                logger.info(f"Falling back to basic volume chart for {symbol}")
+                fig3_fallback = ChartVisualizer.plot_comprehensive_volume_chart(data, indicators, None, symbol)
+                
+                buf = io.BytesIO()
+                fig3_fallback.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+                buf.seek(0)
+                img_bytes = buf.getvalue()
+                
+                charts['volume_analysis'] = {
+                    'type': 'image_bytes',
+                    'data': img_bytes,
+                    'format': 'png',
+                    'size_bytes': len(img_bytes),
+                    'chart_type': 'volume_analysis_fallback',
+                    'symbol': symbol,
+                    'interval': interval,
+                    'fallback_reason': str(e)
+                }
+                
+                logger.info(f"✅ Generated fallback volume_analysis chart: {len(img_bytes)} bytes")
+                plt.close(fig3_fallback)
+                
+            except Exception as fallback_error:
+                logger.error(f"Fallback volume chart generation also failed for {symbol}: {fallback_error}")
+                raise Exception(f"All volume chart generation methods failed: {e} | {fallback_error}")
         
         try:
             # 4. MULTI-TIMEFRAME COMPARISON CHART - Generate in memory
@@ -487,10 +526,11 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 enhanced_knowledge_context,
                 mtf_context,
                 exchange,
+                stock_data
             )
         return result, ind_summary_md, chart_insights_md
 
-    async def orchestrate_llm_analysis_with_mtf(self, symbol: str, indicators: dict, chart_paths: dict, period: int, interval: str, knowledge_context: str = "", mtf_context: dict = None, exchange: str = "NSE") -> tuple:
+    async def orchestrate_llm_analysis_with_mtf(self, symbol: str, indicators: dict, chart_paths: dict, period: int, interval: str, knowledge_context: str = "", mtf_context: dict = None, exchange: str = "NSE", stock_data: pd.DataFrame | None = None) -> tuple:
         """Orchestrate the LLM analysis workflow with MTF context integration."""
         try:
             # Initialize token tracker
@@ -500,8 +540,19 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             
             # 1. Indicator summary analysis with MTF context
             print(f"[LLM-ANALYSIS] Starting indicator summary analysis for {symbol}...")
+            # Build curated indicators via new agent if stock_data available
+            curated_for_llm = None
+            try:
+                if stock_data is not None:
+                    agent_res = await indicators_orchestrator.analyze_indicators_comprehensive(
+                        symbol=symbol, stock_data=stock_data, indicators=indicators, context=knowledge_context or ""
+                    )
+                    curated_for_llm = self._curate_indicators_from_agents(agent_res.unified_analysis, raw_indicators=indicators, stock_data=stock_data)
+            except Exception as _e:
+                curated_for_llm = None
+
             ind_summary_md, ind_json = await self.gemini_client.build_indicators_summary(
-                symbol, indicators, period, interval, knowledge_context, token_tracker, mtf_context
+                symbol, indicators, period, interval, knowledge_context, token_tracker, mtf_context, curated_indicators=curated_for_llm
             )
             
             # 2. Chart analysis (already optimized for MTF)
@@ -995,11 +1046,33 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 prefetch = None
             indicators = TechnicalIndicators.calculate_all_indicators_optimized(data, symbol, prefetch=prefetch)
             
-            # Step 3: Create visualizations
-            logger.info(f"[ENHANCED ANALYSIS] Creating visualizations for {symbol}")
-            chart_paths = self.create_visualizations(data, indicators, symbol, output_dir or "output", interval)
+            # Step 3: Get volume agents analysis first (needed for enhanced charts)
+            logger.info(f"[ENHANCED ANALYSIS] Getting volume agents analysis for {symbol}")
+            volume_agents_result = None
+            try:
+                should_use_agents, health_reason = self.volume_agents_manager.should_use_volume_agents()
+                if should_use_agents:
+                    volume_agents_result = await self.volume_agents_manager.get_comprehensive_volume_analysis(
+                        data, symbol, indicators
+                    )
+                    if volume_agents_result.get('success', False):
+                        logger.info(f"[ENHANCED ANALYSIS] Volume agents analysis successful for {symbol}")
+                    else:
+                        logger.warning(f"[ENHANCED ANALYSIS] Volume agents analysis failed: {volume_agents_result.get('error', 'Unknown error')}")
+                        volume_agents_result = None
+                else:
+                    logger.info(f"[ENHANCED ANALYSIS] Volume agents not used: {health_reason}")
+            except Exception as volume_ex:
+                logger.error(f"[ENHANCED ANALYSIS] Volume agents analysis failed: {volume_ex}")
+                volume_agents_result = None
             
-            # Step 4: Get sector context if available
+            # Step 4: Create visualizations with volume agents integration
+            logger.info(f"[ENHANCED ANALYSIS] Creating enhanced visualizations for {symbol}")
+            chart_paths = self.create_visualizations(
+                data, indicators, symbol, output_dir or "output", interval, volume_agents_result
+            )
+            
+            # Step 5: Get sector context if available
             sector_context = None
             if sector:
                 try:
@@ -1022,7 +1095,7 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 except Exception as e:
                     logger.warning(f"[ENHANCED ANALYSIS] Failed to get sector context for {sector}: {e}")
             
-            # Step 5: Enhanced AI analysis with code execution
+            # Step 6: Enhanced AI analysis with code execution
             logger.info(f"[ENHANCED ANALYSIS] Performing enhanced AI analysis for {symbol}")
             # Generate advanced analysis digest early to pass into LLM context
             try:
@@ -1053,7 +1126,7 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 stock_data=data
             )
             
-            # Step 6: Build enhanced result with mathematical validation
+            # Step 7: Build enhanced result with mathematical validation
             logger.info(f"[ENHANCED ANALYSIS] Building enhanced result for {symbol}")
             result = self._build_enhanced_analysis_result(
                 symbol, exchange, data, indicators, ai_analysis, 
@@ -1061,7 +1134,7 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 sector_context, period, interval
             )
             
-            # Step 7: Update state
+            # Step 8: Update state
             state.update(
                 indicators=indicators,
                 analysis_results=result,
@@ -1089,10 +1162,12 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
         Now includes ML system feedback to enhance LLM analysis.
         """
         try:
+            # Import utilities at the beginning
+            from core.utils import clean_for_json
+            
             # Combine knowledge context with sector context
             enhanced_knowledge_context = knowledge_context
             if sector_context:
-                from core.utils import clean_for_json
                 enhanced_knowledge_context += f"\n\nSector Context:\n{json.dumps(clean_for_json(sector_context), indent=2)}"
             
             # Prepare compact deterministic signals JSON for context (multi-timeframe when available)
@@ -1203,6 +1278,43 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 from core.utils import clean_for_json
                 supplemental_blocks.append("AdvancedAnalysisDigest:\n" + json.dumps(clean_for_json(adv_digest)))
 
+            # NEW: Add distributed volume agents analysis
+            volume_agents_context = {}
+            try:
+                logger.info(f"[VOLUME AGENTS] Starting distributed volume agents analysis for {symbol}")
+                if stock_data is not None and not stock_data.empty:
+                    # Check if volume agents system is healthy
+                    if self.volume_agents_manager.is_volume_agents_healthy():
+                        volume_agents_result = await self.volume_agents_manager.get_comprehensive_volume_analysis(
+                            stock_data, symbol, indicators
+                        )
+                        
+                        if volume_agents_result.get('success', False):
+                            # Add volume agents context to supplemental blocks
+                            volume_context = {
+                                'volume_agents_analysis': volume_agents_result.get('volume_analysis', {}),
+                                'consensus_analysis': volume_agents_result.get('consensus_analysis', {}),
+                                'individual_agents_summary': {
+                                    agent_name: {
+                                        'success': agent_data.get('success', False),
+                                        'confidence': agent_data.get('confidence', 0.0)
+                                    }
+                                    for agent_name, agent_data in volume_agents_result.get('individual_agents', {}).items()
+                                }
+                            }
+                            supplemental_blocks.append("VolumeAgentsAnalysis:\n" + json.dumps(clean_for_json(volume_context)))
+                            volume_agents_context = volume_agents_result
+                            logger.info(f"[VOLUME AGENTS] Successfully integrated {volume_agents_result.get('consensus_analysis', {}).get('successful_agents', 0)} volume agents")
+                        else:
+                            logger.warning(f"[VOLUME AGENTS] Volume agents analysis failed: {volume_agents_result.get('error', 'Unknown error')}")
+                    else:
+                        logger.warning("[VOLUME AGENTS] Volume agents system not healthy, skipping distributed analysis")
+                else:
+                    logger.warning("[VOLUME AGENTS] No stock data available for volume agents analysis")
+            except Exception as volume_ex:
+                logger.error(f"[VOLUME AGENTS] Volume agents analysis failed: {volume_ex}")
+                # Continue without volume agents analysis
+            
             # NEW: Build compact ML system context before LLM analysis
             try:
                 ml_block = await self._build_compact_ml_context(stock_data)
@@ -1210,6 +1322,7 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                     supplemental_blocks.append("MLSystemValidation:\n" + json.dumps(ml_block))
             except Exception as ml_ex:
                 logger.warning(f"Compact ML context generation failed: {ml_ex}")
+
 
             # Use enhanced analysis with code execution and ML validation context
             ai_analysis, indicator_summary, chart_insights = await self.gemini_client.analyze_stock_with_enhanced_calculations(
@@ -1226,6 +1339,222 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
         except Exception as e:
             logger.error(f"[ENHANCED ANALYSIS] Error in enhanced AI analysis for {symbol}: {e}")
             raise
+
+
+    def _curate_indicators_from_agents(self, unified: dict, raw_indicators: dict | None = None, stock_data: pd.DataFrame | None = None) -> dict:
+        """
+        Convert IndicatorAgentsOrchestrator unified_analysis into the curated structure expected by
+        the indicator_summary template. Also merge in deterministic numeric fields from raw_indicators/stock_data
+        to preserve detailed values (SMA/EMA/RSI/MACD/levels) in the prompt.
+        """
+        try:
+            indicator_summary = (unified or {}).get('indicator_summary', {})
+            signal_consensus = (unified or {}).get('signal_consensus', {})
+
+            key_indicators: dict[str, Any] = {}
+
+            # Base: agent high-level trend summary
+            trend = indicator_summary.get('trend') if isinstance(indicator_summary, dict) else None
+            if isinstance(trend, dict):
+                key_indicators["trend_indicators"] = {
+                    "direction": trend.get('direction', 'neutral'),
+                    "strength": trend.get('strength', 'weak'),
+                    "confidence": trend.get('confidence', 0.0),
+                }
+            else:
+                key_indicators["trend_indicators"] = {"direction": "neutral", "strength": "weak", "confidence": 0.0}
+
+            # Merge numeric MAs if available from raw indicators
+            try:
+                if isinstance(raw_indicators, dict):
+                    # Prefer flattened moving_averages structure if present
+                    mov = raw_indicators.get('moving_averages')
+                    if isinstance(mov, dict):
+                        def fget(d, k):
+                            v = d.get(k)
+                            try:
+                                return float(v) if v is not None else None
+                            except Exception:
+                                return None
+                        sma_20 = fget(mov, 'sma_20')
+                        sma_50 = fget(mov, 'sma_50')
+                        sma_200 = fget(mov, 'sma_200')
+                        ema_20 = fget(mov, 'ema_20')
+                        ema_50 = fget(mov, 'ema_50')
+                        if sma_20 is not None: key_indicators["trend_indicators"]["sma_20"] = round(sma_20, 2)
+                        if sma_50 is not None: key_indicators["trend_indicators"]["sma_50"] = round(sma_50, 2)
+                        if sma_200 is not None: key_indicators["trend_indicators"]["sma_200"] = round(sma_200, 2)
+                        if ema_20 is not None: key_indicators["trend_indicators"]["ema_20"] = round(ema_20, 2)
+                        if ema_50 is not None: key_indicators["trend_indicators"]["ema_50"] = round(ema_50, 2)
+                        # percentage metrics might be in mov as decimals or percents; if percents, convert to fraction
+                        p2sma200 = mov.get('price_to_sma_200')
+                        if isinstance(p2sma200, (int, float)):
+                            key_indicators["trend_indicators"]["price_to_sma_200"] = round(float(p2sma200), 2)
+                        s20_to_50 = mov.get('sma_20_to_sma_50')
+                        if isinstance(s20_to_50, (int, float)):
+                            key_indicators["trend_indicators"]["sma_20_to_sma_50"] = round(float(s20_to_50), 2)
+                        gc = mov.get('golden_cross')
+                        dc = mov.get('death_cross')
+                        if isinstance(gc, bool): key_indicators["trend_indicators"]["golden_cross"] = gc
+                        if isinstance(dc, bool): key_indicators["trend_indicators"]["death_cross"] = dc
+                    else:
+                        # Legacy nested dicts (sma/ema)
+                        sma = raw_indicators.get('sma') or {}
+                        if isinstance(sma, dict):
+                            def last_val(v):
+                                try:
+                                    return float(v[-1]) if isinstance(v, (list, tuple)) and v else None
+                                except Exception:
+                                    return None
+                            sma_20 = last_val(sma.get(20))
+                            sma_50 = last_val(sma.get(50))
+                            sma_200 = last_val(sma.get(200))
+                            if sma_20 is not None: key_indicators["trend_indicators"]["sma_20"] = round(sma_20, 2)
+                            if sma_50 is not None: key_indicators["trend_indicators"]["sma_50"] = round(sma_50, 2)
+                            if sma_200 is not None: key_indicators["trend_indicators"]["sma_200"] = round(sma_200, 2)
+                        ema = raw_indicators.get('ema') or {}
+                        if isinstance(ema, dict):
+                            def last_val(v):
+                                try:
+                                    return float(v[-1]) if isinstance(v, (list, tuple)) and v else None
+                                except Exception:
+                                    return None
+                            ema_20 = last_val(ema.get(20))
+                            ema_50 = last_val(ema.get(50))
+                            if ema_20 is not None: key_indicators["trend_indicators"]["ema_20"] = round(ema_20, 2)
+                            if ema_50 is not None: key_indicators["trend_indicators"]["ema_50"] = round(ema_50, 2)
+                        # Compute percentages from price if not available
+                        if stock_data is not None and not stock_data.empty:
+                            try:
+                                current_price = float(stock_data['close'].iloc[-1])
+                                s200 = key_indicators["trend_indicators"].get("sma_200")
+                                if s200 and s200 != 0:
+                                    key_indicators["trend_indicators"]["price_to_sma_200"] = round((current_price - s200) / s200, 2)
+                            except Exception:
+                                pass
+                        s20 = key_indicators["trend_indicators"].get("sma_20")
+                        s50 = key_indicators["trend_indicators"].get("sma_50")
+                        if s20 and s50 and s50 != 0:
+                            key_indicators["trend_indicators"]["sma_20_to_sma_50"] = round((s20 - s50) / s50, 2)
+                        key_indicators["trend_indicators"].setdefault("golden_cross", False)
+                        key_indicators["trend_indicators"].setdefault("death_cross", False)
+            except Exception:
+                pass
+
+            # Momentum block from agent plus numeric values
+            key_indicators.setdefault("momentum_indicators", {})
+            momentum = indicator_summary.get('momentum') if isinstance(indicator_summary, dict) else None
+            if isinstance(momentum, dict):
+                key_indicators["momentum_indicators"].update({
+                    "rsi_status": momentum.get('rsi_signal', 'neutral'),
+                    "direction": momentum.get('direction', 'neutral'),
+                    "strength": momentum.get('strength', 'weak'),
+                    "confidence": momentum.get('confidence', 0.0),
+                })
+            # Numeric RSI/MACD from raw indicators
+            try:
+                if isinstance(raw_indicators, dict):
+                    # Handle rsi as dict or list
+                    rsi = raw_indicators.get('rsi')
+                    if isinstance(rsi, dict):
+                        rv = rsi.get('rsi_14')
+                        if isinstance(rv, (int, float)):
+                            key_indicators["momentum_indicators"]["rsi_current"] = round(float(rv), 2)
+                        status = rsi.get('status')
+                        if isinstance(status, str):
+                            key_indicators["momentum_indicators"].setdefault("rsi_status", status)
+                    elif isinstance(rsi, (list, tuple)) and rsi:
+                        key_indicators["momentum_indicators"]["rsi_current"] = round(float(rsi[-1]), 2)
+                    # MACD dict with histogram
+                    macd = raw_indicators.get('macd')
+                    if isinstance(macd, dict):
+                        hist = macd.get('histogram')
+                        hist_val = None
+                        if isinstance(hist, (list, tuple)) and hist:
+                            hist_val = float(hist[-1])
+                        elif isinstance(hist, (int, float)):
+                            hist_val = float(hist)
+                        if hist_val is not None:
+                            key_indicators["momentum_indicators"]["macd"] = {
+                                "histogram": round(hist_val, 2),
+                                "trend": key_indicators["momentum_indicators"].get("direction", "neutral")
+                            }
+            except Exception:
+                pass
+
+            # Volume indicators (optional)
+            try:
+                if isinstance(raw_indicators, dict):
+                    vol = raw_indicators.get('volume') or {}
+                    vol_ratio = None
+                    if isinstance(vol, dict):
+                        vol_ratio = vol.get('volume_ratio')
+                    ki_vol = {}
+                    if isinstance(vol_ratio, (int, float)):
+                        ki_vol["volume_ratio"] = round(float(vol_ratio), 2)
+                    # best-effort trend
+                    if ki_vol:
+                        ki_vol.setdefault("volume_trend", "neutral")
+                        key_indicators["volume_indicators"] = ki_vol
+            except Exception:
+                pass
+
+            # Conflicts: prefer ContextEngineer detailed analysis based on numeric indicators
+            detected_conflicts = {
+                "has_conflicts": False,
+                "conflict_count": 0,
+                "conflict_list": []
+            }
+            try:
+                from gemini.context_engineer import ContextEngineer
+                ce = ContextEngineer()
+                ce_conf = ce._comprehensive_conflict_analysis(key_indicators)
+                if isinstance(ce_conf, dict):
+                    detected_conflicts = ce_conf
+                else:
+                    raise ValueError("Invalid conflict data")
+            except Exception:
+                # Fallback: use agent consensus if mixed
+                if isinstance(signal_consensus, dict) and signal_consensus.get('consensus') == 'mixed':
+                    detected_conflicts.update({
+                        "has_conflicts": True,
+                        "conflict_count": 1,
+                        "conflict_list": ["Mixed consensus across indicator agents"]
+                    })
+
+            # Critical levels: best-effort support/resistance via TechnicalIndicators if stock_data available
+            critical_levels = {}
+            try:
+                if stock_data is not None and not stock_data.empty:
+                    support_levels, resistance_levels = TechnicalIndicators.detect_support_resistance(stock_data)
+                    # Deduplicate and round
+                    if support_levels:
+                        sl = sorted(set(float(x) for x in support_levels), reverse=True)
+                        critical_levels["support"] = [round(v, 2) for v in sl[:3]]
+                    if resistance_levels:
+                        rl = sorted(set(float(x) for x in resistance_levels))
+                        critical_levels["resistance"] = [round(v, 2) for v in rl[:3]]
+            except Exception as _e:
+                # Non-fatal; leave levels empty
+                pass
+
+            curated = {
+                "analysis_focus": "technical_indicators_summary",
+                "key_indicators": key_indicators,
+                "critical_levels": critical_levels,
+                "conflict_analysis_needed": detected_conflicts["has_conflicts"],
+                "detected_conflicts": detected_conflicts,
+            }
+            return curated
+        except Exception as ex:
+            print(f"[PROMPT-PARITY] Agent curation failed: {ex}")
+            return {
+                "analysis_focus": "technical_indicators_summary",
+                "key_indicators": {},
+                "critical_levels": {},
+                "conflict_analysis_needed": False,
+                "detected_conflicts": {"has_conflicts": False, "conflict_count": 0, "conflict_list": []}
+            }
 
     async def _build_compact_ml_context(self, stock_data: pd.DataFrame | None) -> dict:
         """

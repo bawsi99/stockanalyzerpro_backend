@@ -48,3 +48,4 @@ You are a technical analyst. Analyze the provided indicators and generate action
 - Return ONLY valid JSON
 - Use provided data to populate specific price levels
 - Include clear rationale for recommendations
+- Do not include any headings, markdown, or explanations; return only the JSON object with no additional text.
