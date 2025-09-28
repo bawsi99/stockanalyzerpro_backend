@@ -195,7 +195,7 @@ class VolumeAgentsOrchestrator:
             'volume_anomaly': {
                 'enabled': True,
                 'weight': 0.20,
-                'timeout': 30,
+                'timeout': None,
                 'processor': self.volume_anomaly,
                 'charts': self.anomaly_charts,
                 'prompt_template': 'volume_anomaly_analysis'
@@ -203,7 +203,7 @@ class VolumeAgentsOrchestrator:
             'institutional_activity': {
                 'enabled': True,
                 'weight': 0.25,
-                'timeout': 30,
+                'timeout': None,
                 'processor': self.institutional_activity,
                 'charts': self.institutional_charts,
                 'prompt_template': 'institutional_activity_analysis'
@@ -211,7 +211,7 @@ class VolumeAgentsOrchestrator:
             'volume_confirmation': {
                 'enabled': True,
                 'weight': 0.20,
-                'timeout': 30,
+                'timeout': None,
                 'processor': self.volume_confirmation,
                 'charts': self.confirmation_charts,
                 'prompt_template': 'volume_confirmation_analysis'
@@ -219,7 +219,7 @@ class VolumeAgentsOrchestrator:
             'support_resistance': {
                 'enabled': True,
                 'weight': 0.20,
-                'timeout': 30,
+                'timeout': None,
                 'processor': self.support_resistance,
                 'charts': self.sr_charts,
                 'prompt_template': 'volume_support_resistance'
@@ -227,7 +227,7 @@ class VolumeAgentsOrchestrator:
             'volume_momentum': {
                 'enabled': True,
                 'weight': 0.15,
-                'timeout': 30,
+                'timeout': None,
                 'processor': self.volume_momentum,
                 'charts': self.momentum_charts,
                 'prompt_template': 'volume_trend_momentum'
@@ -408,23 +408,29 @@ class VolumeAgentsOrchestrator:
         start_time = time.time()
         
         try:
-            # Wait for agent completion with timeout
-            result = await asyncio.wait_for(
-                self._execute_agent(agent_name, config, stock_data, symbol, indicators),
-                timeout=config['timeout']
-            )
+            # Wait for agent completion with optional timeout
+            if config['timeout'] is not None:
+                result = await asyncio.wait_for(
+                    self._execute_agent(agent_name, config, stock_data, symbol, indicators),
+                    timeout=config['timeout']
+                )
+            else:
+                # No timeout - let agent run until completion
+                result = await self._execute_agent(agent_name, config, stock_data, symbol, indicators)
+            
             processing_time = time.time() - start_time
             result.processing_time = processing_time
             return result
             
         except asyncio.TimeoutError:
             processing_time = time.time() - start_time
-            logger.warning(f"Agent {agent_name} timed out after {config['timeout']}s")
+            timeout_msg = f"Agent {agent_name} timed out after {config['timeout']}s" if config['timeout'] is not None else f"Agent {agent_name} timed out"
+            logger.warning(timeout_msg)
             return VolumeAgentResult(
                 agent_name=agent_name,
                 success=False,
                 processing_time=processing_time,
-                error_message=f"Agent timed out after {config['timeout']} seconds"
+                error_message=f"Agent timed out after {config['timeout']} seconds" if config['timeout'] is not None else "Agent execution timed out"
             )
         except Exception as e:
             processing_time = time.time() - start_time
@@ -445,47 +451,56 @@ class VolumeAgentsOrchestrator:
         """
         Execute a specific volume agent
         """
+        # Local import to avoid global dependency and allow patching without top-level edits
+        import asyncio
         processor = config['processor']
         charts = config['charts']
         
         try:
-            # Process data with the specific agent (call concrete processor methods)
+            # Process data with the specific agent (offload CPU-bound processing to a thread)
             if agent_name == 'volume_anomaly':
-                analysis_data = processor.process_volume_anomaly_data(stock_data)
+                analysis_data = await asyncio.to_thread(processor.process_volume_anomaly_data, stock_data)
             elif agent_name == 'institutional_activity':
-                analysis_data = processor.process_institutional_activity_data(stock_data)
+                analysis_data = await asyncio.to_thread(processor.process_institutional_activity_data, stock_data)
             elif agent_name == 'volume_confirmation':
-                analysis_data = processor.process_volume_confirmation_data(stock_data)
+                analysis_data = await asyncio.to_thread(processor.process_volume_confirmation_data, stock_data)
             elif agent_name == 'support_resistance':
-                analysis_data = processor.process_support_resistance_data(stock_data)
+                analysis_data = await asyncio.to_thread(processor.process_support_resistance_data, stock_data)
             elif agent_name == 'volume_momentum':
-                analysis_data = processor.process_volume_trend_momentum_data(stock_data)
+                analysis_data = await asyncio.to_thread(processor.process_volume_trend_momentum_data, stock_data)
             else:
                 raise ValueError(f"Unknown agent: {agent_name}")
             
-            # Generate chart
+            # Generate chart (also offload to a thread; LLM remains async)
             chart_image = None
             try:
                 print(f"[VOLUME_AGENT_DEBUG] {agent_name} chart generation starting for {symbol}")
                 if agent_name == 'volume_anomaly':
-                    chart_image = charts.generate_volume_anomaly_chart(stock_data, analysis_data, symbol)
+                    chart_image = await asyncio.to_thread(charts.generate_volume_anomaly_chart, stock_data, analysis_data, symbol)
                 elif agent_name == 'institutional_activity':
-                    chart_image = charts.generate_institutional_activity_chart(stock_data, analysis_data, symbol)
+                    chart_image = await asyncio.to_thread(charts.generate_institutional_activity_chart, stock_data, analysis_data, symbol)
                 elif agent_name == 'volume_confirmation':
-                    chart_image = charts.generate_volume_confirmation_chart(stock_data, analysis_data, symbol)
+                    chart_image = await asyncio.to_thread(charts.generate_volume_confirmation_chart, stock_data, analysis_data, symbol)
                 elif agent_name == 'support_resistance':
                     # Support resistance uses create_comprehensive_chart method
-                    chart_fig = charts.create_comprehensive_chart(stock_data, analysis_data, symbol)
-                    if chart_fig:
+                    def _sr_chart_to_png():
                         import io
+                        fig = charts.create_comprehensive_chart(stock_data, analysis_data, symbol)
+                        if not fig:
+                            return None
                         buf = io.BytesIO()
-                        chart_fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+                        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
                         buf.seek(0)
-                        chart_image = buf.getvalue()
+                        data = buf.getvalue()
                         buf.close()
-                        plt.close(chart_fig)
+                        try:
+                            plt.close(fig)
+                        except Exception:
+                            pass
+                        return data
+                    chart_image = await asyncio.to_thread(_sr_chart_to_png)
                 elif agent_name == 'volume_momentum':
-                    chart_image = charts.generate_volume_momentum_chart(stock_data, analysis_data, symbol)
+                    chart_image = await asyncio.to_thread(charts.generate_volume_momentum_chart, stock_data, analysis_data, symbol)
                 print(f"[VOLUME_AGENT_DEBUG] {agent_name} chart generation completed for {symbol} - has_image={chart_image is not None} size={(len(chart_image) if chart_image else 0)} bytes")
             except Exception as chart_error:
                 logger.warning(f"Chart generation failed for {agent_name}: {chart_error}")
@@ -527,14 +542,14 @@ class VolumeAgentsOrchestrator:
             )
             
         except Exception as e:
-            logger.error(f"Agent {agent_name} execution failed: {e}")
+            processing_time = time.time() - start_time
+            logger.error(f"Agent {agent_name} failed: {e}")
             return VolumeAgentResult(
                 agent_name=agent_name,
                 success=False,
-                processing_time=0.0,
+                processing_time=processing_time,
                 error_message=str(e)
             )
-
     def _build_agent_prompt(self, agent_name: str, analysis_data: Dict[str, Any], symbol: str) -> str:
         """
         Build agent-specific prompt for LLM analysis
@@ -2784,7 +2799,7 @@ class VolumeAgentIntegrationManager:
             try:
                 # Add timeout protection for the entire orchestrator operation
                 import asyncio
-                timeout_seconds = 120  # 2 minutes timeout for volume agents analysis
+                timeout_seconds = 300  # 5 minutes timeout for volume agents analysis (no individual timeouts)
                 
                 result = await asyncio.wait_for(
                     self.orchestrator.analyze_stock_volume_comprehensive(stock_data, symbol, indicators),

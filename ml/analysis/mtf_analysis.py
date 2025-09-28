@@ -493,21 +493,22 @@ class EnhancedMultiTimeframeAnalyzer:
             logger.error("Failed to authenticate with Zerodha")
             return {}
         
-        # Analyze all timeframes concurrently
-        tasks = []
-        for timeframe in self.timeframe_configs.keys():
-            task = self.analyze_timeframe(symbol, exchange, timeframe)
-            tasks.append((timeframe, task))
+        # Create concurrent tasks for all timeframes
+        task_map = {
+            timeframe: asyncio.create_task(self.analyze_timeframe(symbol, exchange, timeframe))
+            for timeframe in self.timeframe_configs.keys()
+        }
         
-        # Execute all tasks concurrently
-        results = {}
-        for timeframe, task in tasks:
-            try:
-                result = await task
-                if result:
-                    results[timeframe] = result
-            except Exception as e:
-                logger.error(f"Error in timeframe {timeframe}: {e}")
+        results: Dict[str, TimeframeAnalysis] = {}
+        # Await all tasks concurrently
+        completed = await asyncio.gather(*task_map.values(), return_exceptions=True)
+        
+        for timeframe, outcome in zip(task_map.keys(), completed):
+            if isinstance(outcome, Exception):
+                logger.error(f"Error in timeframe {timeframe}: {outcome}")
+                continue
+            if outcome:
+                results[timeframe] = outcome
         
         return results
     

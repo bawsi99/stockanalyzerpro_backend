@@ -1077,7 +1077,7 @@ JSON:
         print("[VOLUME_AGENT_DEBUG] Volume agents context handled by orchestrator - using original knowledge context")
 
         # 3. Final decision prompt with enhanced mathematical validation (depends on all previous results)
-        print("[ASYNC-OPTIMIZED-ENHANCED] Starting enhanced final decision analysis...")
+        print(f"[ASYNC-OPTIMIZED-ENHANCED] Starting enhanced final decision analysis...")
         decision_start_time = time.time()
         
         # Extract existing trading strategy data for consistency
@@ -1160,8 +1160,71 @@ JSON:
         total_elapsed_time = time.time() - parallel_start_time
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Enhanced final decision analysis completed in {decision_elapsed_time:.2f} seconds")
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Total enhanced analysis completed in {total_elapsed_time:.2f} seconds")
-        
         return result, ind_summary_md, chart_insights_md
+
+    async def run_final_decision(self, ind_json: dict, chart_insights_md: str, knowledge_context: str) -> dict:
+        """Run only the final decision LLM call given precomputed indicator JSON and chart insights.
+        Adds ML guidance if present in knowledge_context and applies parsing fallbacks.
+        """
+        final_knowledge_context = knowledge_context or ""
+        print("[ASYNC-OPTIMIZED-ENHANCED] Starting enhanced final decision analysis (standalone)...")
+        start_ts = time.time()
+
+        existing_trading_strategy = self._extract_existing_trading_strategy(ind_json)
+        enhanced_ind_json = ind_json.copy() if isinstance(ind_json, dict) else {}
+        if existing_trading_strategy:
+            enhanced_ind_json['existing_trading_strategy'] = existing_trading_strategy
+
+        decision_prompt = self.prompt_manager.format_prompt(
+            "optimized_final_decision",
+            context=self._build_comprehensive_context(enhanced_ind_json, chart_insights_md or "", final_knowledge_context)
+        )
+        try:
+            ml_block = self._extract_labeled_json_block(knowledge_context or "", label="MLSystemValidation:")
+            ml_guidance_text = self._build_ml_guidance_text(ml_block) if ml_block else ""
+            if ml_guidance_text:
+                decision_prompt += "\n\n" + ml_guidance_text
+        except Exception:
+            pass
+
+        # Simple retry for transient 503s
+        attempts = 0
+        while True:
+            attempts += 1
+            try:
+                text_response, code_results, execution_results = await self.core.call_llm_with_code_execution(decision_prompt)
+                if not text_response or not str(text_response).strip():
+                    result = json.loads(self._create_fallback_json())
+                    result.setdefault('analysis_metadata', {})
+                    result['analysis_metadata']['fallback_reason'] = 'empty_final_decision_response'
+                else:
+                    try:
+                        result = json.loads(text_response.strip())
+                    except json.JSONDecodeError:
+                        try:
+                            _, json_blob = self.extract_markdown_and_json(text_response)
+                            result = json.loads(json_blob)
+                        except Exception:
+                            result = json.loads(self._create_fallback_json())
+                            result.setdefault('analysis_metadata', {})
+                            result['analysis_metadata']['fallback_reason'] = 'unparsable_final_decision_response'
+                if code_results or execution_results:
+                    result = self._enhance_final_decision_with_calculations(result, code_results, execution_results)
+                if "ENHANCED MULTI-TIMEFRAME ANALYSIS CONTEXT" in (knowledge_context or ""):
+                    result = self._enhance_result_with_mtf_context(result, knowledge_context)
+                if "SECTOR CONTEXT" in (knowledge_context or ""):
+                    result = self._enhance_result_with_sector_context(result, knowledge_context)
+                break
+            except Exception as ex:
+                # Best-effort transient retry only once
+                if attempts < 2 and "503" in str(ex):
+                    await asyncio.sleep(1.0)
+                    continue
+                raise
+
+        elapsed = time.time() - start_ts
+        print(f"[ASYNC-OPTIMIZED-ENHANCED] Standalone final decision completed in {elapsed:.2f}s")
+        return result
 
 
     # DEPRECATED: This method has been replaced by the distributed volume agents system
@@ -1290,7 +1353,8 @@ Use Python code for all calculations and include the results in your analysis.
         prompt = self.prompt_manager.format_prompt("optimized_technical_overview", context=default_context)
         # Add the solving line at the very end
         prompt += self.prompt_manager.SOLVING_LINE
-        return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+        pil_image = await self.image_utils.bytes_to_image_async(image)
+        return await self.core.call_llm_with_image(prompt, pil_image)
 
     async def analyze_pattern_analysis(self, image: bytes, indicators: dict = None) -> str:
         """
@@ -1322,7 +1386,8 @@ Use Python code for all calculations and include the results in your analysis.
                     context="## Analysis Context:\nNo additional context provided. Analyze the chart based on visual patterns and technical indicators."
                 )
             
-            return await self.core.call_llm_with_image(enhanced_prompt, self.image_utils.bytes_to_image(image))
+            pil_image = await self.image_utils.bytes_to_image_async(image)
+            return await self.core.call_llm_with_image(enhanced_prompt, pil_image)
             
         except Exception as e:
             print(f"Error in analyze_pattern_analysis: {e}")
@@ -1348,7 +1413,8 @@ Use Python code for all calculations and include the results in your analysis.
             
             # Add the solving line at the very end
             prompt += self.prompt_manager.SOLVING_LINE
-            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+            pil_image = await self.image_utils.bytes_to_image_async(image)
+            return await self.core.call_llm_with_image(prompt, pil_image)
         except Exception as ex:
             print(f"[DEBUG-ERROR] Exception during volume analysis context engineering: {ex}")
             print(f"[DEBUG-ERROR] Exception type: {type(ex).__name__}")
@@ -1375,7 +1441,8 @@ Use Python code for all calculations and include the results in your analysis.
             
             # Add the solving line at the very end
             prompt += self.prompt_manager.SOLVING_LINE
-            return await self.core.call_llm_with_image(prompt, self.image_utils.bytes_to_image(image))
+            pil_image = await self.image_utils.bytes_to_image_async(image)
+            return await self.core.call_llm_with_image(prompt, pil_image)
         except Exception as ex:
             print(f"[DEBUG-ERROR] Exception during MTF comparison context engineering: {ex}")
             print(f"[DEBUG-ERROR] Exception type: {type(ex).__name__}")
@@ -1428,7 +1495,7 @@ Use Python code for all calculations and include the results in your analysis.
             final_prompt += self.prompt_manager.SOLVING_LINE
             
             # Convert bytes to PIL Image and call LLM
-            pil_image = self.image_utils.bytes_to_image(chart_image)
+            pil_image = await self.image_utils.bytes_to_image_async(chart_image)
             response = await self.core.call_llm_with_image(final_prompt, pil_image, enable_code_execution=True)
             
             print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM analysis completed successfully")

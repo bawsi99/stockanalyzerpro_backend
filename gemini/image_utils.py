@@ -1,6 +1,7 @@
 import io
 import os
 import base64
+import asyncio
 from PIL import Image
 import matplotlib.pyplot as plt
 
@@ -44,8 +45,15 @@ class ImageUtils:
 
     @staticmethod
     def bytes_to_image(image_data: bytes) -> Image.Image:
-        """Convert bytes to PIL Image."""
+        """Convert bytes to PIL Image (synchronous)."""
         return Image.open(io.BytesIO(image_data))
+
+    @staticmethod
+    async def bytes_to_image_async(image_data: bytes) -> Image.Image:
+        """Convert bytes to PIL Image using a background thread to avoid blocking the event loop."""
+        def _open():
+            return Image.open(io.BytesIO(image_data))
+        return await asyncio.to_thread(_open)
 
     @staticmethod
     def figure_to_image(figure) -> Image.Image:

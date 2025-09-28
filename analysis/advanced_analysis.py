@@ -13,6 +13,7 @@ import pandas as pd
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +29,19 @@ class AdvancedAnalysisProvider:
                                        indicators: dict) -> Dict[str, Any]:
         """
         Generate comprehensive advanced analysis for the Advanced Tab.
-        
-        Args:
-            stock_data: Historical price data
-            symbol: Stock symbol
-            indicators: Basic technical indicators
-            
-        Returns:
-            Dictionary containing all advanced analysis components
+        Offloaded to a background thread to avoid blocking the event loop.
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.generate_advanced_analysis_sync(stock_data, symbol, indicators)
+        )
+
+    def generate_advanced_analysis_sync(self, stock_data: pd.DataFrame, 
+                                      symbol: str, 
+                                      indicators: dict) -> Dict[str, Any]:
+        """
+        Synchronous implementation of advanced analysis. Intended to be run in a thread executor.
         """
         try:
             # Calculate returns for analysis (handle small/empty data safely)

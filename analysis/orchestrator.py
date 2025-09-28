@@ -17,7 +17,6 @@ from patterns.visualization import PatternVisualizer, ChartVisualizer
 import asyncio
 from ml.analysis.mtf_utils import multi_timeframe_analysis
 from ml.analysis.mtf_analysis import EnhancedMultiTimeframeAnalyzer
-from agents.volume import VolumeAgentIntegrationManager
 from agents.indicators import indicators_orchestrator, indicator_agent_integration_manager
 
 # Set up logging
@@ -61,8 +60,6 @@ class StockAnalysisOrchestrator:
         self.visualizer = PatternVisualizer()
         from ml.sector.benchmarking import SectorBenchmarkingProvider
         self.sector_benchmarking_provider = SectorBenchmarkingProvider()
-        # Initialize volume agents integration manager
-        self.volume_agents_manager = VolumeAgentIntegrationManager(self.gemini_client)
         # Initialize indicator agents integration manager
         self.indicator_agents_manager = indicator_agent_integration_manager
     
@@ -679,6 +676,74 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             support = [{"level": float(lvl)} for lvl in support_levels]
             resistance = [{"level": float(lvl)} for lvl in resistance_levels]
 
+            # If levels are sparse, augment using enhanced methods (Fibonacci/Pivots)
+            if len(support) == 0 or len(resistance) == 0 or (len(support) + len(resistance)) < 2:
+                try:
+                    enhanced_sr = TechnicalIndicators.calculate_enhanced_support_resistance(data)
+                    dyn_sup = enhanced_sr.get("dynamic_support", []) or []
+                    dyn_res = enhanced_sr.get("dynamic_resistance", []) or []
+                    # Merge while de-duplicating
+                    sup_prices = {round(float(x.get("level", x)), 4) for x in support}
+                    res_prices = {round(float(x.get("level", x)), 4) for x in resistance}
+                    for val in dyn_sup:
+                        price = round(float(val), 4)
+                        if price not in sup_prices:
+                            support.append({"level": float(price)})
+                            sup_prices.add(price)
+                    for val in dyn_res:
+                        price = round(float(val), 4)
+                        if price not in res_prices:
+                            resistance.append({"level": float(price)})
+                            res_prices.add(price)
+                    
+                    # If still empty, try pivot/Fib extremities
+                    if len(support) == 0 or len(resistance) == 0:
+                        fib = enhanced_sr.get("fibonacci_levels", {}) or {}
+                        piv = enhanced_sr.get("pivot_points", {}) or {}
+                        # Collect few nearest levels from fib/piv around current price
+                        current_price = float(data['close'].iloc[-1]) if not data.empty else 0.0
+                        fib_vals = sorted([float(v) for v in fib.values()])
+                        if len(support) == 0:
+                            below = [v for v in fib_vals if v < current_price]
+                            for v in below[-2:]:
+                                price = round(float(v), 4)
+                                if price not in sup_prices:
+                                    support.append({"level": float(price)})
+                                    sup_prices.add(price)
+                        if len(resistance) == 0:
+                            above = [v for v in fib_vals if v > current_price]
+                            for v in above[:2]:
+                                price = round(float(v), 4)
+                                if price not in res_prices:
+                                    resistance.append({"level": float(price)})
+                                    res_prices.add(price)
+                        # Add primary pivot supports/resistances if available
+                        for key in ("support_1","support_2","support_3"):
+                            if len(support) >= 3: break
+                            if key in piv:
+                                price = round(float(piv[key]), 4)
+                                if price not in sup_prices:
+                                    support.append({"level": float(price)})
+                                    sup_prices.add(price)
+                        for key in ("resistance_1","resistance_2","resistance_3"):
+                            if len(resistance) >= 3: break
+                            if key in piv:
+                                price = round(float(piv[key]), 4)
+                                if price not in res_prices:
+                                    resistance.append({"level": float(price)})
+                                    res_prices.add(price)
+                except Exception:
+                    pass
+
+            # Trim to top 3 per side, preferring proximity to current price
+            try:
+                current_price = float(data['close'].iloc[-1]) if not data.empty else 0.0
+                support = sorted(support, key=lambda x: (-x["level"], abs(current_price - x["level"])) )[:3]
+                resistance = sorted(resistance, key=lambda x: (x["level"], abs(current_price - x["level"])) )[:3]
+            except Exception:
+                support = support[:3]
+                resistance = resistance[:3]
+
             # --- DOUBLE TOPS/BOTTOMS ---
             double_tops = PatternRecognition.detect_double_top(data['close'])
             double_bottoms = PatternRecognition.detect_double_bottom(data['close'])
@@ -1078,33 +1143,13 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                 prefetch = None
             indicators = TechnicalIndicators.calculate_all_indicators_optimized(data, symbol, prefetch=prefetch)
             
-            # Step 3: Get volume agents analysis first (needed for enhanced charts)
-            logger.info(f"[ENHANCED ANALYSIS] Getting volume agents analysis for {symbol}")
+            # Step 3: Skip volume agents in orchestrator (handled at service layer)
+            logger.info(f"[ENHANCED ANALYSIS] Volume agents handled by service layer - skipping in orchestrator for {symbol}")
             volume_agents_result = None
-            try:
-                should_use_agents, health_reason = self.volume_agents_manager.should_use_volume_agents()
-                if should_use_agents:
-                    volume_agents_result = await self.volume_agents_manager.get_comprehensive_volume_analysis(
-                        data, symbol, indicators
-                    )
-                    if volume_agents_result.get('success', False):
-                        logger.info(f"[ENHANCED ANALYSIS] Volume agents analysis successful for {symbol}")
-                    else:
-                        logger.warning(f"[ENHANCED ANALYSIS] Volume agents analysis failed: {volume_agents_result.get('error', 'Unknown error')}")
-                        volume_agents_result = None
-                else:
-                    logger.info(f"[ENHANCED ANALYSIS] Volume agents not used: {health_reason}")
-            except Exception as volume_ex:
-                logger.error(f"[ENHANCED ANALYSIS] Volume agents analysis failed: {volume_ex}")
-                volume_agents_result = None
-            
-            # Step 4: Create visualizations with volume agents integration
-            logger.info(f"[ENHANCED ANALYSIS] Creating enhanced visualizations for {symbol}")
-            chart_paths = self.create_visualizations(
-                data, indicators, symbol, output_dir or "output", interval, volume_agents_result
-            )
-            
-            # Step 5: Get sector context if available
+
+            # Step 4: Skip visualization (already removed from decision path)
+            logger.info(f"[ENHANCED ANALYSIS] Skipping chart generation for decision path for {symbol}")
+            chart_paths = {}
             sector_context = None
             if sector:
                 try:

@@ -29,6 +29,10 @@ import httpx # New import for HTTP requests
 import math # New import for checking NaN values
 from services.database_service import make_json_serializable # Importing the serialization utility
 
+# Lightweight in-process cache to pass prefetched data between endpoints within the same service
+# Keyed by correlation_id; values contain {'stock_data': pd.DataFrame, 'indicators': Dict[str, Any], 'created_at': datetime}
+VOLUME_PREFETCH_CACHE: dict[str, dict] = {}
+
 # Try to import optional dependencies
 try:
     import dotenv
@@ -62,6 +66,10 @@ from api.responses import FrontendResponseBuilder
 from core.chart_manager import get_chart_manager, initialize_chart_manager
 from config.deployment_config import DeploymentConfig
 from config.storage_config import StorageConfig
+
+# Volume agents integration (we'll expose service endpoints that use the existing orchestrator-based implementation)
+from agents.volume import VolumeAgentIntegrationManager
+from agents.volume import VolumeAgentsOrchestrator
 
 app = FastAPI(title="Stock Analysis Service", version="1.0.0")
 logger = logging.getLogger(__name__)
@@ -633,6 +641,15 @@ class IndicatorsRequest(BaseModel):
     interval: str = Field(default="1d", description="Data interval")
     indicators: str = Field(default="rsi,macd,sma,ema,bollinger", description="Comma-separated list of indicators")
 
+# --- Volume Agents API Models ---
+class VolumeAgentRequest(BaseModel):
+    symbol: str = Field(..., description="Stock symbol")
+    exchange: str = Field(default="NSE", description="Stock exchange")
+    interval: str = Field(default="day", description="Data interval (internal mapping)")
+    period: int = Field(default=365, description="Analysis period in days")
+    correlation_id: Optional[str] = Field(default=None, description="Optional correlation ID for tracing")
+    return_prompt: Optional[bool] = Field(default=False, description="Return per-agent prompt where applicable")
+
 # --- REST API Endpoints ---
 
 @app.get("/health")
@@ -725,21 +742,20 @@ async def analyze(request: AnalysisRequest):
 async def enhanced_analyze(request: EnhancedAnalysisRequest):
     """
     Enhanced stock analysis with mathematical validation using code execution.
-    This endpoint provides more accurate analysis by performing actual calculations
-    instead of relying on LLM estimation.
+    Now orchestrates independent analyses in parallel (volume agents via service endpoint,
+    MTF, sector, advanced), and only blocks on the final decision LLM.
     """
+    start_ts = time.monotonic()
     try:
         print(f"[ENHANCED ANALYSIS] Starting enhanced analysis for {request.stock}")
-        
-        serialized_frontend_response = None # Initialize to None
+        serialized_frontend_response = None
 
-        # Resolve user ID based on provided user_id or email
+        # Resolve user ID
         resolved_user_id = "default_user_id"
         if request.user_id:
             resolved_user_id = request.user_id
         elif request.email:
             try:
-                # Call the database service to resolve user ID from email
                 async with httpx.AsyncClient() as client:
                     user_id_response = await _make_database_request_with_retry(
                         client, "POST", f"{DATABASE_SERVICE_URL}/users/resolve-id", json_data={"email": request.email}
@@ -750,45 +766,22 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 print(f"❌ Error resolving user ID for email {request.email}: {e}. Using default user ID.")
                 resolved_user_id = str(uuid.uuid4())
         else:
-            resolved_user_id = str(uuid.uuid4()) # Generate a new UUID if no user_id or email is provided
+            resolved_user_id = str(uuid.uuid4())
             print(f"⚠️ No user ID or email provided. Generated new user ID: {resolved_user_id}")
 
-        # Create orchestrator instance
+        # Orchestrator for data and final decision LLM
         orchestrator = StockAnalysisOrchestrator()
-        
-        # Perform enhanced analysis with code execution
-        result = await orchestrator.enhanced_analyze_stock(
-            symbol=request.stock,
-            exchange=request.exchange,
-            period=request.period,
-            interval=request.interval,
-            output_dir=request.output,
-            sector=request.sector
-        )
-        
-        # Extract components from the result
-        analysis_results, success_message, error_message = result
-        
-        if error_message:
-            raise HTTPException(status_code=500, detail=error_message)
-        
-        # Extract data and indicators from the analysis results
-        # The enhanced_analyze_stock method already retrieves data and calculates indicators
+
+        # 1) Retrieve stock data
         try:
-            # Get the data again for building frontend response
             stock_data = await orchestrator.retrieve_stock_data(
                 request.stock, request.exchange, request.interval, request.period
             )
-            
-            # Extract indicators from analysis_results if available, otherwise calculate them
-            if analysis_results and 'technical_indicators' in analysis_results:
-                indicators = analysis_results['technical_indicators']
-            else:
-                indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, request.stock)
-                
         except ValueError as e:
             error_msg = f"Data retrieval failed for {request.stock}: {str(e)}"
             print(f"[ENHANCED ANALYSIS ERROR] {error_msg}")
+            elapsed = time.monotonic() - start_ts
+            print(f"[ANALYSIS-TIMER] {request.stock} failed early (data retrieval) in {elapsed:.2f}s")
             return JSONResponse(
                 content={
                     "success": False,
@@ -799,8 +792,27 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 status_code=400
             )
         except Exception as e:
+            error_msg = f"Unexpected error retrieving data for {request.stock}: {str(e)}"
+            print(f"[ENHANCED ANALYSIS ERROR] {error_msg}")
+            elapsed = time.monotonic() - start_ts
+            print(f"[ANALYSIS-TIMER] {request.stock} failed early (unexpected data retrieval error) in {elapsed:.2f}s")
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": error_msg,
+                    "stock_symbol": request.stock
+                },
+                status_code=500
+            )
+
+        # 2) Calculate indicators
+        try:
+            indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, request.stock)
+        except Exception as e:
             error_msg = f"Technical indicator calculation failed for {request.stock}: {str(e)}"
             print(f"[ENHANCED ANALYSIS ERROR] {error_msg}")
+            elapsed = time.monotonic() - start_ts
+            print(f"[ANALYSIS-TIMER] {request.stock} failed early (indicator calc) in {elapsed:.2f}s")
             return JSONResponse(
                 content={
                     "success": False,
@@ -810,187 +822,283 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 },
                 status_code=500
             )
-        
-        # Skip chart generation - frontend doesn't use these charts
-        # Charts are only needed for AI analysis which is already done in enhanced_analyze_stock
-        chart_paths = {}
-        
-        # Get sector context (prioritize orchestrator's result, use service as fallback)
-        sector_context = None
-        orchestrator_sector_context = analysis_results.get('sector_context')
-        
-        if orchestrator_sector_context:
-            print(f"✅ Using orchestrator's sector context for {request.stock}")
-            sector_context = orchestrator_sector_context
-        else:
-            print(f"🔄 Orchestrator sector context not available, generating sector context for {request.stock}")
+
+# 3) Launch independent tasks in parallel
+        print(f"[ENHANCED ANALYSIS] Launching parallel tasks for {request.stock}")
+        # Prepare correlation ID and cache prefetched data to avoid duplicate fetch in volume analyze-all
+        correlation_id = str(uuid.uuid4())
+        try:
+            # Store prefetched stock_data and indicators in in-process cache for reuse by analyze-all
+            VOLUME_PREFETCH_CACHE[correlation_id] = {
+                'stock_data': stock_data,
+                'indicators': indicators,
+                'created_at': datetime.now()
+            }
+        except Exception as cache_e:
+            print(f"[VOLUME_PREFETCH_CACHE] Failed to store prefetched data: {cache_e}")
+
+        # Volume agents via service endpoint (loopback)
+        volume_agents_url = os.getenv("ANALYSIS_SERVICE_URL", "http://localhost:8002") + "/agents/volume/analyze-all"
+        async def _call_volume_agents():
             try:
-                # Determine sector to use
-                detected_sector = None
-                try:
-                    if not request.sector:
-                        from ml.sector.classifier import SectorClassifier as _sc
-                        detected_sector = _sc(sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category')).get_stock_sector(request.stock)
-                        # Clear module reference when done
-                        del _sc
-                except Exception:
-                    detected_sector = None
-
-                # Use sector benchmarking provider directly
-                from ml.sector.benchmarking import SectorBenchmarkingProvider
-                sector_benchmarking_provider = SectorBenchmarkingProvider()
-
-                # Launch sector tasks in parallel for reduced latency
-                print(f"🔄 Starting parallel sector analysis tasks for {request.stock}")
-                benchmarking_task = sector_benchmarking_provider.get_comprehensive_benchmarking_async(
-                    request.stock,
-                    stock_data,
-                    user_sector=request.sector
-                )
-                rotation_task = sector_benchmarking_provider.analyze_sector_rotation_async("1M")
-                correlation_task = sector_benchmarking_provider.generate_sector_correlation_matrix_async("3M")
-
-                sector_benchmarking, sector_rotation, sector_correlation = await asyncio.gather(
-                    benchmarking_task,
-                    rotation_task,
-                    correlation_task,
-                    return_exceptions=True,
-                )
-
-                # Robust fallback handling
-                if isinstance(sector_benchmarking, Exception):
-                    print(f"Warning: sector_benchmarking failed: {sector_benchmarking}")
-                    sector_benchmarking = {}
-                if isinstance(sector_rotation, Exception):
-                    print(f"Warning: sector_rotation failed: {sector_rotation}")
-                    sector_rotation = None
-                if isinstance(sector_correlation, Exception):
-                    print(f"Warning: sector_correlation failed: {sector_correlation}")
-                    sector_correlation = None
-
-                # Prefer explicit request.sector, then detected, then fallback from benchmarking payload
-                sector_value = request.sector or detected_sector or (
-                    (sector_benchmarking or {}).get('sector_info', {}).get('sector') if isinstance(sector_benchmarking, dict) else None
-                ) or ''
-
-                # Create sector context with necessary data
-                # Extract the essential information from sector_benchmarking while preserving performance metrics
-                essential_benchmarking = {}
-                if isinstance(sector_benchmarking, dict):
-                    # Extract ALL the key components that frontend needs
-                    if 'sector_info' in sector_benchmarking:
-                        essential_benchmarking['sector_info'] = sector_benchmarking['sector_info']
-                    if 'market_benchmarking' in sector_benchmarking:
-                        essential_benchmarking['market_benchmarking'] = sector_benchmarking['market_benchmarking']
-                    if 'sector_benchmarking' in sector_benchmarking:
-                        essential_benchmarking['sector_benchmarking'] = sector_benchmarking['sector_benchmarking']
-                    if 'relative_performance' in sector_benchmarking:
-                        essential_benchmarking['relative_performance'] = sector_benchmarking['relative_performance']
-                    if 'sector_risk_metrics' in sector_benchmarking:
-                        essential_benchmarking['sector_risk_metrics'] = sector_benchmarking['sector_risk_metrics']
-                    if 'analysis_summary' in sector_benchmarking:
-                        essential_benchmarking['analysis_summary'] = sector_benchmarking['analysis_summary']
-                    if 'timestamp' in sector_benchmarking:
-                        essential_benchmarking['timestamp'] = sector_benchmarking['timestamp']
-                    if 'data_points' in sector_benchmarking:
-                        essential_benchmarking['data_points'] = sector_benchmarking['data_points']
-                    
-                    # Don't clear the original data structure - we need it!
-                    
-                sector_context = {
-                    'sector_benchmarking': essential_benchmarking,
-                    'sector_rotation': sector_rotation,
-                    'sector_correlation': sector_correlation,
-                    'sector': sector_value
-                }
-
-                print(f"✅ Sector context generated successfully for {request.stock}")
-
+                async with httpx.AsyncClient(timeout=600.0) as client:
+                    resp = await client.post(
+                        volume_agents_url,
+                        json={
+                            "symbol": request.stock,
+                            "exchange": request.exchange,
+                            "interval": request.interval,
+                            "period": request.period,
+                            "correlation_id": correlation_id
+                        }
+                    )
+                    resp.raise_for_status()
+                    return resp.json()
             except Exception as e:
-                print(f"Warning: Could not get sector context: {e}")
-                sector_context = {}
-        
-        # Get Enhanced MTF context
-        mtf_context = None
-        try:
-            from ml.analysis.mtf_analysis import EnhancedMultiTimeframeAnalyzer
+                print(f"[VOLUME_AGENTS] Error calling analyze-all endpoint: {e}")
+                return {}
 
-            # Perform comprehensive multi-timeframe analysis in parallel with sector tasks already done
-            enhanced_mtf_analyzer = EnhancedMultiTimeframeAnalyzer()
-            mtf_results = await enhanced_mtf_analyzer.comprehensive_mtf_analysis(
-                symbol=request.stock,
-                exchange=request.exchange
-            )
+        # Helper: logging wrapper with timeout
+        start_base = time.monotonic()
+        durations: dict[str, float] = {}
+        statuses: dict[str, bool] = {}
+        async def _with_logging(name: str, coro, timeout: float | None = None):
+            t0 = time.monotonic()
+            print(f"[TASK-START] {name} t={t0 - start_base:+.3f}s")
+            try:
+                if timeout is not None:
+                    result = await asyncio.wait_for(coro, timeout=timeout)
+                else:
+                    result = await coro
+                dt = time.monotonic() - t0
+                durations[name] = dt
+                statuses[name] = True
+                print(f"[TASK-END] {name} ok=True dt={dt:.2f}s")
+                return result
+            except Exception as e:
+                dt = time.monotonic() - t0
+                durations[name] = dt
+                statuses[name] = False
+                print(f"[TASK-END] {name} ok=False dt={dt:.2f}s err={type(e).__name__}: {e!r}")
+                raise
 
-            if mtf_results.get('success', False):
-                mtf_context = mtf_results
-                print(f"✅ Enhanced MTF analysis generated successfully for {request.stock}")
-            else:
-                print(f"Warning: Enhanced MTF analysis failed: {mtf_results.get('error', 'Unknown error')}")
-                mtf_context = {}
+        # Create tasks with logging + timeouts
+        volume_task = asyncio.create_task(_with_logging("volume_agents", _call_volume_agents(), timeout=300.0))
 
-        except Exception as e:
-            print(f"Warning: Could not get Enhanced MTF context: {e}")
+        # MTF analysis
+        async def _mtf():
+            try:
+                from ml.analysis.mtf_analysis import EnhancedMultiTimeframeAnalyzer
+                analyzer = EnhancedMultiTimeframeAnalyzer()
+                res = await analyzer.comprehensive_mtf_analysis(symbol=request.stock, exchange=request.exchange)
+                return res if isinstance(res, dict) else {}
+            except Exception as e:
+                print(f"[MTF] Error: {e}")
+                return {}
+
+        mtf_task = asyncio.create_task(_with_logging("mtf", _mtf(), timeout=120.0))
+
+        # Advanced analysis
+        async def _advanced():
+            try:
+                from analysis.advanced_analysis import advanced_analysis_provider
+                return await advanced_analysis_provider.generate_advanced_analysis(stock_data, request.stock, indicators)
+            except Exception as e:
+                print(f"[ADVANCED] Error: {e}")
+                return {}
+
+        advanced_task = asyncio.create_task(_with_logging("advanced", _advanced(), timeout=90.0))
+
+        # Sector context (optional)
+        async def _sector():
+            try:
+                if request.sector:
+                    from ml.sector.benchmarking import SectorBenchmarkingProvider
+                    provider = SectorBenchmarkingProvider()
+                    comprehensive = await provider.get_optimized_comprehensive_sector_analysis(
+                        request.stock, stock_data, request.sector, requested_period=request.period
+                    )
+                    if comprehensive:
+                        return {
+                            'sector': request.sector,
+                            'sector_benchmarking': comprehensive.get('sector_benchmarking', {}),
+                            'sector_rotation': comprehensive.get('sector_rotation', {}),
+                            'sector_correlation': comprehensive.get('sector_correlation', {}),
+                            'optimization_metrics': comprehensive.get('optimization_metrics', {})
+                        }
+                return {}
+            except Exception as e:
+                print(f"[SECTOR] Error: {e}")
+                return {}
+
+        sector_task = asyncio.create_task(_with_logging("sector", _sector(), timeout=120.0))
+
+        # Indicator summary LLM (runs in parallel with volume/MTF/sector/advanced)
+        async def _indicator_summary():
+            try:
+                # Try curated indicators via agents manager
+                curated = None
+                try:
+                    success, curated = await orchestrator.indicator_agents_manager.get_curated_indicators_analysis(
+                        symbol=request.stock, stock_data=stock_data, indicators=indicators, context=""
+                    )
+                    if not success:
+                        curated = None
+                except Exception:
+                    curated = None
+                if curated is None:
+                    curated = {
+                        "analysis_focus": "technical_indicators_summary",
+                        "key_indicators": {},
+                        "critical_levels": {},
+                        "conflict_analysis_needed": False,
+                        "detected_conflicts": {"has_conflicts": False, "conflict_count": 0, "conflict_list": []},
+                        "fallback_used": True,
+                        "source": "enhanced_analyze_fallback"
+                    }
+                md, ind_json = await orchestrator.gemini_client.build_indicators_summary(
+                    symbol=request.stock,
+                    indicators=indicators,
+                    period=request.period,
+                    interval=request.interval,
+                    knowledge_context="",
+                    token_tracker=None,
+                    mtf_context=None,
+                    curated_indicators=curated
+                )
+                return md, ind_json
+            except Exception as e:
+                print(f"[INDICATOR_SUMMARY] Error: {e}")
+                # Fallback empty
+                return "", {}
+
+        indicator_task = asyncio.create_task(_with_logging("indicator_summary", _indicator_summary(), timeout=120.0))
+
+        # Await all independent tasks with return_exceptions=True to avoid cancellation
+        parallel_t0 = time.monotonic()
+        results = await asyncio.gather(volume_task, mtf_task, advanced_task, sector_task, indicator_task, return_exceptions=True)
+        parallel_dt = time.monotonic() - parallel_t0
+        print(f"[PARALLEL] Independent tasks completed in {parallel_dt:.2f}s")
+        # One-line summary for quick glance
+        names = ["volume_agents", "mtf", "advanced", "sector", "indicator_summary"]
+        summary = ", ".join(
+            f"{n}={durations.get(n, float('nan')):.2f}s/{'OK' if statuses.get(n) else 'ERR'}" for n in names
+        )
+        print(f"[PARALLEL] Summary: {summary}")
+
+        volume_agents_result = results[0]
+        mtf_context = results[1]
+        advanced_analysis = results[2]
+        sector_context = results[3]
+        indicator_summary_result = results[4]
+
+        # Normalize exceptions to empty fallbacks
+        if isinstance(volume_agents_result, Exception):
+            print(f"[PARALLEL] volume_agents failed: {type(volume_agents_result).__name__}: {volume_agents_result!r}")
+            volume_agents_result = {}
+        if isinstance(mtf_context, Exception):
+            print(f"[PARALLEL] mtf failed: {type(mtf_context).__name__}: {mtf_context!r}")
             mtf_context = {}
-        
-        # Get Advanced Analysis for Advanced Tab
-        advanced_analysis = None
-        try:
-            from analysis.advanced_analysis import advanced_analysis_provider
-            advanced_analysis = await advanced_analysis_provider.generate_advanced_analysis(
-                stock_data, request.stock, indicators
-            )
-            print(f"✅ Advanced analysis generated successfully for {request.stock}")
-        except Exception as e:
-            print(f"Warning: Could not get advanced analysis: {e}")
+        if isinstance(advanced_analysis, Exception):
+            print(f"[PARALLEL] advanced failed: {type(advanced_analysis).__name__}: {advanced_analysis!r}")
             advanced_analysis = {}
-        
-        # Generate ML predictions (price direction, magnitude, volatility, regime)
+        if isinstance(sector_context, Exception):
+            print(f"[PARALLEL] sector failed: {type(sector_context).__name__}: {sector_context!r}")
+            sector_context = {}
+        if isinstance(indicator_summary_result, Exception):
+            print(f"[PARALLEL] indicator_summary failed: {type(indicator_summary_result).__name__}: {indicator_summary_result!r}")
+            indicator_summary_result = ("", {})
+
+        # Normalize contexts
+        if not isinstance(mtf_context, dict):
+            mtf_context = {}
+        if not isinstance(advanced_analysis, dict):
+            advanced_analysis = {}
+        if not isinstance(sector_context, dict):
+            sector_context = {}
+        if not isinstance(volume_agents_result, dict):
+            volume_agents_result = {}
+
+        indicator_summary_md, indicator_json = ("", {})
+        if isinstance(indicator_summary_result, tuple) and len(indicator_summary_result) == 2:
+            indicator_summary_md, indicator_json = indicator_summary_result
+        elif isinstance(indicator_summary_result, dict):
+            # In case a dict accidentally gets returned
+            indicator_summary_md, indicator_json = "", indicator_summary_result
+
+        # 4) Final decision LLM (depends on prior results). No charts here.
+        chart_insights_md = ""
+        # Build minimal knowledge_context blocks (sector/MTF/advanced) as JSON labels
+        knowledge_blocks = []
+        try:
+            if sector_context:
+                knowledge_blocks.append("SECTOR CONTEXT:\n" + json.dumps(sector_context))
+        except Exception:
+            pass
+        try:
+            if mtf_context:
+                knowledge_blocks.append("ENHANCED MULTI-TIMEFRAME ANALYSIS CONTEXT:\n" + json.dumps(mtf_context))
+        except Exception:
+            pass
+        try:
+            if advanced_analysis:
+                knowledge_blocks.append("AdvancedAnalysisDigest:\n" + json.dumps(advanced_analysis))
+        except Exception:
+            pass
+        knowledge_context = "\n\n".join(knowledge_blocks)
+
+        # Final decision with START/END logging
+        fd_t0 = time.monotonic()
+        print(f"[TASK-START] final_decision t={fd_t0 - start_base:+.3f}s")
+        try:
+            ai_analysis = await orchestrator.gemini_client.run_final_decision(
+                ind_json=indicator_json or {},
+                chart_insights_md=chart_insights_md,
+                knowledge_context=knowledge_context
+            )
+            fd_dt = time.monotonic() - fd_t0
+            print(f"[TASK-END] final_decision ok=True dt={fd_dt:.2f}s")
+        except Exception as e:
+            fd_dt = time.monotonic() - fd_t0
+            print(f"[TASK-END] final_decision ok=False dt={fd_dt:.2f}s err={type(e).__name__}: {e!r}")
+            raise
+
+        # For frontend compatibility
+        indicator_summary = indicator_summary_md
+        chart_insights = chart_insights_md
+
+        # 5) Optional ML predictions (kept as before)
         ml_predictions = {}
         try:
             from ml.quant_system.engines.unified_manager import UnifiedMLManager
             unified_ml_manager = UnifiedMLManager()
-            # Train engines that require stock data (raw_data_ml, hybrid) before prediction
             try:
-                print(f"🧠 Training ML engines for {request.stock}")
                 _ = unified_ml_manager.train_all_engines(stock_data, None)
-            except Exception as e:
-                print(f"⚠️ Warning: ML engine training failed: {str(e)}")
+            except Exception:
                 pass
-                
-            # Get predictions
-            print(f"🔮 Generating ML predictions for {request.stock}")
             ml_predictions = unified_ml_manager.get_comprehensive_prediction(stock_data)
-            print(f"✅ ML predictions generated successfully for {request.stock}")
-            
-            # Clear any cached training data if possible
             try:
                 if hasattr(unified_ml_manager, 'clear_cache') and callable(unified_ml_manager.clear_cache):
                     unified_ml_manager.clear_cache()
-                    print(f"🧹 Cleared ML training cache for {request.stock}")
-                # If no explicit clear_cache method, try to clean up the most memory-intensive components
                 elif hasattr(unified_ml_manager, '_trained_models') and isinstance(unified_ml_manager._trained_models, dict):
                     unified_ml_manager._trained_models.clear()
-                    print(f"🧹 Cleared ML model cache for {request.stock}")
-            except Exception as cache_e:
-                print(f"⚠️ Non-fatal error during ML cache cleanup: {str(cache_e)}")
-                
-            # Clear module reference when done
+            except Exception:
+                pass
             del unified_ml_manager
-            
         except Exception as e:
-            print(f"Warning: Could not generate ML predictions: {e}")
+            print(f"[ML] Warning: {e}")
             ml_predictions = {}
-        
-        # Build frontend-expected response structure
+
+        # 6) Build frontend response
+        chart_paths = {}  # No charts generated in enhanced path
         frontend_response = FrontendResponseBuilder.build_frontend_response(
             symbol=request.stock,
             exchange=request.exchange,
             data=stock_data,
             indicators=indicators,
-            ai_analysis=analysis_results.get('ai_analysis', {}),
-            indicator_summary=analysis_results.get('indicator_summary', ''),
-            chart_insights=analysis_results.get('chart_insights', ''),
+            ai_analysis=ai_analysis or {},
+            indicator_summary=indicator_summary or '',
+            chart_insights=chart_insights or '',
             chart_paths=chart_paths,
             sector_context=sector_context,
             mtf_context=mtf_context,
@@ -999,20 +1107,10 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             period=request.period,
             interval=request.interval
         )
-        
-        # Clear large data structures that are no longer needed after building response
-        print(f"🧹 Cleaning up memory for {request.stock} analysis...")
-        # These structures have been incorporated into frontend_response and are no longer needed
-        del sector_context
-        del mtf_context
-        del advanced_analysis
-        del ml_predictions
 
-        # Store analysis in database service
+        # 7) Store in DB service
         try:
-            # Make the response JSON serializable to handle NaN values before sending
             serialized_frontend_response = make_json_serializable(frontend_response)
-            
             async with httpx.AsyncClient() as client:
                 store_response = await _make_database_request_with_retry(
                     client, "POST", f"{DATABASE_SERVICE_URL}/analyses/store",
@@ -1026,74 +1124,24 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                     }
                 )
                 analysis_id = store_response.json().get("analysis_id")
-            
-            if not analysis_id:
-                print(f"⚠️ Warning: Failed to store enhanced analysis for {request.stock} via database service")
+            if analysis_id:
+                print(f"✅ Stored enhanced analysis for {request.stock} with ID: {analysis_id}")
             else:
-                print(f"✅ Successfully stored enhanced analysis for {request.stock} with ID: {analysis_id}")
-                
-        except httpx.HTTPStatusError as http_error:
-            print(f"❌ HTTP error storing enhanced analysis: {http_error}")
-            print(f"⚠️ Enhanced analysis completed but not stored due to database service HTTP error")
-        except httpx.RequestError as req_error:
-            print(f"❌ Request error storing enhanced analysis: {req_error}")
-            print(f"⚠️ Enhanced analysis completed but not stored due to database service request error")
+                print(f"⚠️ Warning: Failed to store enhanced analysis for {request.stock}")
         except Exception as e:
-            print(f"❌ Error storing enhanced analysis: {e}")
-            print(f"⚠️ Enhanced analysis completed but not stored due to storage error")
-        
-        print(f"[ENHANCED ANALYSIS] Completed enhanced analysis for {request.stock}")
-        
-        # Clear original response after serialization (now serialized_frontend_response holds the data)
-        del frontend_response
+            print(f"❌ Storage error (non-fatal): {e}")
 
-        # No chart cleanup needed - we're not generating charts anymore
-        import gc
-        
-        # Clear analysis results to free memory
-        try:
-            if 'analysis_results' in locals():
-                if isinstance(analysis_results, dict):
-                    analysis_results.clear()
-                del analysis_results
-        except Exception as e:
-            print(f"⚠️ Non-fatal error clearing analysis results: {str(e)}")
-        
-        # Force garbage collection
-        gc.collect()
+        # 8) Return
+        elapsed = time.monotonic() - start_ts
+        print(f"[ANALYSIS-TIMER] {request.stock} completed in {elapsed:.2f}s")
+        return JSONResponse(content=serialized_frontend_response or frontend_response, status_code=200)
 
-        return JSONResponse(content=serialized_frontend_response, status_code=200)
-        
     except Exception as e:
         error_msg = f"Enhanced analysis failed for {request.stock}: {str(e)}"
         print(f"[ENHANCED ANALYSIS ERROR] {error_msg}")
         print(f"[ENHANCED ANALYSIS ERROR] Traceback: {traceback.format_exc()}")
-        
-        # Attempt to clean up any resources that might have been created
-        try:
-            # Clean up any local variables that might be holding large data
-            locals_to_clean = ['stock_data', 'indicators', 'analysis_results', 
-                              'sector_context', 'mtf_context', 'advanced_analysis', 
-                              'ml_predictions', 'frontend_response']
-            
-            for var_name in locals_to_clean:
-                if var_name in locals():
-                    var_value = locals()[var_name]
-                    if isinstance(var_value, dict):
-                        var_value.clear()
-                    elif var_name in locals():
-                        del locals()[var_name]
-            
-            # Clean up any chart files that might have been created
-            chart_manager = get_chart_manager()
-            chart_dir = chart_manager.get_chart_directory(request.stock, request.interval)
-            if os.path.exists(chart_dir):
-                print(f"🧹 Cleaning up chart directory for {request.stock}")
-                chart_manager.cleanup_specific_charts(request.stock, request.interval)
-                
-        except Exception as cleanup_e:
-            print(f"⚠️ Non-fatal error during error cleanup: {str(cleanup_e)}")
-        
+        elapsed = time.monotonic() - start_ts
+        print(f"[ANALYSIS-TIMER] {request.stock} failed in {elapsed:.2f}s")
         return JSONResponse(
             content={
                 "success": False,
@@ -1980,6 +2028,387 @@ async def get_charts(
             "timestamp": pd.Timestamp.now().isoformat()
         }
         raise HTTPException(status_code=500, detail=error_response)
+
+# --- Volume Agents Endpoints ---
+
+@app.post("/agents/volume/anomaly")
+async def agents_volume_anomaly(req: VolumeAgentRequest):
+    try:
+        orchestrator = StockAnalysisOrchestrator()
+        # Retrieve stock data
+        try:
+            stock_data = await orchestrator.retrieve_stock_data(
+                symbol=req.symbol,
+                exchange=req.exchange,
+                interval=req.interval,
+                period=req.period
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+
+        # Indicators
+        try:
+            indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, req.symbol)
+        except Exception:
+            indicators = {}
+
+        # Run single agent
+        vao = VolumeAgentsOrchestrator(orchestrator.gemini_client)
+        result = await vao._execute_agent(
+            "volume_anomaly",
+            vao.agent_config["volume_anomaly"],
+            stock_data,
+            req.symbol,
+            indicators
+        )
+        response = {
+            "success": result.success,
+            "processing_time": result.processing_time,
+            "confidence": (result.confidence_score or 0.0),
+            "key_data": (result.analysis_data or {}),
+            "error_message": result.error_message,
+            "metadata": {
+                "agent_name": "volume_anomaly",
+                "symbol": req.symbol,
+                "exchange": req.exchange,
+                "interval": req.interval,
+                "period": req.period
+            }
+        }
+        if req.return_prompt and result.prompt_text:
+            response["prompt"] = result.prompt_text
+        return JSONResponse(content=make_json_serializable(response), status_code=200)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[VOLUME_AGENTS] anomaly endpoint error: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "agent": "volume_anomaly",
+                "symbol": req.symbol,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+@app.post("/agents/volume/institutional")
+async def agents_volume_institutional(req: VolumeAgentRequest):
+    try:
+        orchestrator = StockAnalysisOrchestrator()
+        # Retrieve stock data
+        try:
+            stock_data = await orchestrator.retrieve_stock_data(
+                symbol=req.symbol,
+                exchange=req.exchange,
+                interval=req.interval,
+                period=req.period
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+
+        # Indicators
+        try:
+            indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, req.symbol)
+        except Exception:
+            indicators = {}
+
+        # Run single agent
+        vao = VolumeAgentsOrchestrator(orchestrator.gemini_client)
+        result = await vao._execute_agent(
+            "institutional_activity",
+            vao.agent_config["institutional_activity"],
+            stock_data,
+            req.symbol,
+            indicators
+        )
+        response = {
+            "success": result.success,
+            "processing_time": result.processing_time,
+            "confidence": (result.confidence_score or 0.0),
+            "key_data": (result.analysis_data or {}),
+            "error_message": result.error_message,
+            "metadata": {
+                "agent_name": "institutional_activity",
+                "symbol": req.symbol,
+                "exchange": req.exchange,
+                "interval": req.interval,
+                "period": req.period
+            }
+        }
+        if req.return_prompt and result.prompt_text:
+            response["prompt"] = result.prompt_text
+        return JSONResponse(content=make_json_serializable(response), status_code=200)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[VOLUME_AGENTS] institutional endpoint error: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "agent": "institutional_activity",
+                "symbol": req.symbol,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+@app.post("/agents/volume/confirmation")
+async def agents_volume_confirmation(req: VolumeAgentRequest):
+    try:
+        orchestrator = StockAnalysisOrchestrator()
+        # Retrieve stock data
+        try:
+            stock_data = await orchestrator.retrieve_stock_data(
+                symbol=req.symbol,
+                exchange=req.exchange,
+                interval=req.interval,
+                period=req.period
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+
+        # Indicators
+        try:
+            indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, req.symbol)
+        except Exception:
+            indicators = {}
+
+        # Run single agent
+        vao = VolumeAgentsOrchestrator(orchestrator.gemini_client)
+        result = await vao._execute_agent(
+            "volume_confirmation",
+            vao.agent_config["volume_confirmation"],
+            stock_data,
+            req.symbol,
+            indicators
+        )
+        response = {
+            "success": result.success,
+            "processing_time": result.processing_time,
+            "confidence": (result.confidence_score or 0.0),
+            "key_data": (result.analysis_data or {}),
+            "error_message": result.error_message,
+            "metadata": {
+                "agent_name": "volume_confirmation",
+                "symbol": req.symbol,
+                "exchange": req.exchange,
+                "interval": req.interval,
+                "period": req.period
+            }
+        }
+        if req.return_prompt and result.prompt_text:
+            response["prompt"] = result.prompt_text
+        return JSONResponse(content=make_json_serializable(response), status_code=200)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[VOLUME_AGENTS] confirmation endpoint error: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "agent": "volume_confirmation",
+                "symbol": req.symbol,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+@app.post("/agents/volume/support-resistance")
+async def agents_volume_support_resistance(req: VolumeAgentRequest):
+    try:
+        orchestrator = StockAnalysisOrchestrator()
+        # Retrieve stock data
+        try:
+            stock_data = await orchestrator.retrieve_stock_data(
+                symbol=req.symbol,
+                exchange=req.exchange,
+                interval=req.interval,
+                period=req.period
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+
+        # Indicators
+        try:
+            indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, req.symbol)
+        except Exception:
+            indicators = {}
+
+        # Run single agent
+        vao = VolumeAgentsOrchestrator(orchestrator.gemini_client)
+        result = await vao._execute_agent(
+            "support_resistance",
+            vao.agent_config["support_resistance"],
+            stock_data,
+            req.symbol,
+            indicators
+        )
+        response = {
+            "success": result.success,
+            "processing_time": result.processing_time,
+            "confidence": (result.confidence_score or 0.0),
+            "key_data": (result.analysis_data or {}),
+            "error_message": result.error_message,
+            "metadata": {
+                "agent_name": "support_resistance",
+                "symbol": req.symbol,
+                "exchange": req.exchange,
+                "interval": req.interval,
+                "period": req.period
+            }
+        }
+        if req.return_prompt and result.prompt_text:
+            response["prompt"] = result.prompt_text
+        return JSONResponse(content=make_json_serializable(response), status_code=200)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[VOLUME_AGENTS] support-resistance endpoint error: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "agent": "support_resistance",
+                "symbol": req.symbol,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+@app.post("/agents/volume/momentum")
+async def agents_volume_momentum(req: VolumeAgentRequest):
+    try:
+        orchestrator = StockAnalysisOrchestrator()
+        # Retrieve stock data
+        try:
+            stock_data = await orchestrator.retrieve_stock_data(
+                symbol=req.symbol,
+                exchange=req.exchange,
+                interval=req.interval,
+                period=req.period
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+
+        # Indicators
+        try:
+            indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, req.symbol)
+        except Exception:
+            indicators = {}
+
+        # Run single agent
+        vao = VolumeAgentsOrchestrator(orchestrator.gemini_client)
+        result = await vao._execute_agent(
+            "volume_momentum",
+            vao.agent_config["volume_momentum"],
+            stock_data,
+            req.symbol,
+            indicators
+        )
+        response = {
+            "success": result.success,
+            "processing_time": result.processing_time,
+            "confidence": (result.confidence_score or 0.0),
+            "key_data": (result.analysis_data or {}),
+            "error_message": result.error_message,
+            "metadata": {
+                "agent_name": "volume_momentum",
+                "symbol": req.symbol,
+                "exchange": req.exchange,
+                "interval": req.interval,
+                "period": req.period
+            }
+        }
+        if req.return_prompt and result.prompt_text:
+            response["prompt"] = result.prompt_text
+        return JSONResponse(content=make_json_serializable(response), status_code=200)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[VOLUME_AGENTS] momentum endpoint error: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "agent": "volume_momentum",
+                "symbol": req.symbol,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+@app.post("/agents/volume/analyze-all")
+async def agents_volume_analyze_all(req: VolumeAgentRequest):
+    try:
+        # Prepare orchestrator and data
+        orchestrator = StockAnalysisOrchestrator()
+
+        # Attempt to reuse prefetched data if provided via correlation_id
+        stock_data = None
+        indicators = None
+        if req.correlation_id:
+            try:
+                cached = VOLUME_PREFETCH_CACHE.pop(req.correlation_id, None)
+                if cached and isinstance(cached, dict):
+                    stock_data = cached.get('stock_data')
+                    indicators = cached.get('indicators')
+                    print(f"[VOLUME_PREFETCH_CACHE] Using prefetched data for correlation_id={req.correlation_id}")
+            except Exception as cache_e:
+                print(f"[VOLUME_PREFETCH_CACHE] Error retrieving prefetched data: {cache_e}")
+
+        # Retrieve stock data only if not provided
+        if stock_data is None:
+            try:
+                stock_data = await orchestrator.retrieve_stock_data(
+                    symbol=req.symbol,
+                    exchange=req.exchange,
+                    interval=req.interval,
+                    period=req.period
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+
+        # Calculate indicators only if not provided
+        if indicators is None:
+            try:
+                indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, req.symbol)
+            except Exception as ind_e:
+                # Non-fatal: proceed with minimal indicators
+                indicators = {}
+                print(f"[VOLUME_AGENTS] Warning: indicator calculation failed: {ind_e}")
+
+        # Run integration manager (runs all 5 agents concurrently and aggregates)
+        integ = VolumeAgentIntegrationManager(orchestrator.gemini_client)
+        result = await integ.get_comprehensive_volume_analysis(stock_data, req.symbol, indicators)
+
+        # Ensure JSON serializable
+        serializable = make_json_serializable(result)
+        return JSONResponse(content=serializable, status_code=200)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[VOLUME_AGENTS] analyze-all endpoint error: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "agent_group": "volume",
+                "endpoint": "/agents/volume/analyze-all",
+                "symbol": req.symbol,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
 
 # ===== USER ANALYSIS ENDPOINTS - REMOVED, NOW IN DATABASE SERVICE =====
 # All endpoints below are commented out as they are moved to database_service.py

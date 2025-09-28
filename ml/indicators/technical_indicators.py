@@ -727,8 +727,8 @@ class TechnicalIndicators:
         from scipy.signal import argrelextrema
         
         # Use multiple order values to find different significance levels
-        support_candidates = set()
-        resistance_candidates = set()
+        support_candidates: List[Tuple[float, int]] = []  # (price, index)
+        resistance_candidates: List[Tuple[float, int]] = []  # (price, index)
         
         # Try different order values to capture swing points of varying significance
         for order in [3, 5, 8, 12]:
@@ -740,13 +740,13 @@ class TechnicalIndicators:
                 lows_idx = argrelextrema(data['low'].values, np.less, order=order)[0]
                 highs_idx = argrelextrema(data['high'].values, np.greater, order=order)[0]
                 
-                # Add support levels
+                # Add support levels with indices
                 for idx in lows_idx:
-                    support_candidates.add(float(data['low'].iloc[idx]))
+                    support_candidates.append((float(data['low'].iloc[idx]), int(idx)))
                 
-                # Add resistance levels
+                # Add resistance levels with indices
                 for idx in highs_idx:
-                    resistance_candidates.add(float(data['high'].iloc[idx]))
+                    resistance_candidates.append((float(data['high'].iloc[idx]), int(idx)))
                     
             except Exception:
                 continue
@@ -758,86 +758,117 @@ class TechnicalIndicators:
             current_price = float(data['close'].iloc[-1])
             
             if len(support_candidates) == 0:
+                low_idx_label = recent_data['low'].idxmin()
+                try:
+                    low_pos = int(data.index.get_loc(low_idx_label))
+                except Exception:
+                    low_pos = len(data) - 1
                 low_price = float(recent_data['low'].min())
                 mid_low = current_price - (current_price - low_price) * 0.382
-                support_candidates.update([low_price, mid_low])
+                support_candidates.extend([(low_price, low_pos), (mid_low, len(data) - 1)])
             
             if len(resistance_candidates) == 0:
+                high_idx_label = recent_data['high'].idxmax()
+                try:
+                    high_pos = int(data.index.get_loc(high_idx_label))
+                except Exception:
+                    high_pos = len(data) - 1
                 high_price = float(recent_data['high'].max())
                 mid_high = current_price + (high_price - current_price) * 0.382
-                resistance_candidates.update([high_price, mid_high])
+                resistance_candidates.extend([(high_price, high_pos), (mid_high, len(data) - 1)])
         
-        # Convert to sorted lists
-        support_list = sorted(list(support_candidates))
-        resistance_list = sorted(list(resistance_candidates), reverse=True)
-        
-        # Cluster similar levels using threshold
-        def cluster_levels(levels: List[float], threshold: float) -> List[float]:
-            if not levels:
-                return []
-            
-            clustered = []
-            for level in levels:
-                # Check if this level is close to any existing level
-                is_similar = False
-                for existing in clustered:
-                    if abs(level - existing) / existing < threshold:
-                        is_similar = True
-                        break
-                
-                if not is_similar:
-                    clustered.append(level)
-            
-            return clustered
-        
-        # Apply clustering
-        clustered_support = cluster_levels(support_list, threshold)
-        clustered_resistance = cluster_levels(resistance_list, threshold)
-        
-        # Ensure we have meaningful levels relative to current price
+        # Compute ATR-based dynamic thresholds
         current_price = float(data['close'].iloc[-1])
+        try:
+            atr_series = TechnicalIndicators.calculate_atr(data, window=14)
+            atr_val = float(atr_series.iloc[-1]) if not pd.isna(atr_series.iloc[-1]) else None
+        except Exception:
+            atr_val = None
+        if atr_val is None or current_price <= 0:
+            # Fallback to average true range proxy if ATR unavailable
+            hl_range = (data['high'] - data['low']).rolling(14).mean()
+            atr_val = float(hl_range.iloc[-1]) if len(hl_range) > 0 and not pd.isna(hl_range.iloc[-1]) else current_price * 0.01
+        atr_pct = atr_val / current_price if current_price > 0 else 0.01
         
-        # Filter support levels (should be below current price)
-        filtered_support = [s for s in clustered_support if s < current_price * 0.98]
+        def clamp(x: float, a: float, b: float) -> float:
+            return max(a, min(b, x))
         
-        # Filter resistance levels (should be above current price)
-        filtered_resistance = [r for r in clustered_resistance if r > current_price * 1.02]
+        # Clustering threshold and min distance from price derived from ATR
+        cluster_threshold_pct = clamp(1.5 * atr_pct, 0.003, 0.02)  # 0.3% to 2%
+        # Allow config override for min distance, but use the max of both to avoid too-small bands
+        try:
+            from core.config import Config as _Cfg
+            cfg_min = float(_Cfg.get("support_resistance", "min_distance_pct", 0.0))
+        except Exception:
+            cfg_min = 0.0
+        min_dist_pct = max(cfg_min, clamp(1.0 * atr_pct, 0.003, 0.02))
         
-        # Sort and limit to top 3 most significant levels
-        # For support: closest to current price first (descending order)
-        final_support = sorted(filtered_support, reverse=True)[:3]
+        # Cluster points with indices, produce median representatives with touch counts and recency
+        def cluster_levels_with_idx(points: List[Tuple[float, int]], thr_pct: float):
+            if not points:
+                return []
+            pts = sorted(points, key=lambda t: t[0])
+            clusters: List[List[Tuple[float, int]]] = []
+            for price, idx in pts:
+                if not clusters:
+                    clusters.append([(price, idx)])
+                else:
+                    rep_price = clusters[-1][0][0]
+                    if rep_price == 0:
+                        clusters[-1].append((price, idx))
+                    elif abs(price - rep_price) / abs(rep_price) < thr_pct:
+                        clusters[-1].append((price, idx))
+                    else:
+                        clusters.append([(price, idx)])
+            reps = []
+            n_total = max(1, len(data))
+            for cluster in clusters:
+                prices = [p for p, _ in cluster]
+                idxs = [i for _, i in cluster]
+                # median price as representative
+                prices_sorted = sorted(prices)
+                m = len(prices_sorted)
+                if m % 2 == 1:
+                    median_price = float(prices_sorted[m // 2])
+                else:
+                    median_price = float(0.5 * (prices_sorted[m // 2 - 1] + prices_sorted[m // 2]))
+                touch_count = len(cluster)
+                recent_idx = max(idxs)
+                recency_score = recent_idx / n_total
+                score = touch_count + recency_score  # simple composite score
+                reps.append({"price": median_price, "count": touch_count, "recent_idx": recent_idx, "score": score})
+            return reps
         
-        # For resistance: closest to current price first (ascending order) 
-        final_resistance = sorted(filtered_resistance)[:3]
+        support_objs = cluster_levels_with_idx(support_candidates, cluster_threshold_pct)
+        resistance_objs = cluster_levels_with_idx(resistance_candidates, cluster_threshold_pct)
         
-        # Ensure we have at least some levels
+        # Filter by min distance from current price
+        min_support_threshold = current_price * (1 - min_dist_pct)
+        max_resistance_threshold = current_price * (1 + min_dist_pct)
+        support_filtered = [o for o in support_objs if o["price"] < min_support_threshold]
+        resistance_filtered = [o for o in resistance_objs if o["price"] > max_resistance_threshold]
+        
+        # Fallback: if too strict and nothing remains, allow nearest below/above current price
+        if not support_filtered:
+            support_filtered = [o for o in support_objs if o["price"] < current_price]
+        if not resistance_filtered:
+            resistance_filtered = [o for o in resistance_objs if o["price"] > current_price]
+        
+        # Sort by score and proximity preference
+        support_sorted = sorted(support_filtered, key=lambda o: (-o["score"], -o["price"]))
+        resistance_sorted = sorted(resistance_filtered, key=lambda o: (-o["score"], o["price"]))
+        
+        # Extract top 3 prices
+        final_support = [o["price"] for o in support_sorted[:3]]
+        final_resistance = [o["price"] for o in resistance_sorted[:3]]
+        
+        # Ensure we have at least one on each side via range-based fallback
         if len(final_support) == 0:
-            # Add basic support levels based on recent range
             recent_low = float(data['low'].tail(50).min()) if len(data) > 50 else float(data['low'].min())
             final_support = [recent_low]
-            
-            # Add additional levels using percentage drops
-            if len(final_support) < 3:
-                level_2 = current_price * 0.95  # 5% below current
-                level_3 = current_price * 0.90  # 10% below current
-                if level_2 > recent_low:
-                    final_support.append(level_2)
-                if level_3 > recent_low and len(final_support) < 3:
-                    final_support.append(level_3)
-        
         if len(final_resistance) == 0:
-            # Add basic resistance levels based on recent range
             recent_high = float(data['high'].tail(50).max()) if len(data) > 50 else float(data['high'].max())
             final_resistance = [recent_high]
-            
-            # Add additional levels using percentage increases
-            if len(final_resistance) < 3:
-                level_2 = current_price * 1.05  # 5% above current
-                level_3 = current_price * 1.10  # 10% above current
-                if level_2 < recent_high:
-                    final_resistance.append(level_2)
-                if level_3 < recent_high and len(final_resistance) < 3:
-                    final_resistance.append(level_3)
         
         return final_support, final_resistance
     

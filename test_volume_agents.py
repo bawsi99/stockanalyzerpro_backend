@@ -187,8 +187,8 @@ from agents.volume import VolumeAgentsOrchestrator
             # Check weight is reasonable
             assert 0 < agent_config['weight'] <= 1, f"Invalid weight for {agent_name}: {agent_config['weight']}"
             
-            # Check timeout is reasonable
-            assert agent_config['timeout'] > 0, f"Invalid timeout for {agent_name}: {agent_config['timeout']}"
+            # Check timeout is reasonable (can be None for no timeout)
+            assert agent_config['timeout'] is None or agent_config['timeout'] > 0, f"Invalid timeout for {agent_name}: {agent_config['timeout']}"
             
         print("✅ All agents have proper configuration")
         
