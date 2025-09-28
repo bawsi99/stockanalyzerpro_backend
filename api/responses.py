@@ -96,10 +96,71 @@ class FrontendResponseBuilder:
     """Builds the exact response structure that the frontend expects."""
     
     @staticmethod
+    def _infer_anchor_from_interval(interval: str) -> str:
+        """Map interval string to anchor period used for pivots: 'D','W','M','Q'."""
+        iv = (interval or '').lower()
+        if any(k in iv for k in ['min', 'hour', 'h']):
+            return 'D'  # intraday -> prior day
+        if 'week' in iv or 'w' == iv:
+            return 'M'  # weekly -> prior month
+        if 'month' in iv or 'mo' in iv:
+            return 'Q'  # monthly -> prior quarter (approx via Q)
+        return 'W'  # default daily -> prior week
+    
+    @staticmethod
+    def _get_prior_period_hlc(data: pd.DataFrame, anchor: str) -> tuple[float, float, float] | None:
+        """Compute prior period (by anchor) H/L/C from a DateTime indexed OHLCV DataFrame."""
+        try:
+            if data is None or data.empty or not isinstance(data.index, pd.DatetimeIndex):
+                return None
+            # Build OHLC per anchor
+            ohlc = data[['open','high','low','close']].copy()
+            agg = {
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last'
+            }
+            grouped = ohlc.resample(anchor).agg(agg).dropna()
+            if len(grouped) < 2:
+                return None
+            # prior completed period = second last row
+            prev = grouped.iloc[-2]
+            H, L, C = float(prev['high']), float(prev['low']), float(prev['close'])
+            return (H, L, C)
+        except Exception:
+            return None
+    
+    @staticmethod
+    def _compute_pivots_for_ui(data: pd.DataFrame, interval: str, method: str = 'standard') -> dict:
+        """Compute pivot + S/R using prior period anchor inferred from interval. Returns dict."""
+        try:
+            from ml.indicators.technical_indicators import TechnicalIndicators
+        except Exception:
+            return {}
+        try:
+            anchor = FrontendResponseBuilder._infer_anchor_from_interval(interval)
+            hlc = FrontendResponseBuilder._get_prior_period_hlc(data, anchor)
+            if not hlc:
+                # Fallback: use last bar as period
+                H = float(data['high'].iloc[-1]) if 'high' in data.columns else None
+                L = float(data['low'].iloc[-1]) if 'low' in data.columns else None
+                C = float(data['close'].iloc[-1]) if 'close' in data.columns else None
+            else:
+                H, L, C = hlc
+            if H is None or L is None or C is None:
+                return {}
+            tmp = pd.DataFrame({'open':[C], 'high':[H], 'low':[L], 'close':[C]})
+            piv = TechnicalIndicators.calculate_pivot_points(tmp, method=method)
+            return {k: float(v) for k, v in piv.items() if v is not None}
+        except Exception:
+            return {}
+    
+    @staticmethod
     def build_frontend_response(symbol: str, exchange: str, data: pd.DataFrame, 
-                              indicators: dict, ai_analysis: dict, indicator_summary: str, 
-                              chart_insights: str, chart_paths: dict, sector_context: dict, 
-                              mtf_context: dict, advanced_analysis: dict, ml_predictions: Optional[dict], period: int, interval: str) -> dict:
+                               indicators: dict, ai_analysis: dict, indicator_summary: str, 
+                               chart_insights: str, chart_paths: dict, sector_context: dict, 
+                               mtf_context: dict, advanced_analysis: dict, ml_predictions: Optional[dict], period: int, interval: str) -> dict:
         """
         Build the exact response structure that the frontend expects.
         """
@@ -132,6 +193,30 @@ class FrontendResponseBuilder:
             # Create timestamp once to avoid duplication
             timestamp = datetime.now().isoformat()
             
+            # Pre-compute pivot levels for UI
+            pivots = FrontendResponseBuilder._compute_pivots_for_ui(data, interval, method='standard')
+            pivot_value = float(pivots.get('pivot')) if pivots else None
+            support_ui = []
+            resistance_ui = []
+            if pivots:
+                for k in ['support_1','support_2','support_3']:
+                    if k in pivots and pivots[k] is not None:
+                        support_ui.append(float(pivots[k]))
+                for k in ['resistance_1','resistance_2','resistance_3']:
+                    if k in pivots and pivots[k] is not None:
+                        resistance_ui.append(float(pivots[k]))
+
+            # Pre-compute volume zones (bands) for downstream consumers
+            volume_sr_bands = {"support": [], "resistance": []}
+            try:
+                from agents.volume.support_resistance.processor import SupportResistanceProcessor
+                _vz_proc = SupportResistanceProcessor()
+                _vz = _vz_proc.extract_volume_bands(data, top_n=3)
+                if isinstance(_vz, dict):
+                    volume_sr_bands = _vz
+            except Exception:
+                pass
+
             # Build basic response structure
             result = {
                 "success": True,
@@ -203,8 +288,12 @@ class FrontendResponseBuilder:
                         ai_analysis.get('medium_term', {}),
                         ai_analysis.get('long_term', {})
                     ),
-                    "support_levels": FrontendResponseBuilder._extract_support_levels(data, indicators, latest_price),
-                    "resistance_levels": FrontendResponseBuilder._extract_resistance_levels(data, indicators, latest_price),
+                    # Pivot-based numeric levels for UI
+                    "pivot": float(pivot_value) if pivot_value is not None else None,
+                    "support_levels": support_ui,
+                    "resistance_levels": resistance_ui,
+                    # Bands for internal/agent use
+                    "volume_sr_bands": volume_sr_bands,
                     "triangle_patterns": [],
                     "flag_patterns": [],
                     "volume_anomalies_detailed": [],
@@ -1341,13 +1430,39 @@ class FrontendResponseBuilder:
             merged_advanced = cleaned_advanced
 
             # Ensure the structure matches frontend expectations
+            sr_overlay = overlays.get("support_resistance", {}) if isinstance(overlays, dict) else {}
+            support_list = sr_overlay.get("support", []) or []
+            resistance_list = sr_overlay.get("resistance", []) or []
+            # If SR lines are empty, synthesize from pivot arrays (UI depends on overlays for tech tab)
+            if (not support_list) or (not resistance_list):
+                piv = FrontendResponseBuilder._compute_pivots_for_ui(data, interval, method='standard')
+                if piv:
+                    sup = []
+                    res = []
+                    for k in ["support_1","support_2","support_3"]:
+                        if k in piv and piv[k] is not None:
+                            try:
+                                sup.append({"level": float(piv[k]), "source": "pivot"})
+                            except Exception:
+                                pass
+                    for k in ["resistance_1","resistance_2","resistance_3"]:
+                        if k in piv and piv[k] is not None:
+                            try:
+                                res.append({"level": float(piv[k]), "source": "pivot"})
+                            except Exception:
+                                pass
+                    if sup or res:
+                        support_list = sup
+                        resistance_list = res
+
             return {
                 "triangles": overlays.get("triangles", []),
                 "flags": overlays.get("flags", []),
                 "support_resistance": {
-                    "support": overlays.get("support_resistance", {}).get("support", []),
-                    "resistance": overlays.get("support_resistance", {}).get("resistance", [])
+                    "support": support_list,
+                    "resistance": resistance_list
                 },
+                "volume_zones": overlays.get("volume_zones", {"support": [], "resistance": []}),
                 "double_tops": overlays.get("double_tops", []),
                 "double_bottoms": overlays.get("double_bottoms", []),
                 "divergences": overlays.get("divergences", []),

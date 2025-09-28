@@ -217,41 +217,90 @@ class TechnicalOverviewProcessor:
             "momentum_alignment": momentum_alignment
         }
     
+    def _compute_pivots_anchored(self, stock_data: pd.DataFrame, anchor: str = 'W', method: str = 'standard') -> Dict[str, float]:
+        """Compute pivot + S/R anchored to prior completed period of the given anchor.
+        Default anchor 'W' = prior week H/L/C for daily charts."""
+        try:
+            from ml.indicators.technical_indicators import TechnicalIndicators
+        except Exception:
+            return {}
+        try:
+            if stock_data is None or stock_data.empty or not isinstance(stock_data.index, pd.DatetimeIndex):
+                return {}
+            ohlc = stock_data[['open','high','low','close']].copy()
+            grouped = ohlc.resample(anchor).agg({'open':'first','high':'max','low':'min','close':'last'}).dropna()
+            if len(grouped) < 2:
+                # fallback to last bar
+                H = float(stock_data['high'].iloc[-1])
+                L = float(stock_data['low'].iloc[-1])
+                C = float(stock_data['close'].iloc[-1])
+            else:
+                prev = grouped.iloc[-2]
+                H, L, C = float(prev['high']), float(prev['low']), float(prev['close'])
+            tmp = pd.DataFrame({'open':[C],'high':[H],'low':[L],'close':[C]})
+            piv = TechnicalIndicators.calculate_pivot_points(tmp, method=method)
+            return {k: float(v) for k, v in piv.items() if v is not None}
+        except Exception:
+            return {}
+
     def _analyze_support_resistance(self, stock_data: pd.DataFrame) -> Dict[str, Any]:
-        """Identify key support and resistance levels"""
-        highs = stock_data['high'].values
-        lows = stock_data['low'].values
-        
-        # Find recent significant levels
-        window = min(10, len(highs) // 4)
-        
+        """Identify key support and resistance levels using Pivot Points.
+        Adds optional confluence if pivot levels fall within volume-based bands."""
+        # 1) Compute pivot-based levels (weekly anchor by default for daily charts)
+        piv = self._compute_pivots_anchored(stock_data, anchor='W', method='standard')
         support_levels = []
         resistance_levels = []
+        pivot_val = None
+        if piv:
+            pivot_val = float(piv.get('pivot')) if 'pivot' in piv else None
+            for k in ['support_1','support_2','support_3']:
+                if k in piv:
+                    support_levels.append(round(float(piv[k]), 2))
+            for k in ['resistance_1','resistance_2','resistance_3']:
+                if k in piv:
+                    resistance_levels.append(round(float(piv[k]), 2))
         
-        # Find local maxima (resistance)
-        for i in range(window, len(highs) - window):
-            if highs[i] == np.max(highs[i-window:i+window+1]):
-                resistance_levels.append(round(highs[i], 2))
-        
-        # Find local minima (support) 
-        for i in range(window, len(lows) - window):
-            if lows[i] == np.min(lows[i-window:i+window+1]):
-                support_levels.append(round(lows[i], 2))
-        
-        # Keep most significant levels
-        resistance_levels = sorted(list(set(resistance_levels)), reverse=True)[:3]
-        support_levels = sorted(list(set(support_levels)), reverse=True)[:3]
-        
-        # Assess strength based on number of touches
+        # Basic strength classification
         support_strength = "strong" if len(support_levels) >= 2 else "medium" if len(support_levels) == 1 else "weak"
         resistance_strength = "strong" if len(resistance_levels) >= 2 else "medium" if len(resistance_levels) == 1 else "weak"
         
-        return {
+        # 2) Optional confluence: check against volume bands
+        confluence = {"support": [], "resistance": []}
+        try:
+            from agents.volume.support_resistance.processor import SupportResistanceProcessor
+            vz_proc = SupportResistanceProcessor()
+            bands = vz_proc.extract_volume_bands(stock_data, top_n=3)
+            sup_bands = bands.get('support', []) if isinstance(bands, dict) else []
+            res_bands = bands.get('resistance', []) if isinstance(bands, dict) else []
+            # helper
+            def within_any_band(level: float, arr: List[Dict[str, Any]]):
+                for b in arr:
+                    try:
+                        if float(b.get('low')) <= level <= float(b.get('high')):
+                            return True, {"low": round(float(b.get('low')),2), "high": round(float(b.get('high')),2), "reliability": b.get('reliability')}
+                    except Exception:
+                        continue
+                return False, None
+            for lv in support_levels:
+                w, meta = within_any_band(lv, sup_bands)
+                confluence['support'].append({"level": lv, "volume_confluence": bool(w), "band": meta})
+            for lv in resistance_levels:
+                w, meta = within_any_band(lv, res_bands)
+                confluence['resistance'].append({"level": lv, "volume_confluence": bool(w), "band": meta})
+        except Exception:
+            pass
+        
+        result = {
+            "pivot": round(pivot_val, 2) if pivot_val is not None else None,
             "key_support_levels": support_levels,
             "key_resistance_levels": resistance_levels,
             "support_strength": support_strength,
-            "resistance_strength": resistance_strength
+            "resistance_strength": resistance_strength,
         }
+        # Only add confluence if we computed it
+        if confluence['support'] or confluence['resistance']:
+            result['confluence'] = confluence
+        return result
     
     def _assess_risk(self, stock_data: pd.DataFrame, indicators: Dict[str, Any]) -> Dict[str, Any]:
         """Assess overall risk levels"""

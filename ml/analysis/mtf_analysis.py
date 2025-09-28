@@ -391,13 +391,68 @@ class EnhancedMultiTimeframeAnalyzer:
         
         return signals
     
-    def calculate_support_resistance(self, data: pd.DataFrame) -> Tuple[List[float], List[float]]:
-        """Calculate support and resistance levels."""
+    def _infer_anchor_from_tf_interval(self, interval: str) -> str:
+        """Map Zerodha interval to resample anchor for prior-period pivots."""
+        iv = (interval or '').lower()
+        if 'minute' in iv or 'hour' in iv:
+            return 'D'  # intraday -> prior day
+        if 'day' in iv:
+            return 'W'  # daily -> prior week
+        if 'week' in iv:
+            return 'M'  # weekly -> prior month
+        if 'month' in iv:
+            return 'Q'  # monthly -> prior quarter (approx)
+        return 'W'
+
+    def _get_prior_period_hlc(self, data: pd.DataFrame, anchor: str) -> Optional[Tuple[float, float, float]]:
         try:
-            support, resistance = self.technical_indicators.detect_support_resistance(data)
-            return support, resistance
+            if data is None or data.empty or not isinstance(data.index, pd.DatetimeIndex):
+                return None
+            ohlc = data[['open','high','low','close']].copy()
+            grouped = ohlc.resample(anchor).agg({'open':'first','high':'max','low':'min','close':'last'}).dropna()
+            if len(grouped) < 2:
+                return None
+            prev = grouped.iloc[-2]
+            return float(prev['high']), float(prev['low']), float(prev['close'])
+        except Exception:
+            return None
+
+    def _compute_pivots_for_timeframe(self, data: pd.DataFrame, tf_interval: str, method: str = 'standard') -> Dict[str, float]:
+        try:
+            anchor = self._infer_anchor_from_tf_interval(tf_interval)
+            hlc = self._get_prior_period_hlc(data, anchor)
+            if not hlc:
+                H = float(data['high'].iloc[-1]) if 'high' in data.columns else None
+                L = float(data['low'].iloc[-1]) if 'low' in data.columns else None
+                C = float(data['close'].iloc[-1]) if 'close' in data.columns else None
+            else:
+                H, L, C = hlc
+            if H is None or L is None or C is None:
+                return {}
+            tmp = pd.DataFrame({'open':[C], 'high':[H], 'low':[L], 'close':[C]})
+            piv = TechnicalIndicators.calculate_pivot_points(tmp, method=method)
+            return {k: float(v) for k, v in piv.items() if v is not None}
+        except Exception:
+            return {}
+
+    def calculate_support_resistance(self, data: pd.DataFrame, timeframe: str) -> Tuple[List[float], List[float]]:
+        """Calculate support and resistance levels using pivot points for the given timeframe."""
+        try:
+            tf_interval = self.timeframe_configs.get(timeframe).interval if timeframe in self.timeframe_configs else 'day'
+            piv = self._compute_pivots_for_timeframe(data, tf_interval, method='standard')
+            if not piv:
+                return [], []
+            supports = []
+            resistances = []
+            for k in ['support_1','support_2','support_3','support_4']:
+                if k in piv:
+                    supports.append(float(piv[k]))
+            for k in ['resistance_1','resistance_2','resistance_3','resistance_4']:
+                if k in piv:
+                    resistances.append(float(piv[k]))
+            return supports, resistances
         except Exception as e:
-            logger.error(f"Error calculating support/resistance: {e}")
+            logger.error(f"Error calculating support/resistance (pivots) for {timeframe}: {e}")
             return [], []
     
     def detect_patterns(self, data: pd.DataFrame) -> Dict[str, Any]:
@@ -443,8 +498,8 @@ class EnhancedMultiTimeframeAnalyzer:
             # Generate signals
             signals = self.generate_timeframe_signals(indicators, timeframe)
             
-            # Calculate support/resistance
-            support_levels, resistance_levels = self.calculate_support_resistance(data)
+            # Calculate support/resistance using pivots for this timeframe
+            support_levels, resistance_levels = self.calculate_support_resistance(data, timeframe)
             
             # Detect patterns
             patterns = self.detect_patterns(data)

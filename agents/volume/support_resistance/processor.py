@@ -703,6 +703,159 @@ class SupportResistanceProcessor:
         except Exception as e:
             return {'error': f"Trading implications generation failed: {str(e)}"}
     
+    def extract_volume_bands(self, data: pd.DataFrame, top_n: int = 3) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Build volume-based support/resistance bands from validated levels and VAP bins.
+        Returns { 'support': [...], 'resistance': [...] } with entries including
+        low, high, center, reliability, success_rate, total_tests, volume_strength.
+        """
+        try:
+            results = self.process_support_resistance_data(data)
+            if 'error' in results:
+                return {'support': [], 'resistance': []}
+            validated_levels = results.get('validated_levels', []) or []
+            vap = results.get('volume_at_price_analysis', {}) or {}
+            volume_profile = vap.get('volume_profile', []) or []
+
+            # Helper to find the bin range containing a price
+            def find_bin_range(price: float) -> Tuple[float, float]:
+                for lvl in volume_profile:
+                    pr = lvl.get('price_range') or [None, None]
+                    if pr and pr[0] is not None and pr[1] is not None:
+                        if pr[0] <= price <= pr[1]:
+                            return float(pr[0]), float(pr[1])
+                # Fallback: build a small ATR-like band if no exact bin found
+                try:
+                    current_price = float(data['close'].iloc[-1])
+                    width = max(0.005 * current_price, 0.005 * price)  # ~0.5%
+                except Exception:
+                    width = 0.005 * price if price else 0.0
+                return float(price - width), float(price + width)
+
+            # Ranking key for reliability
+            def reliability_rank(rel: str) -> int:
+                order = {'very_high': 5, 'high': 4, 'medium': 3, 'low': 2, 'very_low': 1}
+                return order.get(str(rel), 0)
+
+            supports: List[Dict[str, Any]] = []
+            resistances: List[Dict[str, Any]] = []
+            for lvl in validated_levels:
+                price = float(lvl.get('price', 0.0) or 0.0)
+                ltype = str(lvl.get('type', 'unknown'))
+                low, high = find_bin_range(price)
+                band = {
+                    'low': float(low),
+                    'high': float(high),
+                    'center': price,
+                    'reliability': lvl.get('reliability'),
+                    'success_rate': float(lvl.get('success_rate') or 0.0),
+                    'total_tests': int(lvl.get('total_tests') or 0),
+                    'volume_strength': self._classify_volume_strength(float(lvl.get('volume') or 0.0))
+                }
+                if ltype in ('support', 'both'):
+                    supports.append(band)
+                if ltype in ('resistance', 'both'):
+                    resistances.append(band)
+
+            # Ensure reasonable band width bounds (min 0.5% / max 2.0% around center)
+            def normalize_width(b: Dict[str, Any]) -> Dict[str, Any]:
+                c = float(b['center'])
+                if c <= 0:
+                    return b
+                min_w = 0.005 * c
+                max_w = 0.02 * c
+                low, high = float(b['low']), float(b['high'])
+                width = max(0.0, high - low)
+                if width < min_w:
+                    pad = (min_w - width) / 2.0
+                    low, high = c - (width/2 + pad), c + (width/2 + pad)
+                elif width > max_w:
+                    # shrink symmetrically around center
+                    low, high = c - max_w/2.0, c + max_w/2.0
+                b['low'], b['high'] = float(low), float(high)
+                return b
+
+            supports = [normalize_width(b) for b in supports]
+            resistances = [normalize_width(b) for b in resistances]
+
+            # Sort by reliability, then success_rate, then total_tests
+            supports.sort(key=lambda b: (reliability_rank(b['reliability']), b['success_rate'], b['total_tests']), reverse=True)
+            resistances.sort(key=lambda b: (reliability_rank(b['reliability']), b['success_rate'], b['total_tests']), reverse=True)
+
+            # Fallback: if very few validated bands, derive from VAP significant levels
+            need_sup = max(0, top_n - len(supports))
+            need_res = max(0, top_n - len(resistances))
+            if (need_sup > 0 or need_res > 0) and volume_profile:
+                try:
+                    # Use significant levels if available, otherwise top volume nodes
+                    # significant_volume_levels were computed in _calculate_volume_at_price
+                    sig_levels = vap.get('significant_volume_levels', []) or []
+                    if not sig_levels:
+                        # Build minimal proxy from highest volume bins
+                        sig_levels = sorted(volume_profile, key=lambda x: x.get('volume', 0), reverse=True)[:top_n*2]
+                    current_price = float(data['close'].iloc[-1]) if len(data) > 0 else 0.0
+
+                    def band_from_level(lvl: Dict[str, Any]) -> Dict[str, Any]:
+                        pr = lvl.get('price_range') or [None, None]
+                        low = float(pr[0]) if pr and pr[0] is not None else float(lvl.get('price_level') or 0.0)
+                        high = float(pr[1]) if pr and pr[1] is not None else float(lvl.get('price_level') or 0.0)
+                        center = float(lvl.get('price_level') or (low + high) / 2.0)
+                        return {
+                            'low': low,
+                            'high': high if high >= low else low,
+                            'center': center,
+                            'reliability': 'low',
+                            'success_rate': 0.0,
+                            'total_tests': 0,
+                            'volume_strength': self._classify_volume_strength(float(lvl.get('volume') or 0.0))
+                        }
+
+                    # Fill supports
+                    if need_sup > 0:
+                        candidates = [band_from_level(l) for l in sig_levels if float(l.get('price_level') or 0.0) < current_price]
+                        # Normalize widths
+                        candidates = [normalize_width(b) for b in candidates]
+                        # De-dup close centers
+                        def unique_by_center(arr):
+                            seen = set()
+                            out = []
+                            for b in arr:
+                                key = round(b['center'], 4)
+                                if key in seen:
+                                    continue
+                                seen.add(key)
+                                out.append(b)
+                            return out
+                        candidates = unique_by_center(candidates)
+                        supports.extend(candidates[:need_sup])
+
+                    # Fill resistances
+                    if need_res > 0:
+                        candidates = [band_from_level(l) for l in sig_levels if float(l.get('price_level') or 0.0) > current_price]
+                        candidates = [normalize_width(b) for b in candidates]
+                        def unique_by_center(arr):
+                            seen = set()
+                            out = []
+                            for b in arr:
+                                key = round(b['center'], 4)
+                                if key in seen:
+                                    continue
+                                seen.add(key)
+                                out.append(b)
+                            return out
+                        candidates = unique_by_center(candidates)
+                        resistances.extend(candidates[:need_res])
+
+                except Exception:
+                    pass
+
+            return {
+                'support': supports[:max(1, top_n)],
+                'resistance': resistances[:max(1, top_n)]
+            }
+        except Exception as e:
+            return {'support': [], 'resistance': [], 'error': f'volume_bands_failed: {e}'}
+
     def _assess_analysis_quality(self, validated_levels: List[Dict[str, Any]], 
                                vap_analysis: Dict[str, Any]) -> Dict[str, Any]:
         """Assess overall analysis quality"""
@@ -884,6 +1037,15 @@ def test_support_resistance_processor():
     if 'error' in results:
         print(f"❌ Analysis failed: {results['error']}")
         return False
+
+    # Extract volume bands for smoke test
+    bands = processor.extract_volume_bands(test_data, top_n=3)
+    print("\n🟦 Volume S/R Bands (top 3 per side):")
+    for side in ("support","resistance"):
+        arr = bands.get(side, []) if isinstance(bands, dict) else []
+        print(f"  {side.title()}:")
+        for b in arr:
+            print(f"    {b['reliability'] or 'n/a'} band: [{b['low']:.2f}, {b['high']:.2f}] (center {b['center']:.2f})")
     
     print("✅ Analysis completed successfully")
     

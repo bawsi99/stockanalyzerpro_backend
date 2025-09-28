@@ -315,18 +315,32 @@ class IndicatorAgentIntegrationManager:
                         "conflict_list": ["Mixed consensus across indicator agents"]
                     })
 
-            # Critical levels: best-effort support/resistance via TechnicalIndicators if stock_data available
+            # Critical levels: prefer VOLUME ZONES (bands) from volume-based S/R
             critical_levels = {}
             try:
                 if stock_data is not None and not stock_data.empty:
-                    support_levels, resistance_levels = TechnicalIndicators.detect_support_resistance(stock_data)
-                    # Deduplicate and round
-                    if support_levels:
-                        sl = sorted(set(float(x) for x in support_levels), reverse=True)
-                        critical_levels["support"] = [round(v, 2) for v in sl[:3]]
-                    if resistance_levels:
-                        rl = sorted(set(float(x) for x in resistance_levels))
-                        critical_levels["resistance"] = [round(v, 2) for v in rl[:3]]
+                    try:
+                        from agents.volume.support_resistance.processor import SupportResistanceProcessor
+                        _vz_proc = SupportResistanceProcessor()
+                        _vz = _vz_proc.extract_volume_bands(stock_data, top_n=3)
+                    except Exception:
+                        _vz = {"support": [], "resistance": []}
+                    # Attach bands directly
+                    critical_levels["volume_bands"] = {
+                        "support": _vz.get("support", []),
+                        "resistance": _vz.get("resistance", [])
+                    }
+                    # Also provide numeric centers as a lightweight compatibility field
+                    def centers(arr):
+                        out = []
+                        for b in (arr or []):
+                            try:
+                                out.append(round(float(b.get("center")), 2))
+                            except Exception:
+                                continue
+                        return out
+                    critical_levels["support"] = centers(_vz.get("support"))
+                    critical_levels["resistance"] = centers(_vz.get("resistance"))
             except Exception as _e:
                 # Non-fatal; leave levels empty
                 pass
@@ -459,18 +473,32 @@ class IndicatorAgentIntegrationManager:
                     except:
                         pass
             
-            # Critical levels using TechnicalIndicators
+            # Critical levels using VOLUME ZONES (bands)
             critical_levels = {}
             try:
                 if stock_data is not None and not stock_data.empty:
-                    support_levels, resistance_levels = TechnicalIndicators.detect_support_resistance(stock_data)
-                    if support_levels:
-                        sl = sorted(set(float(x) for x in support_levels), reverse=True)
-                        critical_levels["support"] = [round(v, 2) for v in sl[:3]]
-                    if resistance_levels:
-                        rl = sorted(set(float(x) for x in resistance_levels))
-                        critical_levels["resistance"] = [round(v, 2) for v in rl[:3]]
-            except:
+                    try:
+                        from agents.volume.support_resistance.processor import SupportResistanceProcessor
+                        _vz_proc = SupportResistanceProcessor()
+                        _vz = _vz_proc.extract_volume_bands(stock_data, top_n=3)
+                    except Exception:
+                        _vz = {"support": [], "resistance": []}
+                    critical_levels["volume_bands"] = {
+                        "support": _vz.get("support", []),
+                        "resistance": _vz.get("resistance", [])
+                    }
+                    # Provide numeric centers for compatibility
+                    def centers(arr):
+                        out = []
+                        for b in (arr or []):
+                            try:
+                                out.append(round(float(b.get("center")), 2))
+                            except Exception:
+                                continue
+                        return out
+                    critical_levels["support"] = centers(_vz.get("support"))
+                    critical_levels["resistance"] = centers(_vz.get("resistance"))
+            except Exception:
                 pass
             
             return {

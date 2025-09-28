@@ -31,6 +31,96 @@ class VolumeConfirmationProcessor:
     def __init__(self):
         self.min_data_points = 20  # Minimum data points for reliable analysis
         
+    def _extract_volume_bands(self, data: pd.DataFrame, top_n: int = 3) -> Dict[str, List[Dict[str, Any]]]:
+        """Wrapper to get volume S/R bands from the shared SupportResistanceProcessor."""
+        try:
+            from agents.volume.support_resistance.processor import SupportResistanceProcessor
+            vz = SupportResistanceProcessor().extract_volume_bands(data, top_n=top_n)
+            if isinstance(vz, dict):
+                return {
+                    'support': vz.get('support', []),
+                    'resistance': vz.get('resistance', [])
+                }
+        except Exception:
+            pass
+        return {'support': [], 'resistance': []}
+
+    def analyze_sr_band_confirmations(self, data: pd.DataFrame, volume_ratio_threshold: float = 1.5) -> List[Dict[str, Any]]:
+        """
+        Detect confirmations using volume-based S/R bands.
+        Rules:
+        - Near-support confirmation: current close inside any support band and volume ratio > threshold
+        - Breakout confirmation: close crosses above a resistance band high with volume ratio > threshold
+        - (Optional) Breakdown: close crosses below a support band low with volume ratio > threshold
+        """
+        events: List[Dict[str, Any]] = []
+        if len(data) < max(self.min_data_points, 21):
+            return events
+        try:
+            bands = self._extract_volume_bands(data, top_n=3)
+            sup_bands = bands.get('support', [])
+            res_bands = bands.get('resistance', [])
+            close = data['close']
+            vol = data['volume']
+            vol_ma20 = vol.rolling(20).mean()
+            if vol_ma20.iloc[-1] and vol_ma20.iloc[-1] > 0:
+                vol_ratio = float(vol.iloc[-1] / vol_ma20.iloc[-1])
+            else:
+                vol_ratio = 1.0
+            c0 = float(close.iloc[-2]) if len(close) > 1 else float(close.iloc[-1])
+            c1 = float(close.iloc[-1])
+            date = data.index[-1].strftime('%Y-%m-%d')
+
+            # Near-support confirmation
+            for b in sup_bands:
+                try:
+                    low = float(b.get('low')); high = float(b.get('high'))
+                    if low <= c1 <= high and vol_ratio >= volume_ratio_threshold:
+                        events.append({
+                            'date': date,
+                            'type': 'near_support_confirmed',
+                            'band': {'low': low, 'high': high, 'center': float(b.get('center')), 'reliability': b.get('reliability')},
+                            'volume_ratio': round(vol_ratio, 2)
+                        })
+                        break
+                except Exception:
+                    continue
+
+            # Breakout above resistance
+            for b in res_bands:
+                try:
+                    high_edge = float(b.get('high'))
+                    # Cross above: yesterday at/below, today above
+                    if c0 <= high_edge and c1 > high_edge and vol_ratio >= volume_ratio_threshold:
+                        events.append({
+                            'date': date,
+                            'type': 'resistance_breakout_confirmed',
+                            'band': {'low': float(b.get('low')), 'high': high_edge, 'center': float(b.get('center')), 'reliability': b.get('reliability')},
+                            'volume_ratio': round(vol_ratio, 2)
+                        })
+                        break
+                except Exception:
+                    continue
+
+            # Breakdown below support (optional symmetrical rule)
+            for b in sup_bands:
+                try:
+                    low_edge = float(b.get('low'))
+                    if c0 >= low_edge and c1 < low_edge and vol_ratio >= volume_ratio_threshold:
+                        events.append({
+                            'date': date,
+                            'type': 'support_breakdown_confirmed',
+                            'band': {'low': low_edge, 'high': float(b.get('high')), 'center': float(b.get('center')), 'reliability': b.get('reliability')},
+                            'volume_ratio': round(vol_ratio, 2)
+                        })
+                        break
+                except Exception:
+                    continue
+
+            return events
+        except Exception:
+            return events
+
     def calculate_price_volume_correlation(self, data: pd.DataFrame, window: int = 30) -> Dict[str, Any]:
         """
         Calculate price-volume correlation metrics
@@ -266,6 +356,9 @@ class VolumeConfirmationProcessor:
             trend_support = self.analyze_trend_support(data)
             volume_averages = self.calculate_volume_moving_averages(data)
             
+            # Band-based confirmations
+            sr_band_confirmations = self.analyze_sr_band_confirmations(data, volume_ratio_threshold=1.5)
+
             # Overall assessment
             overall_assessment = self._determine_overall_assessment(
                 correlation_analysis, recent_confirmations, trend_support
@@ -279,6 +372,7 @@ class VolumeConfirmationProcessor:
                 "recent_movements": recent_confirmations,
                 "trend_support": trend_support,
                 "volume_averages": volume_averages,
+                "sr_band_confirmations": sr_band_confirmations,
                 "overall_assessment": overall_assessment,
                 "data_quality": "excellent" if len(data) > 60 else "good" if len(data) > 30 else "limited"
             }
