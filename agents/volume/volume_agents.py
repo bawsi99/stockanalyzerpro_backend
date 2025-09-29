@@ -2799,7 +2799,7 @@ class VolumeAgentIntegrationManager:
             try:
                 # Add timeout protection for the entire orchestrator operation
                 import asyncio
-                timeout_seconds = 300  # 5 minutes timeout for volume agents analysis (no individual timeouts)
+                timeout_seconds = 200  # 200 seconds timeout for volume agents analysis (no individual timeouts)
                 
                 result = await asyncio.wait_for(
                     self.orchestrator.analyze_stock_volume_comprehensive(stock_data, symbol, indicators),

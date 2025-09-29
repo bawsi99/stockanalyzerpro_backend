@@ -883,7 +883,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 raise
 
         # Create tasks with logging + timeouts
-        volume_task = asyncio.create_task(_with_logging("volume_agents", _call_volume_agents(), timeout=300.0))
+        volume_task = asyncio.create_task(_with_logging("volume_agents", _call_volume_agents(), timeout=200.0))
 
         # MTF analysis
         async def _mtf():
