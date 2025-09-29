@@ -62,7 +62,8 @@ class CrossTimeframeValidation:
     divergence_detected: bool
     divergence_type: Optional[str]
     key_conflicts: List[str]
-    confidence_score: float 
+    confidence_score: float
+    conflict_severity: str = "None"
 
 class EnhancedMultiTimeframeAnalyzer:
     """
@@ -579,7 +580,8 @@ class EnhancedMultiTimeframeAnalyzer:
                 divergence_detected=False,
                 divergence_type=None,
                 key_conflicts=[],
-                confidence_score=0.0
+                confidence_score=0.0,
+                conflict_severity="None"
             )
         
         # Collect trends and weights
@@ -644,13 +646,20 @@ class EnhancedMultiTimeframeAnalyzer:
                     divergence_detected = True
                     divergence_type = 'bullish_divergence'
         
-        # Identify key conflicts
+        # Identify key conflicts and calculate conflict severity
         key_conflicts = []
+        total_conflict_weight = 0.0
+        
         if conflicting_timeframes:
             for tf in conflicting_timeframes:
                 config = self.timeframe_configs[tf]
-                if trends[tf]['weight'] > 0.1:  # Only significant conflicts
-                    key_conflicts.append(f"{tf} ({config.description}): {trends[tf]['trend']}")
+                tf_weight = trends[tf]['weight']
+                total_conflict_weight += tf_weight
+                # Include all conflicts but note their weight for transparency
+                key_conflicts.append(f"{tf} ({config.description}): {trends[tf]['trend']} [weight: {tf_weight:.3f}]")
+        
+        # Calculate conflict severity score based on total conflict weight
+        conflict_severity = self._calculate_conflict_severity(total_conflict_weight, total_weight)
         
         # Calculate overall confidence score
         confidence_score = signal_strength * (len(supporting_timeframes) / len(timeframe_analyses))
@@ -664,7 +673,8 @@ class EnhancedMultiTimeframeAnalyzer:
             divergence_detected=divergence_detected,
             divergence_type=divergence_type,
             key_conflicts=key_conflicts,
-            confidence_score=confidence_score
+            confidence_score=confidence_score,
+            conflict_severity=conflict_severity
         )
     
     async def comprehensive_mtf_analysis(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
@@ -718,7 +728,8 @@ class EnhancedMultiTimeframeAnalyzer:
                     'neutral_timeframes': validation.neutral_timeframes,
                     'divergence_detected': validation.divergence_detected,
                     'divergence_type': validation.divergence_type,
-                    'key_conflicts': validation.key_conflicts
+                    'key_conflicts': validation.key_conflicts,
+                    'conflict_severity': validation.conflict_severity
                 },
                 'summary': {
                     'overall_signal': validation.consensus_trend,
@@ -738,6 +749,28 @@ class EnhancedMultiTimeframeAnalyzer:
                 'error': str(e),
                 'success': False
             }
+    
+    def _calculate_conflict_severity(self, total_conflict_weight: float, total_weight: float) -> str:
+        """Calculate conflict severity based on weighted conflict score."""
+        if total_weight == 0 or total_conflict_weight == 0:
+            return "None"
+        
+        # Calculate conflict ratio (0.0 to 1.0)
+        conflict_ratio = total_conflict_weight / total_weight
+        
+        # Map conflict ratio to severity levels
+        if conflict_ratio >= 0.6:
+            return "Very High"
+        elif conflict_ratio >= 0.4:
+            return "High"
+        elif conflict_ratio >= 0.25:
+            return "Medium"
+        elif conflict_ratio >= 0.1:
+            return "Low"
+        elif conflict_ratio >= 0.05:
+            return "Very Low"
+        else:
+            return "Insignificant"
     
     def calculate_signal_quality(self, analysis) -> float:
         """Calculate signal quality score for dynamic weighting."""
