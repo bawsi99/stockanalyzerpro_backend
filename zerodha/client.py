@@ -487,6 +487,7 @@ class ZerodhaDataClient:
             df = pd.DataFrame(instruments)
 
             # Save new CSV
+            os.makedirs(os.path.dirname(csv_path), exist_ok=True)
             if os.path.exists(csv_path):
                 os.remove(csv_path)
             df.to_csv(csv_path, index=False)

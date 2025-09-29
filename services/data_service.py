@@ -31,6 +31,11 @@ try:
 except ImportError:
     pass
 
+# Shared path for Zerodha instruments CSV used by services and clients
+INSTRUMENTS_CSV_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'zerodha_instruments.csv'
+)
+
 try:
     import msgpack
     MSGPACK_AVAILABLE = True
@@ -692,7 +697,7 @@ async def ws_stream(websocket: WebSocket):
                             if symbols:
                                 try:
                                     # Read directly from CSV file to avoid authentication issues
-                                    df = pd.read_csv('zerodha_instruments.csv')
+                                    df = pd.read_csv(INSTRUMENTS_CSV_PATH)
                                     for symbol in symbols:
                                         instrument = df[(df['tradingsymbol'] == symbol) & (df['exchange'] == 'NSE')]
                                         if len(instrument) > 0:
@@ -749,7 +754,7 @@ async def ws_stream(websocket: WebSocket):
                             if symbols:
                                 try:
                                     # Read directly from CSV file to avoid authentication issues
-                                    df = pd.read_csv('zerodha_instruments.csv')
+                                    df = pd.read_csv(INSTRUMENTS_CSV_PATH)
                                     for symbol in symbols:
                                         instrument = df[(df['tradingsymbol'] == symbol) & (df['exchange'] == 'NSE')]
                                         if len(instrument) > 0:
@@ -1281,7 +1286,7 @@ async def symbol_to_token(symbol: str, exchange: str = "NSE"):
     """Get token for a given symbol."""
     try:
         # Read directly from CSV file to avoid authentication issues
-        df = pd.read_csv('zerodha_instruments.csv')
+        df = pd.read_csv(INSTRUMENTS_CSV_PATH)
         instrument = df[(df['tradingsymbol'] == symbol) & (df['exchange'] == exchange)]
         
         if len(instrument) > 0:
