@@ -146,23 +146,25 @@ class MTFAgentsOrchestrator:
         self.position_processor = PositionMTFProcessor()
         
         # Agent configuration
+        # NOTE: Placeholder agents (intraday, swing, position) are currently DISABLED
+        # as they are not yet integrated. Only core MTF processor is being used.
         self.agent_config = {
             'intraday': {
-                'enabled': True,
+                'enabled': False,  # DISABLED - placeholder not integrated
                 'weight': 0.25,
                 'timeout': 120.0,
                 'processor': self.intraday_processor,
                 'description': 'Intraday scalping and short-term trading analysis'
             },
             'swing': {
-                'enabled': True,
+                'enabled': False,  # DISABLED - placeholder not integrated
                 'weight': 0.35,
                 'timeout': 150.0,
                 'processor': self.swing_processor,
                 'description': 'Medium-term swing trading analysis'
             },
             'position': {
-                'enabled': True,
+                'enabled': False,  # DISABLED - placeholder not integrated
                 'weight': 0.40,
                 'timeout': 180.0,
                 'processor': self.position_processor,
@@ -170,7 +172,7 @@ class MTFAgentsOrchestrator:
             }
         }
         
-        logger.info("MTFAgentsOrchestrator initialized with core processor and 3 specialized agents")
+        logger.info("MTFAgentsOrchestrator initialized with core processor (specialized agents disabled)")
     
     async def analyze_comprehensive_mtf(
         self, 

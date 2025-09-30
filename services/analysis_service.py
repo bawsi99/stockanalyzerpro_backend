@@ -885,16 +885,48 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         # Create tasks with logging + timeouts
         volume_task = asyncio.create_task(_with_logging("volume_agents", _call_volume_agents(), timeout=200.0))
 
-        # MTF analysis
+        # MTF analysis with LLM agent
         async def _mtf():
             try:
+                print(f"[MTF_DEBUG] Starting MTF analysis for {request.stock}...")
+                
+                # Step 1: Get technical MTF analysis
                 from agents.mtf_analysis import mtf_agent_integration_manager
-                success, res = await mtf_agent_integration_manager.get_comprehensive_mtf_analysis(
+                success, mtf_technical = await mtf_agent_integration_manager.get_comprehensive_mtf_analysis(
                     symbol=request.stock, exchange=request.exchange
                 )
-                return res if success and isinstance(res, dict) else {}
+                print(f"[MTF_DEBUG] MTF technical analysis complete for {request.stock}. Success: {success}")
+                
+                if not success or not isinstance(mtf_technical, dict):
+                    print(f"[MTF_DEBUG] MTF technical analysis failed, returning empty")
+                    return {}
+                
+                # Step 2: Send MTF results to LLM agent for natural language analysis
+                print(f"[MTF_DEBUG] Calling MTF LLM agent for {request.stock}...")
+                from agents.mtf_analysis.mtf_llm_agent import mtf_llm_agent
+                llm_success, mtf_llm_analysis = await mtf_llm_agent.analyze_mtf_with_llm(
+                    symbol=request.stock,
+                    exchange=request.exchange,
+                    mtf_analysis=mtf_technical,
+                    context=""
+                )
+                print(f"[MTF_DEBUG] MTF LLM analysis complete for {request.stock}. Success: {llm_success}")
+                
+                # Step 3: Combine technical and LLM analysis
+                combined_mtf = mtf_technical.copy()
+                if llm_success and isinstance(mtf_llm_analysis, dict):
+                    combined_mtf['llm_insights'] = mtf_llm_analysis
+                    print(f"[MTF_DEBUG] MTF LLM insights added to result for {request.stock}")
+                else:
+                    print(f"[MTF_DEBUG] MTF LLM analysis failed, using technical only for {request.stock}")
+                
+                print(f"[MTF_DEBUG] Finished complete MTF analysis for {request.stock}")
+                return combined_mtf
+                
             except Exception as e:
                 print(f"[MTF] Error: {e}")
+                import traceback
+                traceback.print_exc()
                 return {}
 
         mtf_task = asyncio.create_task(_with_logging("mtf", _mtf(), timeout=120.0))
@@ -1030,6 +1062,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         # 4) Final decision LLM (depends on prior results). No charts here.
         chart_insights_md = ""
         # Build minimal knowledge_context blocks (sector/MTF/advanced) as JSON labels
+        # NOTE: For MTF, we only send the LLM insights (interpretation), not raw technical data
         knowledge_blocks = []
         try:
             if sector_context:
@@ -1038,8 +1071,28 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             pass
         try:
             if mtf_context:
-                knowledge_blocks.append("ENHANCED MULTI-TIMEFRAME ANALYSIS CONTEXT:\n" + json.dumps(mtf_context))
-        except Exception:
+                # Extract only LLM insights for final decision
+                # The technical data stays in mtf_context for frontend/storage
+                mtf_llm_insights = mtf_context.get('llm_insights', {})
+                if mtf_llm_insights and mtf_llm_insights.get('success'):
+                    # Send only the LLM analysis text to final decision
+                    mtf_for_final_decision = {
+                        'agent': mtf_llm_insights.get('agent', 'mtf_llm_agent'),
+                        'llm_analysis': mtf_llm_insights.get('llm_analysis', ''),
+                        'confidence': mtf_llm_insights.get('confidence', 0.0),
+                        'mtf_summary': mtf_llm_insights.get('mtf_summary', {}),
+                        'cross_timeframe_validation': mtf_llm_insights.get('cross_timeframe_validation', {})
+                    }
+                    knowledge_blocks.append("MTF ANALYSIS INSIGHTS:\n" + json.dumps(mtf_for_final_decision))
+                else:
+                    # Fallback: if LLM insights not available, send summary only (not full technical data)
+                    mtf_summary_only = {
+                        'summary': mtf_context.get('summary', {}),
+                        'cross_timeframe_validation': mtf_context.get('cross_timeframe_validation', {})
+                    }
+                    knowledge_blocks.append("MTF SUMMARY:\n" + json.dumps(mtf_summary_only))
+        except Exception as e:
+            print(f"[MTF] Error building MTF knowledge context: {e}")
             pass
         try:
             if advanced_analysis:

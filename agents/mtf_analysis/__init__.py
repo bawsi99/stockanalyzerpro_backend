@@ -48,6 +48,12 @@ from .integration_manager import (
     mtf_agent_integration_manager  # Global instance
 )
 
+# Import MTF LLM agent
+from .mtf_llm_agent import (
+    MTFLLMAgent,
+    mtf_llm_agent  # Global instance
+)
+
 # Keep backward compatibility with old orchestrator
 try:
     from .orchestrator import MTFOrchestrator
@@ -63,6 +69,10 @@ __all__ = [
     # Integration manager
     'MTFAgentIntegrationManager',
     'MTFAgentsHealthMetrics',
+    
+    # MTF LLM Agent
+    'MTFLLMAgent',
+    'mtf_llm_agent',
     
     # Orchestrator
     'MTFAgentsOrchestrator',
