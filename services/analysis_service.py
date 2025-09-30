@@ -888,10 +888,11 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         # MTF analysis
         async def _mtf():
             try:
-                from ml.analysis.mtf_analysis import EnhancedMultiTimeframeAnalyzer
-                analyzer = EnhancedMultiTimeframeAnalyzer()
-                res = await analyzer.comprehensive_mtf_analysis(symbol=request.stock, exchange=request.exchange)
-                return res if isinstance(res, dict) else {}
+                from agents.mtf_analysis import mtf_agent_integration_manager
+                success, res = await mtf_agent_integration_manager.get_comprehensive_mtf_analysis(
+                    symbol=request.stock, exchange=request.exchange
+                )
+                return res if success and isinstance(res, dict) else {}
             except Exception as e:
                 print(f"[MTF] Error: {e}")
                 return {}
@@ -1213,18 +1214,17 @@ async def enhanced_mtf_analyze(request: AnalysisRequest):
     try:
         print(f"[ENHANCED MTF] Starting enhanced multi-timeframe analysis for {request.stock}")
         
-        # Import the enhanced analyzer
-        from ml.analysis.mtf_analysis import EnhancedMultiTimeframeAnalyzer
+        # Use the new MTF agents integration manager
+        from agents.mtf_analysis import mtf_agent_integration_manager
         
         # Perform comprehensive multi-timeframe analysis
-        enhanced_mtf_analyzer = EnhancedMultiTimeframeAnalyzer()
-        mtf_results = await enhanced_mtf_analyzer.comprehensive_mtf_analysis(
+        success, mtf_results = await mtf_agent_integration_manager.get_comprehensive_mtf_analysis(
             symbol=request.stock,
             exchange=request.exchange
         )
         
-        if not mtf_results.get('success', False):
-            error_msg = f"Enhanced multi-timeframe analysis failed: {mtf_results.get('error', 'Unknown error')}"
+        if not success or not mtf_results.get('success', False):
+            error_msg = f"Enhanced multi-timeframe analysis failed: {mtf_results.get('error', 'Unknown error') if mtf_results else 'MTF agents failed'}"
             print(f"[ENHANCED MTF ERROR] {error_msg}")
             raise HTTPException(status_code=500, detail=error_msg)
         

@@ -1,12 +1,15 @@
+#!/usr/bin/env python3
 """
-Enhanced Multi-Timeframe Analysis System
+Core Multi-Timeframe Analysis Processor
 
-This module provides comprehensive multi-timeframe analysis by:
-1. Fetching data for all available Zerodha intervals
-2. Calculating appropriate indicators for each timeframe
-3. Performing cross-timeframe signal validation
-4. Identifying supporting and conflicting signals
-5. Providing confidence-weighted analysis
+This module contains the core logic for multi-timeframe analysis,
+moved from ml.analysis.mtf_analysis to follow the agents pattern.
+
+The CoreMTFProcessor handles the fundamental MTF analysis operations:
+- Timeframe data fetching and validation
+- Technical indicator calculations per timeframe
+- Cross-timeframe signal validation
+- Confidence scoring and quality assessment
 """
 
 import asyncio
@@ -15,7 +18,7 @@ import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
 
 # Local imports
@@ -26,7 +29,7 @@ from patterns.recognition import PatternRecognition
 logger = logging.getLogger(__name__)
 
 @dataclass
-class TimeframeConfig:
+class MTFTimeframeConfig:
     """Configuration for each timeframe analysis."""
     interval: str
     period_days: int
@@ -36,7 +39,7 @@ class TimeframeConfig:
     description: str
 
 @dataclass
-class TimeframeAnalysis:
+class MTFTimeframeAnalysis:
     """Results of analysis for a single timeframe."""
     timeframe: str
     data_points: int
@@ -52,7 +55,7 @@ class TimeframeAnalysis:
     risk_metrics: Dict[str, Any]
 
 @dataclass
-class CrossTimeframeValidation:
+class MTFCrossTimeframeValidation:
     """Cross-timeframe validation results."""
     supporting_timeframes: List[str]
     conflicting_timeframes: List[str]
@@ -65,9 +68,26 @@ class CrossTimeframeValidation:
     confidence_score: float
     conflict_severity: str = "None"
 
-class EnhancedMultiTimeframeAnalyzer:
+@dataclass
+class MTFAnalysisResult:
+    """Core MTF analysis result structure for agent integration."""
+    success: bool
+    processing_time: float = 0.0
+    symbol: str = ""
+    exchange: str = ""
+    analysis_timestamp: str = ""
+    timeframe_analyses: Dict[str, Any] = field(default_factory=dict)
+    cross_timeframe_validation: Dict[str, Any] = field(default_factory=dict) 
+    summary: Dict[str, Any] = field(default_factory=dict)
+    confidence_score: float = 0.0
+    error_message: Optional[str] = None
+
+class CoreMTFProcessor:
     """
-    Enhanced multi-timeframe analysis system with comprehensive signal validation.
+    Core multi-timeframe analysis processor.
+    
+    This is the main analysis engine that handles all fundamental MTF operations.
+    It's designed to be used by the MTF agents orchestrator and integration manager.
     """
     
     def __init__(self):
@@ -77,31 +97,31 @@ class EnhancedMultiTimeframeAnalyzer:
         
         # Define timeframe configurations with appropriate indicators and weights
         self.timeframe_configs = {
-            '1min': TimeframeConfig(
+            '1min': MTFTimeframeConfig(
                 interval='minute',
-                period_days=30,  # 30 days for 1min data
+                period_days=1,  # 1 day only - for scalping/micro-timing (reduced from 30 to minimize noise)
                 min_data_points=100,
                 indicators=['sma_20', 'ema_12', 'rsi_14', 'macd', 'bollinger_bands', 'volume_ratio', 'atr'],
                 weight=0.05,  # Lowest weight for noise
                 description='Intraday scalping timeframe'
             ),
-            '5min': TimeframeConfig(
+            '5min': MTFTimeframeConfig(
                 interval='5minute',
-                period_days=60,  # 60 days for 5min data
+                period_days=3,  # 3 days - for day trading precision (reduced from 60 to reduce data overload)
                 min_data_points=80,
                 indicators=['sma_20', 'ema_12', 'rsi_14', 'macd', 'bollinger_bands', 'volume_ratio', 'atr', 'stochastic'],
                 weight=0.10,
                 description='Short-term intraday trading'
             ),
-            '15min': TimeframeConfig(
+            '15min': MTFTimeframeConfig(
                 interval='15minute',
-                period_days=90,  # 90 days for 15min data
+                period_days=7,  # 7 days - one week for intraday trends (reduced from 90 for better signal-to-noise)
                 min_data_points=60,
                 indicators=['sma_20', 'sma_50', 'ema_12', 'rsi_14', 'macd', 'bollinger_bands', 'volume_ratio', 'atr', 'stochastic', 'adx'],
                 weight=0.15,
                 description='Medium-term intraday trading'
             ),
-            '30min': TimeframeConfig(
+            '30min': MTFTimeframeConfig(
                 interval='30minute',
                 period_days=120,  # 120 days for 30min data
                 min_data_points=50,
@@ -109,7 +129,7 @@ class EnhancedMultiTimeframeAnalyzer:
                 weight=0.20,
                 description='Swing trading timeframe'
             ),
-            '1hour': TimeframeConfig(
+            '1hour': MTFTimeframeConfig(
                 interval='60minute',
                 period_days=180,  # 180 days for 1hour data
                 min_data_points=40,
@@ -117,7 +137,7 @@ class EnhancedMultiTimeframeAnalyzer:
                 weight=0.25,
                 description='Position trading timeframe'
             ),
-            '1day': TimeframeConfig(
+            '1day': MTFTimeframeConfig(
                 interval='day',
                 period_days=365,  # 1 year for daily data
                 min_data_points=30,
@@ -139,6 +159,110 @@ class EnhancedMultiTimeframeAnalyzer:
     async def authenticate(self) -> bool:
         """Authenticate with Zerodha API."""
         return self.zerodha_client.authenticate() 
+    
+    async def analyze_comprehensive_mtf(self, symbol: str, exchange: str = "NSE") -> MTFAnalysisResult:
+        """
+        Perform comprehensive multi-timeframe analysis.
+        
+        This is the main entry point for core MTF analysis.
+        Returns structured results compatible with the agents framework.
+        """
+        start_time = datetime.now()
+        
+        try:
+            logger.info(f"[CORE_MTF] Starting comprehensive MTF analysis for {symbol}")
+            
+            # Analyze all timeframes
+            timeframe_analyses = await self.analyze_all_timeframes(symbol, exchange)
+            
+            if not timeframe_analyses:
+                processing_time = (datetime.now() - start_time).total_seconds()
+                return MTFAnalysisResult(
+                    success=False,
+                    processing_time=processing_time,
+                    symbol=symbol,
+                    exchange=exchange,
+                    analysis_timestamp=datetime.now().isoformat(),
+                    error_message='No timeframe data available'
+                )
+            
+            # Validate cross-timeframe
+            validation = self.validate_cross_timeframe(timeframe_analyses)
+            
+            # Build timeframe analyses summary
+            timeframe_summary = {}
+            for tf, analysis in timeframe_analyses.items():
+                timeframe_summary[tf] = {
+                    'trend': analysis.trend,
+                    'confidence': analysis.confidence,
+                    'data_points': analysis.data_points,
+                    'key_indicators': {
+                        'rsi': analysis.indicators.get('rsi_14'),
+                        'macd_signal': analysis.signals.get('overall_trend'),
+                        'volume_status': analysis.volume_analysis.get('volume_status'),
+                        'support_levels': analysis.support_levels[:3],  # Top 3
+                        'resistance_levels': analysis.resistance_levels[:3]  # Top 3
+                    },
+                    'patterns': list(analysis.pattern_analysis.keys()),
+                    'risk_metrics': {
+                        'current_price': analysis.risk_metrics.get('current_price'),
+                        'volatility': analysis.risk_metrics.get('volatility'),
+                        'max_drawdown': analysis.risk_metrics.get('max_drawdown')
+                    }
+                }
+            
+            # Build cross-timeframe validation summary
+            validation_summary = {
+                'consensus_trend': validation.consensus_trend,
+                'signal_strength': validation.signal_strength,
+                'confidence_score': validation.confidence_score,
+                'supporting_timeframes': validation.supporting_timeframes,
+                'conflicting_timeframes': validation.conflicting_timeframes,
+                'neutral_timeframes': validation.neutral_timeframes,
+                'divergence_detected': validation.divergence_detected,
+                'divergence_type': validation.divergence_type,
+                'key_conflicts': validation.key_conflicts,
+                'conflict_severity': validation.conflict_severity
+            }
+            
+            # Build summary
+            summary = {
+                'overall_signal': validation.consensus_trend,
+                'confidence': validation.confidence_score,
+                'timeframes_analyzed': len(timeframe_analyses),
+                'signal_alignment': 'aligned' if len(validation.conflicting_timeframes) == 0 else 'conflicting',
+                'risk_level': self._determine_risk_level(validation.confidence_score, validation.divergence_detected),
+                'recommendation': self._generate_recommendation(validation.consensus_trend, validation.confidence_score, validation.divergence_detected)
+            }
+            
+            processing_time = (datetime.now() - start_time).total_seconds()
+            
+            logger.info(f"[CORE_MTF] Completed comprehensive MTF analysis for {symbol} in {processing_time:.2f}s")
+            
+            return MTFAnalysisResult(
+                success=True,
+                processing_time=processing_time,
+                symbol=symbol,
+                exchange=exchange,
+                analysis_timestamp=datetime.now().isoformat(),
+                timeframe_analyses=timeframe_summary,
+                cross_timeframe_validation=validation_summary,
+                summary=summary,
+                confidence_score=validation.confidence_score
+            )
+            
+        except Exception as e:
+            processing_time = (datetime.now() - start_time).total_seconds()
+            logger.error(f"[CORE_MTF] Error in comprehensive MTF analysis for {symbol}: {e}")
+            
+            return MTFAnalysisResult(
+                success=False,
+                processing_time=processing_time,
+                symbol=symbol,
+                exchange=exchange,
+                analysis_timestamp=datetime.now().isoformat(),
+                error_message=str(e)
+            )
     
     async def fetch_timeframe_data(self, symbol: str, exchange: str, timeframe: str) -> Optional[pd.DataFrame]:
         """Fetch data for a specific timeframe."""
@@ -392,100 +516,33 @@ class EnhancedMultiTimeframeAnalyzer:
         
         return signals
     
-    def _infer_anchor_from_tf_interval(self, interval: str) -> str:
-        """Map Zerodha interval to resample anchor for prior-period pivots."""
-        iv = (interval or '').lower()
-        if 'minute' in iv or 'hour' in iv:
-            return 'D'  # intraday -> prior day
-        if 'day' in iv:
-            return 'W'  # daily -> prior week
-        if 'week' in iv:
-            return 'M'  # weekly -> prior month
-        if 'month' in iv:
-            return 'Q'  # monthly -> prior quarter (approx)
-        return 'W'
-
-    def _get_prior_period_hlc(self, data: pd.DataFrame, anchor: str) -> Optional[Tuple[float, float, float]]:
-        try:
-            if data is None or data.empty or not isinstance(data.index, pd.DatetimeIndex):
-                return None
-            ohlc = data[['open','high','low','close']].copy()
-            grouped = ohlc.resample(anchor).agg({'open':'first','high':'max','low':'min','close':'last'}).dropna()
-            if len(grouped) < 2:
-                return None
-            prev = grouped.iloc[-2]
-            return float(prev['high']), float(prev['low']), float(prev['close'])
-        except Exception:
-            return None
-
-    def _compute_pivots_for_timeframe(self, data: pd.DataFrame, tf_interval: str, method: str = 'standard') -> Dict[str, float]:
-        try:
-            anchor = self._infer_anchor_from_tf_interval(tf_interval)
-            hlc = self._get_prior_period_hlc(data, anchor)
-            if not hlc:
-                H = float(data['high'].iloc[-1]) if 'high' in data.columns else None
-                L = float(data['low'].iloc[-1]) if 'low' in data.columns else None
-                C = float(data['close'].iloc[-1]) if 'close' in data.columns else None
-            else:
-                H, L, C = hlc
-            if H is None or L is None or C is None:
-                return {}
-            tmp = pd.DataFrame({'open':[C], 'high':[H], 'low':[L], 'close':[C]})
-            piv = TechnicalIndicators.calculate_pivot_points(tmp, method=method)
-            return {k: float(v) for k, v in piv.items() if v is not None}
-        except Exception:
+    async def analyze_all_timeframes(self, symbol: str, exchange: str = "NSE") -> Dict[str, MTFTimeframeAnalysis]:
+        """Analyze all timeframes concurrently."""
+        # Authenticate first
+        if not await self.authenticate():
+            logger.error("Failed to authenticate with Zerodha")
             return {}
-
-    def calculate_support_resistance(self, data: pd.DataFrame, timeframe: str) -> Tuple[List[float], List[float]]:
-        """Calculate support and resistance levels using pivot points for the given timeframe."""
-        try:
-            tf_interval = self.timeframe_configs.get(timeframe).interval if timeframe in self.timeframe_configs else 'day'
-            piv = self._compute_pivots_for_timeframe(data, tf_interval, method='standard')
-            if not piv:
-                return [], []
-            supports = []
-            resistances = []
-            for k in ['support_1','support_2','support_3','support_4']:
-                if k in piv:
-                    supports.append(float(piv[k]))
-            for k in ['resistance_1','resistance_2','resistance_3','resistance_4']:
-                if k in piv:
-                    resistances.append(float(piv[k]))
-            return supports, resistances
-        except Exception as e:
-            logger.error(f"Error calculating support/resistance (pivots) for {timeframe}: {e}")
-            return [], []
+        
+        # Create concurrent tasks for all timeframes
+        task_map = {
+            timeframe: asyncio.create_task(self.analyze_timeframe(symbol, exchange, timeframe))
+            for timeframe in self.timeframe_configs.keys()
+        }
+        
+        results: Dict[str, MTFTimeframeAnalysis] = {}
+        # Await all tasks concurrently
+        completed = await asyncio.gather(*task_map.values(), return_exceptions=True)
+        
+        for timeframe, outcome in zip(task_map.keys(), completed):
+            if isinstance(outcome, Exception):
+                logger.error(f"Error in timeframe {timeframe}: {outcome}")
+                continue
+            if outcome:
+                results[timeframe] = outcome
+        
+        return results
     
-    def detect_patterns(self, data: pd.DataFrame) -> Dict[str, Any]:
-        """Detect chart patterns."""
-        try:
-            patterns = {}
-            
-            # Candlestick patterns
-            candlestick_patterns = self.pattern_recognition.detect_candlestick_patterns(data)
-            patterns['candlestick'] = candlestick_patterns[-3:] if candlestick_patterns else []
-            
-            # Double tops/bottoms
-            double_tops = self.pattern_recognition.detect_double_top(data['close'])
-            double_bottoms = self.pattern_recognition.detect_double_bottom(data['close'])
-            patterns['double_tops'] = double_tops
-            patterns['double_bottoms'] = double_bottoms
-            
-            # Triangles
-            triangles = self.pattern_recognition.detect_triangle(data['close'])
-            patterns['triangles'] = triangles
-            
-            # Head and shoulders
-            head_shoulders = self.pattern_recognition.detect_head_and_shoulders(data['close'])
-            patterns['head_shoulders'] = head_shoulders
-            
-            return patterns
-            
-        except Exception as e:
-            logger.error(f"Error detecting patterns: {e}")
-            return {}
-    
-    async def analyze_timeframe(self, symbol: str, exchange: str, timeframe: str) -> Optional[TimeframeAnalysis]:
+    async def analyze_timeframe(self, symbol: str, exchange: str, timeframe: str) -> Optional[MTFTimeframeAnalysis]:
         """Analyze a single timeframe comprehensively."""
         try:
             # Fetch data
@@ -523,7 +580,7 @@ class EnhancedMultiTimeframeAnalyzer:
                 'risk_reward_ratio': self._calculate_risk_reward_ratio(current_price, support_levels, resistance_levels)
             }
             
-            return TimeframeAnalysis(
+            return MTFTimeframeAnalysis(
                 timeframe=timeframe,
                 data_points=len(data),
                 indicators=indicators,
@@ -542,36 +599,10 @@ class EnhancedMultiTimeframeAnalyzer:
             logger.error(f"Error analyzing timeframe {timeframe}: {e}")
             return None 
     
-    async def analyze_all_timeframes(self, symbol: str, exchange: str = "NSE") -> Dict[str, TimeframeAnalysis]:
-        """Analyze all timeframes concurrently."""
-        # Authenticate first
-        if not await self.authenticate():
-            logger.error("Failed to authenticate with Zerodha")
-            return {}
-        
-        # Create concurrent tasks for all timeframes
-        task_map = {
-            timeframe: asyncio.create_task(self.analyze_timeframe(symbol, exchange, timeframe))
-            for timeframe in self.timeframe_configs.keys()
-        }
-        
-        results: Dict[str, TimeframeAnalysis] = {}
-        # Await all tasks concurrently
-        completed = await asyncio.gather(*task_map.values(), return_exceptions=True)
-        
-        for timeframe, outcome in zip(task_map.keys(), completed):
-            if isinstance(outcome, Exception):
-                logger.error(f"Error in timeframe {timeframe}: {outcome}")
-                continue
-            if outcome:
-                results[timeframe] = outcome
-        
-        return results
-    
-    def validate_cross_timeframe(self, timeframe_analyses: Dict[str, TimeframeAnalysis]) -> CrossTimeframeValidation:
+    def validate_cross_timeframe(self, timeframe_analyses: Dict[str, MTFTimeframeAnalysis]) -> MTFCrossTimeframeValidation:
         """Validate signals across timeframes and identify conflicts."""
         if not timeframe_analyses:
-            return CrossTimeframeValidation(
+            return MTFCrossTimeframeValidation(
                 supporting_timeframes=[],
                 conflicting_timeframes=[],
                 neutral_timeframes=[],
@@ -664,7 +695,7 @@ class EnhancedMultiTimeframeAnalyzer:
         # Calculate overall confidence score
         confidence_score = signal_strength * (len(supporting_timeframes) / len(timeframe_analyses))
         
-        return CrossTimeframeValidation(
+        return MTFCrossTimeframeValidation(
             supporting_timeframes=supporting_timeframes,
             conflicting_timeframes=conflicting_timeframes,
             neutral_timeframes=neutral_timeframes,
@@ -677,109 +708,14 @@ class EnhancedMultiTimeframeAnalyzer:
             conflict_severity=conflict_severity
         )
     
-    async def comprehensive_mtf_analysis(self, symbol: str, exchange: str = "NSE") -> Dict[str, Any]:
-        """Perform comprehensive multi-timeframe analysis."""
-        try:
-            # Analyze all timeframes
-            timeframe_analyses = await self.analyze_all_timeframes(symbol, exchange)
-            
-            if not timeframe_analyses:
-                return {
-                    'error': 'No timeframe data available',
-                    'success': False
-                }
-            
-            # Validate cross-timeframe
-            validation = self.validate_cross_timeframe(timeframe_analyses)
-            
-            # Compile results
-            results = {
-                'success': True,
-                'symbol': symbol,
-                'exchange': exchange,
-                'analysis_timestamp': datetime.now().isoformat(),
-                'timeframe_analyses': {
-                    tf: {
-                        'trend': analysis.trend,
-                        'confidence': analysis.confidence,
-                        'data_points': analysis.data_points,
-                        'key_indicators': {
-                            'rsi': analysis.indicators.get('rsi_14'),
-                            'macd_signal': analysis.signals.get('overall_trend'),
-                            'volume_status': analysis.volume_analysis.get('volume_status'),
-                            'support_levels': analysis.support_levels[:3],  # Top 3
-                            'resistance_levels': analysis.resistance_levels[:3]  # Top 3
-                        },
-                        'patterns': list(analysis.pattern_analysis.keys()),
-                        'risk_metrics': {
-                            'current_price': analysis.risk_metrics.get('current_price'),
-                            'volatility': analysis.risk_metrics.get('volatility'),
-                            'max_drawdown': analysis.risk_metrics.get('max_drawdown')
-                        }
-                    }
-                    for tf, analysis in timeframe_analyses.items()
-                },
-                'cross_timeframe_validation': {
-                    'consensus_trend': validation.consensus_trend,
-                    'signal_strength': validation.signal_strength,
-                    'confidence_score': validation.confidence_score,
-                    'supporting_timeframes': validation.supporting_timeframes,
-                    'conflicting_timeframes': validation.conflicting_timeframes,
-                    'neutral_timeframes': validation.neutral_timeframes,
-                    'divergence_detected': validation.divergence_detected,
-                    'divergence_type': validation.divergence_type,
-                    'key_conflicts': validation.key_conflicts,
-                    'conflict_severity': validation.conflict_severity
-                },
-                'summary': {
-                    'overall_signal': validation.consensus_trend,
-                    'confidence': validation.confidence_score,
-                    'timeframes_analyzed': len(timeframe_analyses),
-                    'signal_alignment': 'aligned' if len(validation.conflicting_timeframes) == 0 else 'conflicting',
-                    'risk_level': self._determine_risk_level(validation.confidence_score, validation.divergence_detected),
-                    'recommendation': self._generate_recommendation(validation.consensus_trend, validation.confidence_score, validation.divergence_detected)
-                }
-            }
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"Error in comprehensive MTF analysis: {e}")
-            return {
-                'error': str(e),
-                'success': False
-            }
-    
-    def _calculate_conflict_severity(self, total_conflict_weight: float, total_weight: float) -> str:
-        """Calculate conflict severity based on weighted conflict score."""
-        if total_weight == 0 or total_conflict_weight == 0:
-            return "None"
-        
-        # Calculate conflict ratio (0.0 to 1.0)
-        conflict_ratio = total_conflict_weight / total_weight
-        
-        # Map conflict ratio to severity levels
-        if conflict_ratio >= 0.6:
-            return "Very High"
-        elif conflict_ratio >= 0.4:
-            return "High"
-        elif conflict_ratio >= 0.25:
-            return "Medium"
-        elif conflict_ratio >= 0.1:
-            return "Low"
-        elif conflict_ratio >= 0.05:
-            return "Very Low"
-        else:
-            return "Insignificant"
-    
     def calculate_signal_quality(self, analysis) -> float:
         """Calculate signal quality score for dynamic weighting."""
         try:
             quality_score = 0.0
             
-            # Handle both TimeframeAnalysis objects and dictionaries
+            # Handle both MTFTimeframeAnalysis objects and dictionaries
             if hasattr(analysis, 'indicators'):
-                # TimeframeAnalysis object
+                # MTFTimeframeAnalysis object
                 indicators = analysis.indicators
                 signals = analysis.signals
                 timeframe = analysis.timeframe
@@ -854,6 +790,99 @@ class EnhancedMultiTimeframeAnalyzer:
         except Exception as e:
             logger.error(f"Error calculating signal quality for {timeframe if 'timeframe' in locals() else 'unknown'}: {e}")
             return 1.0  # Default neutral quality
+    
+    def _infer_anchor_from_tf_interval(self, interval: str) -> str:
+        """Map Zerodha interval to resample anchor for prior-period pivots."""
+        iv = (interval or '').lower()
+        if 'minute' in iv or 'hour' in iv:
+            return 'D'  # intraday -> prior day
+        if 'day' in iv:
+            return 'W'  # daily -> prior week
+        if 'week' in iv:
+            return 'M'  # weekly -> prior month
+        if 'month' in iv:
+            return 'Q'  # monthly -> prior quarter (approx)
+        return 'W'
+
+    def _get_prior_period_hlc(self, data: pd.DataFrame, anchor: str) -> Optional[Tuple[float, float, float]]:
+        try:
+            if data is None or data.empty or not isinstance(data.index, pd.DatetimeIndex):
+                return None
+            ohlc = data[['open','high','low','close']].copy()
+            grouped = ohlc.resample(anchor).agg({'open':'first','high':'max','low':'min','close':'last'}).dropna()
+            if len(grouped) < 2:
+                return None
+            prev = grouped.iloc[-2]
+            return float(prev['high']), float(prev['low']), float(prev['close'])
+        except Exception:
+            return None
+
+    def _compute_pivots_for_timeframe(self, data: pd.DataFrame, tf_interval: str, method: str = 'standard') -> Dict[str, float]:
+        try:
+            anchor = self._infer_anchor_from_tf_interval(tf_interval)
+            hlc = self._get_prior_period_hlc(data, anchor)
+            if not hlc:
+                H = float(data['high'].iloc[-1]) if 'high' in data.columns else None
+                L = float(data['low'].iloc[-1]) if 'low' in data.columns else None
+                C = float(data['close'].iloc[-1]) if 'close' in data.columns else None
+            else:
+                H, L, C = hlc
+            if H is None or L is None or C is None:
+                return {}
+            tmp = pd.DataFrame({'open':[C], 'high':[H], 'low':[L], 'close':[C]})
+            piv = TechnicalIndicators.calculate_pivot_points(tmp, method=method)
+            return {k: float(v) for k, v in piv.items() if v is not None}
+        except Exception:
+            return {}
+
+    def calculate_support_resistance(self, data: pd.DataFrame, timeframe: str) -> Tuple[List[float], List[float]]:
+        """Calculate support and resistance levels using pivot points for the given timeframe."""
+        try:
+            tf_interval = self.timeframe_configs.get(timeframe).interval if timeframe in self.timeframe_configs else 'day'
+            piv = self._compute_pivots_for_timeframe(data, tf_interval, method='standard')
+            if not piv:
+                return [], []
+            supports = []
+            resistances = []
+            for k in ['support_1','support_2','support_3','support_4']:
+                if k in piv:
+                    supports.append(float(piv[k]))
+            for k in ['resistance_1','resistance_2','resistance_3','resistance_4']:
+                if k in piv:
+                    resistances.append(float(piv[k]))
+            return supports, resistances
+        except Exception as e:
+            logger.error(f"Error calculating support/resistance (pivots) for {timeframe}: {e}")
+            return [], []
+    
+    def detect_patterns(self, data: pd.DataFrame) -> Dict[str, Any]:
+        """Detect chart patterns."""
+        try:
+            patterns = {}
+            
+            # Candlestick patterns
+            candlestick_patterns = self.pattern_recognition.detect_candlestick_patterns(data)
+            patterns['candlestick'] = candlestick_patterns[-3:] if candlestick_patterns else []
+            
+            # Double tops/bottoms
+            double_tops = self.pattern_recognition.detect_double_top(data['close'])
+            double_bottoms = self.pattern_recognition.detect_double_bottom(data['close'])
+            patterns['double_tops'] = double_tops
+            patterns['double_bottoms'] = double_bottoms
+            
+            # Triangles
+            triangles = self.pattern_recognition.detect_triangle(data['close'])
+            patterns['triangles'] = triangles
+            
+            # Head and shoulders
+            head_shoulders = self.pattern_recognition.detect_head_and_shoulders(data['close'])
+            patterns['head_shoulders'] = head_shoulders
+            
+            return patterns
+            
+        except Exception as e:
+            logger.error(f"Error detecting patterns: {e}")
+            return {}
     
     # Helper methods for signal interpretation
     def _get_rsi_status(self, rsi_value: float) -> str:
@@ -949,6 +978,28 @@ class EnhancedMultiTimeframeAnalyzer:
         except:
             return 1.0
     
+    def _calculate_conflict_severity(self, total_conflict_weight: float, total_weight: float) -> str:
+        """Calculate conflict severity based on weighted conflict score."""
+        if total_weight == 0 or total_conflict_weight == 0:
+            return "None"
+        
+        # Calculate conflict ratio (0.0 to 1.0)
+        conflict_ratio = total_conflict_weight / total_weight
+        
+        # Map conflict ratio to severity levels
+        if conflict_ratio >= 0.6:
+            return "Very High"
+        elif conflict_ratio >= 0.4:
+            return "High"
+        elif conflict_ratio >= 0.25:
+            return "Medium"
+        elif conflict_ratio >= 0.1:
+            return "Low"
+        elif conflict_ratio >= 0.05:
+            return "Very Low"
+        else:
+            return "Insignificant"
+    
     def _determine_risk_level(self, confidence_score: float, divergence_detected: bool) -> str:
         """Determine risk level based on confidence and divergence."""
         if divergence_detected:
@@ -980,5 +1031,3 @@ class EnhancedMultiTimeframeAnalyzer:
                 return 'Hold'
         else:
             return 'Wait for better signals'
-
-# Global instance removed - instantiate locally as needed 

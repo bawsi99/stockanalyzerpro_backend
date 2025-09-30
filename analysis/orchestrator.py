@@ -15,8 +15,9 @@ from patterns.recognition import PatternRecognition
 from patterns.visualization import PatternVisualizer, ChartVisualizer
 # Global instance import removed - using local instantiation
 import asyncio
-from ml.analysis.mtf_utils import multi_timeframe_analysis
-from ml.analysis.mtf_analysis import EnhancedMultiTimeframeAnalyzer
+# Legacy import removed - using CoreMTFProcessor fallback instead
+# from ml.analysis.mtf_utils import multi_timeframe_analysis
+# Use new MTF agents system instead of direct import
 from agents.indicators import indicators_orchestrator, indicator_agent_integration_manager
 
 # Set up logging
@@ -332,32 +333,13 @@ class StockAnalysisOrchestrator:
                 logger.error(f"Fallback volume chart generation also failed for {symbol}: {fallback_error}")
                 raise Exception(f"All volume chart generation methods failed: {e} | {fallback_error}")
         
-        try:
-            # 4. MULTI-TIMEFRAME COMPARISON CHART - Generate in memory
-            fig4 = ChartVisualizer.plot_mtf_comparison_chart(data, indicators, None, symbol)
-            
-            # Convert figure to image bytes
-            buf = io.BytesIO()
-            fig4.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-            buf.seek(0)
-            img_bytes = buf.getvalue()
-            
-            charts['mtf_comparison'] = {
-                'type': 'image_bytes',
-                'data': img_bytes,
-                'format': 'png',
-                'size_bytes': len(img_bytes),
-                'chart_type': 'mtf_comparison',
-                'symbol': symbol,
-                'interval': interval
-            }
-            
-            logger.info(f"✅ Generated mtf_comparison chart: {len(img_bytes)} bytes")
-            plt.close(fig4)
-            
-        except Exception as e:
-            logger.error(f"Failed to create multi-timeframe comparison chart for {symbol}: {e}")
-            raise
+        # REMOVED: Misleading "mtf_comparison" chart generation
+        # This chart showed multi-period MAs on a single timeframe, NOT true MTF data.
+        # For true MTF visualization, the MTF agents system now generates a proper chart
+        # via agents.mtf_analysis.visualization.MTFVisualizer
+        # 
+        # If you need the multi-period MA chart for some reason, use:
+        # fig4 = ChartVisualizer.plot_multi_period_ma_chart(data, indicators, None, symbol)
         
         # Calculate total memory usage
         total_size = sum(chart['size_bytes'] for chart in charts.values())
@@ -1215,8 +1197,8 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
             # Compute MTF context prior to LLM so we can pass deterministic MTF signals
             mtf_context = {}
             try:
-                enhanced_mtf_analyzer = EnhancedMultiTimeframeAnalyzer()
-                mtf_results = await enhanced_mtf_analyzer.comprehensive_mtf_analysis(
+                from agents.mtf_analysis import mtf_integration_manager
+                mtf_results = await mtf_integration_manager.analyze_stock(
                     symbol=symbol,
                     exchange=exchange
                 )
@@ -2009,23 +1991,55 @@ if __name__ == "__main__":
             if stock_data.empty:
                 return None, None, f"No data available for {symbol}"
             
-            # Perform enhanced multi-timeframe analysis
+            # Perform enhanced multi-timeframe analysis using new agents system
             print(f"[ENHANCED MTF] Starting comprehensive multi-timeframe analysis for {symbol}")
-            enhanced_mtf_analyzer = EnhancedMultiTimeframeAnalyzer()
-            mtf_results = await enhanced_mtf_analyzer.comprehensive_mtf_analysis(symbol, exchange)
+            from agents.mtf_analysis import mtf_agent_integration_manager
+            success, mtf_results = await mtf_agent_integration_manager.get_comprehensive_mtf_analysis(symbol, exchange)
+            
+            # Convert tuple result to expected format for backward compatibility
+            if not success:
+                mtf_results = {'success': False, 'error': mtf_results.get('error', 'MTF agents failed') if mtf_results else 'MTF agents failed'}
             
             if not mtf_results.get('success', False):
                 print(f"[ENHANCED MTF] Warning: Multi-timeframe analysis failed: {mtf_results.get('error', 'Unknown error')}")
-                # Fallback to basic MTF analysis
-                interval_map = {
-                    'minute': 'minute', '3minute': 'minute', '5minute': 'minute', '10minute': 'minute', '15minute': 'minute', '30minute': 'minute', '60minute': 'hour',
-                    'day': 'day', 'week': 'week', 'month': 'month'
-                }
-                base_interval = interval_map.get(interval, 'day')
+                print(f"[ENHANCED MTF] Falling back to CoreMTFProcessor for direct analysis")
+                # Fallback to CoreMTFProcessor for consistent format
                 try:
-                    mtf_result = multi_timeframe_analysis(stock_data, base_interval=base_interval)
+                    from agents.mtf_analysis.core.processor import CoreMTFProcessor
+                    core_processor = CoreMTFProcessor()
+                    core_result = await core_processor.analyze_comprehensive_mtf(symbol, exchange)
+                    
+                    # Convert CoreMTFProcessor result to expected format
+                    if core_result.success:
+                        mtf_result = {
+                            'success': True,
+                            'symbol': core_result.symbol,
+                            'exchange': core_result.exchange,
+                            'analysis_timestamp': core_result.analysis_timestamp,
+                            'timeframe_analyses': core_result.timeframe_analyses,
+                            'cross_timeframe_validation': core_result.cross_timeframe_validation,
+                            'summary': core_result.summary,
+                            'processing_time': core_result.processing_time,
+                            'confidence_score': core_result.confidence_score,
+                            'fallback_used': 'core_processor'
+                        }
+                        print(f"[ENHANCED MTF] Fallback to CoreMTFProcessor succeeded")
+                    else:
+                        mtf_result = {
+                            'success': False,
+                            'error': core_result.error_message or 'Core processor failed',
+                            'fallback_used': 'core_processor',
+                            'fallback_failed': True
+                        }
+                        print(f"[ENHANCED MTF] Fallback to CoreMTFProcessor also failed: {core_result.error_message}")
                 except Exception as e:
-                    mtf_result = {'messages': [f"Error in multi-timeframe analysis: {e}"]}
+                    print(f"[ENHANCED MTF] Error in CoreMTFProcessor fallback: {e}")
+                    mtf_result = {
+                        'success': False,
+                        'error': f"Fallback error: {str(e)}",
+                        'fallback_used': 'core_processor',
+                        'fallback_failed': True
+                    }
             else:
                 print(f"[ENHANCED MTF] Multi-timeframe analysis completed successfully")
                 mtf_result = mtf_results
@@ -2983,96 +2997,6 @@ if __name__ == "__main__":
             logger.error(f"Error building sector context: {e}")
             return {}
 
-    def _build_comprehensive_mtf_analysis(self, mtf_context: dict, symbol: str, exchange: str) -> dict:
-        """Build comprehensive multi-timeframe analysis structure for frontend."""
-        try:
-            if not mtf_context:
-                return {}
-                
-            return {
-                "success": True,
-                "symbol": symbol,
-                "exchange": exchange,
-                "analysis_timestamp": datetime.now().isoformat(),
-                "timeframe_analyses": {
-                    "1D": {
-                        "trend": "bullish",
-                        "confidence": 80.0,
-                        "data_points": 252,
-                        "key_indicators": {
-                            "rsi": 65.5,
-                            "macd_signal": "bullish",
-                            "volume_status": "above_average",
-                            "support_levels": [1480, 1450],
-                            "resistance_levels": [1520, 1550]
-                        },
-                        "patterns": ["uptrend", "higher_highs"],
-                        "risk_metrics": {
-                            "current_price": 1510.50,
-                            "volatility": 0.25,
-                            "max_drawdown": 0.15
-                        }
-                    },
-                    "1W": {
-                        "trend": "neutral",
-                        "confidence": 65.0,
-                        "data_points": 52,
-                        "key_indicators": {
-                            "rsi": 55.0,
-                            "macd_signal": "neutral",
-                            "volume_status": "average",
-                            "support_levels": [1450, 1400],
-                            "resistance_levels": [1550, 1600]
-                        },
-                        "patterns": ["consolidation"],
-                        "risk_metrics": {
-                            "current_price": 1510.50,
-                            "volatility": 0.20,
-                            "max_drawdown": 0.10
-                        }
-                    },
-                    "1M": {
-                        "trend": "bullish",
-                        "confidence": 70.0,
-                        "data_points": 12,
-                        "key_indicators": {
-                            "rsi": 60.0,
-                            "macd_signal": "bullish",
-                            "volume_status": "above_average",
-                            "support_levels": [1400, 1350],
-                            "resistance_levels": [1600, 1650]
-                        },
-                        "patterns": ["uptrend"],
-                        "risk_metrics": {
-                            "current_price": 1510.50,
-                            "volatility": 0.18,
-                            "max_drawdown": 0.08
-                        }
-                    }
-                },
-                "cross_timeframe_validation": {
-                    "consensus_trend": "bullish",
-                    "signal_strength": 0.75,
-                    "confidence_score": 78.0,
-                    "supporting_timeframes": ["1D", "1M"],
-                    "conflicting_timeframes": [],
-                    "neutral_timeframes": ["1W"],
-                    "divergence_detected": False,
-                    "divergence_type": None,
-                    "key_conflicts": []
-                },
-                "summary": {
-                    "overall_signal": "bullish",
-                    "confidence": 78.0,
-                    "timeframes_analyzed": 3,
-                    "signal_alignment": "strong",
-                    "risk_level": "low",
-                    "recommendation": "buy"
-                }
-            }
-        except Exception as e:
-            logger.error(f"Error building MTF analysis: {e}")
-            return {}
 
     def _build_comprehensive_overlays(self, data: pd.DataFrame, indicators: dict) -> dict:
         """Build comprehensive overlays structure for frontend."""

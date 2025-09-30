@@ -481,15 +481,13 @@ class GeminiClient:
             return None
 
     async def synthesize_mtf_summary(self, mtf_json: dict) -> str:
-        """Single-purpose: Summarize MTF JSON into 5-8 bullet insights."""
+        """Single-purpose: Synthesize MTF JSON into structured decision with timeframe weighting."""
         try:
             prompt = self.prompt_manager.format_prompt(
-                "mtf_synthesis_template",
+                "optimized_mtf_comparison",
                 context=f"""
 [Source: MultiTimeframeContext]
-Analyze the following multi-timeframe JSON data and provide synthesis focusing on consensus, conflicts, high-importance timeframes, and confidence levels.
-
-MTF Analysis Data:
+Multi-Timeframe Analysis Data:
 {json.dumps(mtf_json, indent=2)[:8000]}
 """
             ) + self.prompt_manager.SOLVING_LINE
@@ -910,19 +908,11 @@ JSON:
         print("[ASYNC-OPTIMIZED-ENHANCED] Skipping legacy volume_analysis_enhanced task (using distributed volume agents instead)")
         
         # GROUP 4: Multi-Timeframe Comparison (MTF validation)
-        # print(f"[ASYNC-OPTIMIZED-ENHANCED] Checking for mtf_comparison: {chart_paths.get('mtf_comparison')}")
-        if chart_paths.get('mtf_comparison') and chart_paths['mtf_comparison'].get('type') == 'image_bytes':
-            try:
-                # Load image bytes directly from chart data
-                mtf_chart = chart_paths['mtf_comparison']['data']
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Successfully read mtf_comparison: {len(mtf_chart)} bytes")
-                task = self.analyze_mtf_comparison(mtf_chart, indicators)
-                chart_analysis_tasks.append(("mtf_comparison_enhanced", task))
-                print("[ASYNC-OPTIMIZED-ENHANCED] Added mtf_comparison_enhanced task")
-            except Exception as e:
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Error reading mtf_comparison: {e}")
-        else:
-            print("[ASYNC-OPTIMIZED-ENHANCED] mtf_comparison not found or not in image_bytes format")
+        # REMOVED: Old mtf_comparison chart analysis - this chart was misleading as it showed
+        # multi-period moving averages on a single timeframe rather than true multi-timeframe data.
+        # The new MTF visualization (backend/agents/mtf_analysis/visualization.py) will be used
+        # with its own dedicated LLM synthesis function in the future.
+        print("[ASYNC-OPTIMIZED-ENHANCED] Skipping legacy mtf_comparison chart analysis (chart removed from orchestrator)")
         
         # 3. AUXILIARY SYNTHESIS TASKS (rules: chunk and label sources; keep tasks single-purpose)
         aux_tasks = []
@@ -993,9 +983,10 @@ JSON:
             chart_analysis_tasks.append(("volume_analysis_enhanced_mock", mock_volume_task))
             print("[ASYNC-OPTIMIZED-ENHANCED] Added mock volume_analysis_enhanced task")
             
-            mock_mtf_task = self.analyze_mtf_comparison(mock_chart_data, indicators)
-            chart_analysis_tasks.append(("mtf_comparison_enhanced_mock", mock_mtf_task))
-            print("[ASYNC-OPTIMIZED-ENHANCED] Added mock mtf_comparison_enhanced task")
+            # REMOVED: Mock mtf_comparison task - old chart was misleading
+            # mock_mtf_task = self.analyze_mtf_comparison(mock_chart_data, indicators)
+            # chart_analysis_tasks.append(("mtf_comparison_enhanced_mock", mock_mtf_task))
+            # print("[ASYNC-OPTIMIZED-ENHANCED] Added mock mtf_comparison_enhanced task")
             
             print(f"[ASYNC-OPTIMIZED-ENHANCED] Created {len(chart_analysis_tasks)} mock chart tasks for testing")
         
@@ -1052,8 +1043,9 @@ JSON:
                 chart_insights_list.append("**Pattern Analysis (All Pattern Recognition):**\n" + result)
             elif task_name == "volume_analysis_enhanced" or task_name == "volume_analysis_enhanced_mock":
                 chart_insights_list.append("**Volume Analysis (Complete Volume Story):**\n" + result)
-            elif task_name == "mtf_comparison_enhanced" or task_name == "mtf_comparison_enhanced_mock":
-                chart_insights_list.append("**Multi-Timeframe Comparison (MTF Validation):**\n" + result)
+            # REMOVED: mtf_comparison_enhanced result processing - old chart was misleading
+            # elif task_name == "mtf_comparison_enhanced" or task_name == "mtf_comparison_enhanced_mock":
+            #     chart_insights_list.append("**Multi-Timeframe Comparison (MTF Validation):**\n" + result)
         
         # Process auxiliary synthesis results
         aux_insights = []

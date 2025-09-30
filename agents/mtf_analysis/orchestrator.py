@@ -3,7 +3,7 @@
 MTF Orchestrator
 
 Coordinates Multi-Timeframe Analysis Agents (intraday, swing, position)
-and integrates with the EnhancedMultiTimeframeAnalyzer for data and validation.
+and integrates with the CoreMTFProcessor for data and validation.
 """
 
 import asyncio
@@ -13,7 +13,8 @@ from typing import Dict, List, Optional, Any
 
 import pandas as pd
 
-from ml.analysis.mtf_analysis import EnhancedMultiTimeframeAnalyzer, TimeframeAnalysis
+from agents.mtf_analysis.core.processor import CoreMTFProcessor
+from agents.mtf_analysis.core.data_models import TimeframeAnalysisResult
 from agents.mtf_analysis.intraday import IntradayMTFProcessor
 
 try:
@@ -36,7 +37,7 @@ class MTFOrchestrator:
 
     def __init__(self, include_agents: Optional[List[str]] = None) -> None:
         self.include_agents = include_agents or ["intraday", "swing", "position"]
-        self.analyzer = EnhancedMultiTimeframeAnalyzer()
+        self.core_processor = CoreMTFProcessor()
         self.default_timeframes: List[str] = [
             "1min",
             "5min",
@@ -47,14 +48,14 @@ class MTFOrchestrator:
         ]
 
     async def _fetch_mtf_data(self, symbol: str, exchange: str) -> Dict[str, pd.DataFrame]:
-        """Fetch OHLCV DataFrames for configured timeframes using the analyzer's client."""
+        """Fetch OHLCV DataFrames for configured timeframes using the core processor's client."""
         # Ensure authentication
-        if not await self.analyzer.authenticate():
+        if not await self.core_processor.authenticate():
             raise RuntimeError("Failed to authenticate with Zerodha API")
 
         async def fetch_tf(tf: str):
             try:
-                df = await self.analyzer.fetch_timeframe_data(symbol, exchange, tf)
+                df = await self.core_processor.fetch_timeframe_data(symbol, exchange, tf)
                 return tf, df
             except Exception as e:  # noqa: E722
                 logger.warning(f"Fetch failed for {tf}: {e}")
@@ -63,9 +64,14 @@ class MTFOrchestrator:
         results = await asyncio.gather(*[fetch_tf(tf) for tf in self.default_timeframes])
         return {tf: df for tf, df in results if df is not None}
 
-    async def _analyze_all_timeframes(self, symbol: str, exchange: str) -> Dict[str, TimeframeAnalysis]:
-        """Use the analyzer to compute full analyses per timeframe (indicators/signals/etc.)."""
-        return await self.analyzer.analyze_all_timeframes(symbol, exchange)
+    async def _analyze_all_timeframes(self, symbol: str, exchange: str) -> Dict[str, TimeframeAnalysisResult]:
+        """Use the core processor to compute full analyses per timeframe (indicators/signals/etc.)."""
+        result = await self.core_processor.analyze_comprehensive_mtf(symbol, exchange)
+        if result.success:
+            return result.timeframe_analyses
+        else:
+            logger.error(f"Core processor analysis failed: {result.error_message}")
+            return {}
 
     async def run(self, symbol: str, exchange: str = "NSE", include: Optional[List[str]] = None) -> Dict[str, Any]:
         """
@@ -112,17 +118,18 @@ class MTFOrchestrator:
         agent_results_pairs = await asyncio.gather(*[run_proc(n, p) for n, p in processors])
         agent_results = {name: res for name, res in agent_results_pairs}
 
-        # Cross-timeframe validation using analyzer results
-        validation = self.analyzer.validate_cross_timeframe(analyzer_overview)
+        # Cross-timeframe validation using core processor results
+        validation = self.core_processor.validate_cross_timeframe(analyzer_overview)
 
-        # Summarize analyzer overview for quick reference
+        # Summarize core processor overview for quick reference
         overview_summary: Dict[str, Any] = {
             tf: {
-                "trend": ta.trend,
-                "confidence": ta.confidence,
-                "data_points": ta.data_points,
+                "trend": ta.get('trend', 'neutral'),
+                "confidence": ta.get('confidence', 0.0),
+                "data_points": ta.get('data_points', 0),
             }
             for tf, ta in analyzer_overview.items()
+            if isinstance(ta, dict)
         }
 
         total_time = (datetime.now() - start_ts).total_seconds()

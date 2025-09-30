@@ -1799,11 +1799,35 @@ class ChartVisualizer:
         return fig
 
     @staticmethod
-    def plot_mtf_comparison_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str = None, stock_symbol: str = 'Stock'):
+    def plot_multi_period_ma_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str = None, stock_symbol: str = 'Stock'):
         """
-        Create multi-timeframe comparison chart for cross-timeframe validation.
+        Create multi-period moving average chart showing SMA 20/50/200 on a single timeframe.
+        
+        NOTE: This is NOT a true multi-timeframe analysis chart. It only shows different
+        period moving averages on ONE timeframe. For true MTF analysis, see
+        agents.mtf_analysis.visualization.MTFVisualizer.
+        
         Returns matplotlib figure object. Optionally saves to file if save_path is provided.
         """
+    
+    @staticmethod
+    def plot_mtf_comparison_chart(data: pd.DataFrame, indicators: Dict[str, Any], save_path: str = None, stock_symbol: str = 'Stock'):
+        """
+        DEPRECATED: Use plot_multi_period_ma_chart() instead.
+        This function name is misleading - it doesn't show multi-timeframe data.
+        
+        For true multi-timeframe visualization, use:
+        agents.mtf_analysis.visualization.MTFVisualizer.create_mtf_comparison_chart()
+        """
+        import warnings
+        warnings.warn(
+            "plot_mtf_comparison_chart is deprecated and misleadingly named. "
+            "Use plot_multi_period_ma_chart() for multi-period MAs, or "
+            "MTFVisualizer.create_mtf_comparison_chart() for true MTF analysis.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return ChartVisualizer.plot_multi_period_ma_chart(data, indicators, save_path, stock_symbol)
         fig, axes = plt.subplots(3, 1, figsize=(16, 12), gridspec_kw={'height_ratios': [2, 1, 1]})
         
         # Main price chart with multiple timeframes
@@ -1838,7 +1862,7 @@ class ChartVisualizer:
             long_trend_line = np.poly1d(long_trend)(range(200))
             ax1.plot(data.index[-200:], long_trend_line, color='purple', linestyle='--', alpha=0.8, label='Long-term Trend')
         
-        ax1.set_title(f'{stock_symbol} - Multi-Timeframe Comparison', fontsize=14, fontweight='bold')
+        ax1.set_title(f'{stock_symbol} - Multi-Period Moving Averages (SMA 20/50/200)', fontsize=14, fontweight='bold')
         ax1.set_ylabel('Price')
         ax1.legend(loc='upper left')
         ax1.grid(True, alpha=0.3)
