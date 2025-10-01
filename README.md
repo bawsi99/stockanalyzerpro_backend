@@ -40,9 +40,9 @@ The system is built as a collection of microservices that can be deployed indepe
 - **PatternRecognition** (`patterns/recognition.py`): Detects advanced chart patterns and anomalies.
 - **PatternVisualizer/ChartVisualizer** (`patterns/visualization.py`): Generates pattern and comparison charts.
 - **GeminiClient** (`gemini/gemini_client.py`): Interfaces with Gemini LLM for AI-powered analysis and summary generation.
-- **SectorBenchmarkingProvider** (`ml/sector/benchmarking.py`): Provides sector benchmarking, rotation, and correlation analysis.
+- **SectorBenchmarkingProvider** (`agents/sector/benchmarking.py`): Provides sector benchmarking, rotation, and correlation analysis.
 - **ZerodhaDataClient** (`zerodha/client.py`): Handles all data retrieval from Zerodha APIs.
-- **SectorClassifier/EnhancedSectorClassifier** (`ml/sector/`): Classifies stocks into sectors using JSON-driven mappings and advanced filtering.
+- **SectorClassifier/EnhancedSectorClassifier** (`agents/sector/`): Classifies stocks into sectors using JSON-driven mappings and advanced filtering.
 
 #### ML & Quantitative System
 
@@ -405,7 +405,7 @@ python services/consolidated_service.py --dev
 2. Configure Google Gemini API key
 3. Set up Redis connection
 4. Configure Supabase credentials
-5. Set up sector classification data in `ml/sector/`
+5. Set up sector classification data in `agents/sector/`
 
 ### Environment Variables
 

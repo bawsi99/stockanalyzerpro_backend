@@ -4,12 +4,31 @@ from google import genai
 from google.genai import types
 import io
 from .debug_logger import debug_logger
+from .api_key_manager import get_api_key_manager
 
 class GeminiCore:
-    def __init__(self, api_key: str = None):
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
+    def __init__(self, api_key: str = None, agent_name: str = None):
+        """Initialize GeminiCore with API key management.
+        
+        Args:
+            api_key: Explicit API key (if provided, uses this instead of rotation)
+            agent_name: Name of the agent/component for key rotation tracking
+        """
+        self.agent_name = agent_name
+        
+        if api_key:
+            # Use explicitly provided key
+            self.api_key = api_key
+            self.use_key_rotation = False
+        else:
+            # Use key manager for rotation
+            self.key_manager = get_api_key_manager()
+            self.api_key = self.key_manager.get_key(agent_name)
+            self.use_key_rotation = True
+        
         if not self.api_key:
-            raise ValueError("Gemini API key is required. Provide it as a parameter or set GEMINI_API_KEY environment variable.")
+            raise ValueError("Gemini API key is required. Provide it as a parameter or set GEMINI_API_KEY1-5 environment variables.")
+        
         self.client = genai.Client(api_key=self.api_key)
         self.last_api_call = 0
         self.min_api_interval = 0.1  # 100ms between calls
@@ -66,36 +85,41 @@ class GeminiCore:
             # Log API response
             debug_logger.log_api_response(response, response_time, "call_llm")
             
-            if response and hasattr(response, 'candidates') and response.candidates:
-                # Extract text from response parts, ignoring executable_code parts
-                text_response = ""
+            # Robust text extraction: prefer response.text, then parts[].text, then content.text
+            text_response = ""
+            
+            # 1. Try response.text convenience field first
+            if hasattr(response, 'text') and response.text:
+                text_response = response.text
+            
+            # 2. If empty, iterate candidates and concatenate all parts[].text
+            if not text_response and hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
                 if hasattr(candidate, 'content') and candidate.content:
                     if hasattr(candidate.content, 'parts') and candidate.content.parts:
                         for part in candidate.content.parts:
                             if hasattr(part, 'text') and part.text:
                                 text_response += part.text
-                    else:
-                        if hasattr(candidate.content, 'text'):
-                            text_response = candidate.content.text
-                
-                if return_full_response:
-                    return response
-                elif text_response:
-                    return text_response
-                else:
-                    raise Exception("No text content found in LLM response")
+                    # 3. Fallback to direct content.text if parts missing or empty
+                    if not text_response and hasattr(candidate.content, 'text'):
+                        text_response = candidate.content.text or ""
+            
+            if return_full_response:
+                return response
             else:
-                raise Exception("Empty or invalid response from LLM")
+                # Return text or empty string (no exception on missing text)
+                return text_response
         except Exception as ex:
             response_time = time.time() - start_time
             debug_logger.log_error(ex, "call_llm", prompt)
             # Return empty string instead of raising
             return ""
 
-    async def call_llm_with_code_execution(self, prompt: str, model: str = "gemini-2.5-flash", return_full_response: bool = False):
+    async def call_llm_with_code_execution(self, prompt: str, model: str = "gemini-2.5-flash", return_full_response: bool = False, max_retries: int = 3):
         """
         Call the LLM with code execution enabled and extract both text and code results.
+        Includes retry logic with exponential backoff for handling temporary errors.
+        
         Returns a tuple of (text_response, code_results, execution_results) or full response if return_full_response=True
         """
         start_time = time.time()
@@ -123,24 +147,54 @@ class GeminiCore:
                 )
             )
         
-        try:
-            response = await loop.run_in_executor(None, sync_call)
-            response_time = time.time() - start_time
-            
-            # Log API response and extract results
-            text_response, code_results, execution_results = debug_logger.log_api_response(
-                response, response_time, "call_llm_with_code_execution"
-            )
-            
-            if return_full_response:
-                return response, code_results, execution_results
-            else:
-                return text_response, code_results, execution_results
-            
-        except Exception as ex:
-            response_time = time.time() - start_time
-            debug_logger.log_error(ex, "call_llm_with_code_execution", prompt)
-            return "", [], []
+        last_exception = None
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    # Exponential backoff: 2^attempt seconds (2s, 4s, 8s)
+                    delay = 2 ** attempt
+                    print(f"🔄 Retry attempt {attempt + 1}/{max_retries} after {delay}s delay...")
+                    await asyncio.sleep(delay)
+                
+                response = await loop.run_in_executor(None, sync_call)
+                response_time = time.time() - start_time
+                
+                # Log API response and extract results
+                text_response, code_results, execution_results = debug_logger.log_api_response(
+                    response, response_time, "call_llm_with_code_execution"
+                )
+                
+                if attempt > 0:
+                    print(f"✅ Retry successful on attempt {attempt + 1}/{max_retries}")
+                
+                if return_full_response:
+                    return response, code_results, execution_results
+                else:
+                    return text_response, code_results, execution_results
+                
+            except Exception as ex:
+                last_exception = ex
+                response_time = time.time() - start_time
+                
+                # Check if it's a retryable error (503, 429, connection errors)
+                error_str = str(ex).lower()
+                is_retryable = any(code in error_str for code in ['503', '429', 'overloaded', 'unavailable', 'timeout', 'connection'])
+                
+                if is_retryable and attempt < max_retries - 1:
+                    print(f"⚠️ Retryable error on attempt {attempt + 1}/{max_retries}: {type(ex).__name__}")
+                    debug_logger.log_error(ex, f"call_llm_with_code_execution_attempt_{attempt + 1}", prompt)
+                    continue  # Retry
+                else:
+                    # Non-retryable error or max retries reached
+                    if attempt == max_retries - 1:
+                        print(f"❌ Max retries ({max_retries}) reached. Giving up.")
+                    debug_logger.log_error(ex, "call_llm_with_code_execution", prompt)
+                    return "", [], []
+        
+        # Should not reach here, but just in case
+        if last_exception:
+            debug_logger.log_error(last_exception, "call_llm_with_code_execution_final", prompt)
+        return "", [], []
 
     async def call_llm_with_image(self, prompt: str, image, model: str = "gemini-2.5-flash", enable_code_execution: bool = True):
         """

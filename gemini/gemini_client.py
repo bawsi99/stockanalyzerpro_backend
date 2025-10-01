@@ -47,12 +47,13 @@ class GeminiClient:
         else:
             return obj
     
-    def __init__(self, api_key: str = None, context_config: ContextConfig = None):
-        self.core = GeminiCore(api_key)
+    def __init__(self, api_key: str = None, context_config: ContextConfig = None, agent_name: str = None):
+        self.core = GeminiCore(api_key, agent_name=agent_name)
         self.prompt_manager = PromptManager()
         self.image_utils = ImageUtils()
         self.error_utils = ErrorUtils()
         self.context_engineer = ContextEngineer(context_config)
+        self.agent_name = agent_name
 
     async def build_indicators_summary(self, symbol, indicators, period, interval, knowledge_context=None, token_tracker=None, mtf_context=None, curated_indicators: Optional[dict] = None):
         """
@@ -515,24 +516,70 @@ Risk Analysis Data:
             return ""
 
     async def synthesize_sector_summary(self, knowledge_context: str) -> str:
-        """Single-purpose: Summarize sector context lines into 4 bullets."""
+        """Single-purpose: Summarize sector context lines into 4 bullets (concise, timeframed).
+        Uses a robust LLM call path with tolerant text extraction and retries to avoid intermittent empty responses.
+        """
         try:
-            lines = "\n".join([l for l in (knowledge_context or "").splitlines() if l.strip().startswith(("- Market Outperformance:", "- Sector Outperformance:", "- Sector Beta:"))])
-            prompt = self.prompt_manager.format_prompt(
-                "sector_synthesis_template",
-                context=f"""
+            import re
+            ctx = knowledge_context or ""
+            # Extract key metrics from knowledge_context
+            def extract(pattern: str) -> str | None:
+                m = re.search(pattern, ctx, re.IGNORECASE)
+                return m.group(1).strip() if m else None
+
+            sector_out = extract(r"-\s*Sector\s*Outperformance:\s*([+-]?[0-9]+(?:\.[0-9]+)?)")
+            market_out = extract(r"-\s*Market\s*Outperformance:\s*([+-]?[0-9]+(?:\.[0-9]+)?)")
+            sector_beta = extract(r"-\s*Sector\s*Beta:\s*([+-]?[0-9]+(?:\.[0-9]+)?)")
+            market_beta = extract(r"-\s*Market\s*Beta:\s*([+-]?[0-9]+(?:\.[0-9]+)?)")
+            rotation_stage = extract(r"-\s*Rotation\s*Stage:\s*([A-Za-z]+)")
+            rotation_mom = extract(r"-\s*Rotation\s*Momentum:\s*([+-]?[0-9]+(?:\.[0-9]+)?)")
+            sector_name = extract(r"-\s*Sector:\s*(.+)")
+
+            # Build concise, explicit context with timeframes
+            metrics_lines = []
+            if sector_out is not None:
+                metrics_lines.append(f"- Sector Outperformance (12m): {sector_out}%")
+            if market_out is not None:
+                metrics_lines.append(f"- Market Outperformance (12m): {market_out}%")
+            if sector_beta is not None:
+                metrics_lines.append(f"- Sector Beta (12m): {sector_beta}")
+            if rotation_stage is not None:
+                metrics_lines.append(f"- Rotation Stage (3m): {rotation_stage}")
+            if rotation_mom is not None:
+                metrics_lines.append(f"- Rotation Momentum (3m): {rotation_mom}%")
+
+            additional_lines = []
+            if sector_name:
+                additional_lines.append(f"- Sector: {sector_name}")
+            if market_beta is not None:
+                additional_lines.append(f"- Market Beta (12m): {market_beta}")
+
+            concise_context = f"""
 [Source: SectorContext]
-Analyze the following sector performance metrics and provide focused sector-based insights.
+Timeframes: Relative performance and beta = 12m; Rotation = 3m
 
 Sector Metrics:
-{lines}
+{chr(10).join(metrics_lines) if metrics_lines else 'N/A'}
 
 Additional Context (if available):
-{knowledge_context[:2000] if 'SECTOR CONTEXT' in knowledge_context else 'No additional sector context available'}
+{chr(10).join(additional_lines) if additional_lines else 'None'}
 """
+
+            prompt = self.prompt_manager.format_prompt(
+                "sector_synthesis_template",
+                context=concise_context
             ) + self.prompt_manager.SOLVING_LINE
-            text = await self.core.call_llm(prompt)
-            return text or ""
+
+            # Prefer the robust path with retries and tolerant extraction
+            text, _code, _exec = await self.core.call_llm_with_code_execution(
+                prompt, return_full_response=False
+            )
+            if text and isinstance(text, str) and text.strip():
+                return text
+
+            # Fallback once to the basic call
+            fallback = await self.core.call_llm(prompt)
+            return fallback or ""
         except Exception:
             return ""
 

@@ -14,7 +14,7 @@ import json
 import argparse
 import logging
 from pathlib import Path
-from ml.sector_classifier import SectorClassifier
+from agents.sector import SectorClassifier
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

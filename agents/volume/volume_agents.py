@@ -174,7 +174,29 @@ class VolumeAgentsOrchestrator:
     """
     
     def __init__(self, gemini_client=None):
+        # Support for either single gemini_client or None (will create per-agent clients)
         self.gemini_client = gemini_client
+        self.use_distributed_keys = (gemini_client is None)
+        
+        # If using distributed keys, create separate gemini clients for each agent
+        if self.use_distributed_keys:
+            from gemini.api_key_manager import get_api_key_manager
+            from gemini.gemini_client import GeminiClient
+            
+            self.key_manager = get_api_key_manager()
+            
+            # Create separate GeminiClient instances for each agent with unique API keys
+            self.agent_clients = {
+                'volume_anomaly': GeminiClient(api_key=self.key_manager.get_key_for_agent(0), agent_name='volume_anomaly'),
+                'institutional_activity': GeminiClient(api_key=self.key_manager.get_key_for_agent(1), agent_name='institutional_activity'),
+                'volume_confirmation': GeminiClient(api_key=self.key_manager.get_key_for_agent(2), agent_name='volume_confirmation'),
+                'support_resistance': GeminiClient(api_key=self.key_manager.get_key_for_agent(3), agent_name='support_resistance'),
+                'volume_momentum': GeminiClient(api_key=self.key_manager.get_key_for_agent(4), agent_name='volume_momentum')
+            }
+            print("🔑 Volume agents using distributed API keys (5 separate clients)")
+        else:
+            self.agent_clients = None
+            print("🔑 Volume agents using shared Gemini client")
         
         # Initialize all agent processors
         self.volume_anomaly = VolumeAnomalyProcessor()
@@ -510,19 +532,26 @@ class VolumeAgentsOrchestrator:
             llm_response = None
             prompt_text = None
             
-            if self.gemini_client and chart_image:
+            # Get the appropriate Gemini client (agent-specific or shared)
+            agent_client = None
+            if self.use_distributed_keys and self.agent_clients:
+                agent_client = self.agent_clients.get(agent_name)
+            elif self.gemini_client:
+                agent_client = self.gemini_client
+            
+            if agent_client and chart_image:
                 try:
                     prompt_text = self._build_agent_prompt(agent_name, analysis_data, symbol)
                     # Debug: log when a volume agent LLM request is sent
                     print(f"{agent_name.replace('_', ' ')} agent request sent")
-                    llm_response = await self.gemini_client.analyze_volume_agent_specific(
+                    llm_response = await agent_client.analyze_volume_agent_specific(
                         chart_image, prompt_text, agent_name
                     )
                 except Exception as llm_error:
                     logger.warning(f"LLM analysis failed for {agent_name}: {llm_error}")
                     print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM call failed for {symbol}: {llm_error}")
             else:
-                if not self.gemini_client:
+                if not agent_client:
                     print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM skipped for {symbol}: gemini_client unavailable")
                 elif not chart_image:
                     print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM skipped for {symbol}: no chart image")
@@ -3027,10 +3056,21 @@ class VolumeAgentIntegrationManager:
                     is_healthy = agent is not None
                     
                     # Additional health checks if agent exists
+                    # Check for either shared client or distributed clients
+                    has_gemini_client = False
+                    if is_healthy:
+                        if self.orchestrator.use_distributed_keys:
+                            # Using distributed keys - check agent_clients
+                            has_gemini_client = (self.orchestrator.agent_clients is not None and 
+                                               agent_name in self.orchestrator.agent_clients)
+                        else:
+                            # Using shared client
+                            has_gemini_client = (self.orchestrator.gemini_client is not None)
+                    
                     diagnostics = {
                         'initialized': is_healthy,
-                        # Health depends on orchestrator-wide Gemini client, not per-processor
-                        'gemini_client_available': (self.orchestrator.gemini_client is not None) if is_healthy else False,
+                        'gemini_client_available': has_gemini_client,
+                        'using_distributed_keys': self.orchestrator.use_distributed_keys,
                         'last_check': datetime.now().isoformat()
                     }
                     

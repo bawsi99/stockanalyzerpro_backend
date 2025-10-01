@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 # Import existing components
-from ml.sector.classifier import SectorClassifier
+from agents.sector.classifier import SectorClassifier
 from core.instrument_filter import instrument_filter
 from analysis.datasets import analysis_datasets
 

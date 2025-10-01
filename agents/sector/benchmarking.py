@@ -17,8 +17,8 @@ from pathlib import Path
 import asyncio
 
 # Import existing components
-from ml.sector.classifier import SectorClassifier
-from ml.sector.enhanced_classifier import enhanced_sector_classifier
+from agents.sector.classifier import SectorClassifier
+from agents.sector.enhanced_classifier import enhanced_sector_classifier
 from ml.indicators.technical_indicators import IndianMarketMetricsProvider
 from zerodha.client import ZerodhaDataClient
 
@@ -35,19 +35,11 @@ class SectorBenchmarkingProvider:
         self.sector_classifier = SectorClassifier()
         self.enhanced_classifier = enhanced_sector_classifier
         
-        # Cache for performance optimization
-        self.sector_data_cache = {}
-        self.cache_duration = 3600  # OPTIMIZED: Increased from 900 (15 min) to 3600 (1 hour)
+        # Layer 2 cache REMOVED - now relying only on Layer 1 (file-based) cache
+        # Reasoning: Layer 1 expires when data is stale. If Layer 1 expires, we need fresh data,
+        # not old cached data from Layer 2. Layer 2 would serve stale data when we need fresh data.
         
-        # NEW: Comprehensive sector analysis cache
-        self.comprehensive_sector_cache = {}
-        self.comprehensive_cache_duration = 7200  # OPTIMIZED: Increased from 3600 (1 hour) to 7200 (2 hours)
-        self.last_comprehensive_update = None
-        
-        # REMOVED: Hardcoded sector mappings - now using actual sector definitions from JSON files
-        # All sector information is now dynamically loaded from the sector classifier
-        
-        logging.info("SectorBenchmarkingProvider initialized with hybrid caching strategy")
+        logging.info("SectorBenchmarkingProvider initialized - Layer 2 cache removed, using Layer 1 only")
     
     def get_comprehensive_benchmarking(self, stock_symbol: str, stock_data: pd.DataFrame, user_sector: str = None) -> Dict[str, Any]:
         """
@@ -432,72 +424,79 @@ class SectorBenchmarkingProvider:
                 "6M": 90,    # OPTIMIZED: Reduced from 180 to 90 days
                 "1Y": 180    # OPTIMIZED: Reduced from 365 to 180 days
             }
-            days = timeframe_days.get(timeframe, 30)  # Default to 1M instead of 3M
+            days = timeframe_days.get(timeframe, 30)  # Default to 1M
             
-            # OPTIMIZATION: Fetch NIFTY 50 data once and reuse for all sectors
+            # Fetch NIFTY 50 once
             logging.info(f"Async fetching NIFTY 50 data once for {timeframe} timeframe")
-            nifty_data = await self._get_nifty_data_async(days + 20)  # OPTIMIZED: Reduced buffer from 50 to 20 days
+            nifty_data = await self._get_nifty_data_async(days + 20)
             nifty_return = None
-            if nifty_data is not None and len(nifty_data) >= days:
-                nifty_return = ((nifty_data['close'].iloc[-1] - nifty_data['close'].iloc[-days]) / 
-                              nifty_data['close'].iloc[-days]) * 100
-                logging.info(f"NIFTY 50 return calculated: {nifty_return:.2f}%")
+            if nifty_data is not None and len(nifty_data) >= 2:
+                n = len(nifty_data)
+                window = min(days, n - 1)
+                try:
+                    nifty_return = ((nifty_data['close'].iloc[-1] - nifty_data['close'].iloc[-window]) / nifty_data['close'].iloc[-window]) * 100
+                    logging.info(f"NIFTY 50 return calculated: {nifty_return:.2f}% (window={window} days)")
+                except Exception as e:
+                    logging.warning(f"Failed to compute NIFTY return (async): {e}")
             else:
                 logging.warning("Could not fetch NIFTY 50 data for async sector rotation analysis")
             
-            # Get sector performance data using async parallel fetching
+            # Use actual sectors from classifier
+            all_sectors_data = self.sector_classifier.get_all_sectors()
+            all_sectors = [s['code'] for s in all_sectors_data]
+            
             sector_performance = {}
-            sector_momentum = {}
             sector_rankings = {}
             
-            async def fetch_sector_data(sector, token):
+            async def fetch_sector_perf(sector_code: str):
                 try:
-                    # Get historical data for sector index - OPTIMIZED timeframe
-                    sector_data = await self._get_sector_data_async(sector, days + 20)  # OPTIMIZED: Reduced buffer from 50 to 20 days
-                    # More flexible data requirement for longer timeframes
-                    min_required = days * 0.7 if days > 60 else days * 0.8  # OPTIMIZED: Adjusted thresholds
-                    if sector_data is not None and len(sector_data) >= min_required:
-                        # Calculate daily returns
-                        returns = sector_data['close'].pct_change().dropna()
-                        return sector, returns
-                    else:
-                        logging.warning(f"No sufficient data for {sector}: got {len(sector_data) if sector_data is not None else 0} records, need at least {min_required:.0f}")
+                    sector_index = self.sector_classifier.get_primary_sector_index(sector_code)
+                    if not sector_index:
+                        logging.warning(f"No primary index found for sector: {sector_code}")
                         return None
+                    # Fetch sector index data asynchronously
+                    data = await self._get_sector_index_data_async(sector_code, days + 20)
+                    min_required = days * 0.7 if days > 60 else days * 0.8
+                    if data is None or len(data) < min_required:
+                        logging.warning(f"No sufficient data for {sector_code} ({sector_index}): got {len(data) if data is not None else 0} records, need at least {min_required:.0f}")
+                        return None
+                    close = data['close']
+                    n = len(close)
+                    current_price = close.iloc[-1]
+                    window = min(days, n - 1)
+                    start_price = close.iloc[-window]
+                    total_return = ((current_price - start_price) / start_price) * 100
+                    recent_len = min(10, n - 1)
+                    recent_prices = close.tail(recent_len)
+                    momentum = ((recent_prices.iloc[-1] - recent_prices.iloc[0]) / recent_prices.iloc[0]) * 100 if recent_len >= 2 else 0.0
+                    relative_strength = total_return - nifty_return if nifty_return is not None else total_return
+                    return sector_code, {
+                        'total_return': round(total_return, 2),
+                        'momentum': round(momentum, 2),
+                        'relative_strength': round(relative_strength, 2),
+                        'current_price': current_price,
+                        'start_price': start_price
+                    }
                 except Exception as e:
-                    logging.warning(f"Error calculating performance for {sector}: {e}")
+                    logging.warning(f"Error calculating performance for {sector_code}: {e}")
                     return None
             
-            # Fetch all sector data in parallel
-            tasks = [fetch_sector_data(sector, token) for sector, token in self.sector_tokens.items()]
+            # Run in parallel
+            tasks = [fetch_sector_perf(sec) for sec in all_sectors]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
-            # Process results
-            for result in results:
-                if result is not None and not isinstance(result, Exception):
-                    sector, returns = result
-                    sector_performance[sector] = {
-                        'total_return': returns.mean(),
-                        'momentum': returns.iloc[-1] - returns.iloc[0],
-                        'relative_strength': returns.mean() / returns.std(),
-                        'current_price': returns.iloc[-1],
-                        'start_price': returns.iloc[0]
-                    }
-                    sector_momentum[sector] = returns.iloc[-1] - returns.iloc[0]
+            for res in results:
+                if isinstance(res, Exception) or res is None:
+                    continue
+                sec, perf = res
+                sector_performance[sec] = perf
             
-            # Rank sectors by performance - OPTIMIZED: Only store rank, not duplicate performance data
-            sorted_sectors = sorted(sector_performance.items(), 
-                                  key=lambda x: x[1]['relative_strength'], reverse=True)
+            # Rank sectors by relative strength
+            sorted_sectors = sorted(sector_performance.items(), key=lambda x: x[1]['relative_strength'], reverse=True)
+            for rank, (sec, _) in enumerate(sorted_sectors, 1):
+                sector_rankings[sec] = {'rank': rank}
             
-            for rank, (sector, data) in enumerate(sorted_sectors, 1):
-                sector_rankings[sector] = {
-                    'rank': rank
-                    # Performance data already available in sector_performance[sector]
-                }
-            
-            # Identify rotation patterns
             rotation_analysis = self._identify_rotation_patterns(sector_performance, timeframe)
-            
-            # Generate recommendations
             recommendations = self._generate_rotation_recommendations(sector_rankings, rotation_analysis, sector_performance)
             
             return {
@@ -509,7 +508,6 @@ class SectorBenchmarkingProvider:
                 'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'optimization_note': 'Async timeframes optimized for reduced data fetching'
             }
-            
         except Exception as e:
             logging.error(f"Error in async sector rotation analysis: {e}")
             return None
@@ -1876,28 +1874,16 @@ class SectorBenchmarkingProvider:
         return mitigation_strategies
     
     def _get_sector_index_data(self, sector: str, period: int = 365) -> Optional[pd.DataFrame]:
-        """Get sector index data with caching."""
+        """Get sector index data (no caching - Layer 1 handles caching)."""
         try:
-            logging.info(f"Fetching sector index data for {sector} with period {period}")
-            cache_key = f"{sector}_{period}"
-            current_time = datetime.now()
-            
-            # Check cache
-            if cache_key in self.sector_data_cache:
-                cached_data, cache_time = self.sector_data_cache[cache_key]
-                if (current_time - cache_time).total_seconds() < self.cache_duration:
-                    logging.info(f"Using cached sector data for {sector}")
-                    return cached_data
+            logging.info(f"Fetching fresh sector index data for {sector} with period {period}")
             
             # Get sector index symbol
             sector_index = self.sector_classifier.get_primary_sector_index(sector)
             logging.info(f"Resolved sector index for {sector}: {sector_index}")
             
-            # No fallback needed - use only the classifier data
-            # All sector index mappings should be available in the JSON files
-            
             if not sector_index:
-                logging.warning(f"No primary index found for sector: {sector} (checked both classifier and fallback mappings)")
+                logging.warning(f"No primary index found for sector: {sector}")
                 return None
             
             # Fetch data from Zerodha
@@ -1911,10 +1897,6 @@ class SectorBenchmarkingProvider:
             if sector_data is not None:
                 logging.info(f"Data points received: {len(sector_data)}")
             
-            # Cache the data
-            if sector_data is not None:
-                self.sector_data_cache[cache_key] = (sector_data, current_time)
-            
             return sector_data
             
         except Exception as e:
@@ -1922,25 +1904,13 @@ class SectorBenchmarkingProvider:
             return None
     
     async def _get_sector_index_data_async(self, sector: str, period: int = 365) -> Optional[pd.DataFrame]:
-        """Async version of _get_sector_index_data with caching."""
+        """Async version of _get_sector_index_data (no caching - Layer 1 handles caching)."""
         try:
-            cache_key = f"{sector}_{period}"
-            current_time = datetime.now()
-            
-            # Check cache
-            if cache_key in self.sector_data_cache:
-                cached_data, cache_time = self.sector_data_cache[cache_key]
-                if (current_time - cache_time).total_seconds() < self.cache_duration:
-                    return cached_data
-            
             # Get sector index symbol
             sector_index = self.sector_classifier.get_primary_sector_index(sector)
             
-            # No fallback needed - use only the classifier data
-            # All sector index mappings should be available in the JSON files
-            
             if not sector_index:
-                logging.warning(f"No primary index found for sector: {sector} (checked both classifier and fallback mappings)")
+                logging.warning(f"No primary index found for sector: {sector}")
                 return None
             
             # Fetch data from Zerodha asynchronously
@@ -1949,10 +1919,6 @@ class SectorBenchmarkingProvider:
                 exchange="NSE",
                 period=period
             )
-            
-            # Cache the data
-            if sector_data is not None:
-                self.sector_data_cache[cache_key] = (sector_data, current_time)
             
             return sector_data
             
@@ -1979,7 +1945,7 @@ class SectorBenchmarkingProvider:
     
     def _get_nifty_data(self, period: int = 365) -> Optional[pd.DataFrame]:
         """
-        Get historical data for NIFTY 50 index with caching.
+        Get historical data for NIFTY 50 index (no caching - Layer 1 handles caching).
         
         Args:
             period: Number of days to retrieve
@@ -1988,15 +1954,6 @@ class SectorBenchmarkingProvider:
             DataFrame with historical data or None if not available
         """
         try:
-            # Check cache first
-            cache_key = f"NIFTY_50_{period}"
-            current_time = datetime.now()
-            
-            if cache_key in self.sector_data_cache:
-                cached_data, cache_time = self.sector_data_cache[cache_key]
-                if (current_time - cache_time).total_seconds() < self.cache_duration:
-                    return cached_data
-            
             # Fetch data from Zerodha
             data = self.zerodha_client.get_historical_data(
                 symbol="NIFTY 50",
@@ -2008,9 +1965,6 @@ class SectorBenchmarkingProvider:
             if data is None or data.empty:
                 logging.warning(f"No data available for NIFTY 50")
                 return None
-            
-            # Cache the data
-            self.sector_data_cache[cache_key] = (data, current_time)
                 
             return data
             
@@ -2019,17 +1973,8 @@ class SectorBenchmarkingProvider:
             return None
     
     async def _get_nifty_data_async(self, period: int = 365) -> Optional[pd.DataFrame]:
-        """Async version of _get_nifty_data with caching."""
+        """Async version of _get_nifty_data (no caching - Layer 1 handles caching)."""
         try:
-            # Check cache first
-            cache_key = f"NIFTY_50_{period}"
-            current_time = datetime.now()
-            
-            if cache_key in self.sector_data_cache:
-                cached_data, cache_time = self.sector_data_cache[cache_key]
-                if (current_time - cache_time).total_seconds() < self.cache_duration:
-                    return cached_data
-            
             # Fetch data from Zerodha asynchronously
             data = await self.zerodha_client.get_historical_data_async(
                 symbol="NIFTY 50",
@@ -2041,9 +1986,6 @@ class SectorBenchmarkingProvider:
             if data is None or data.empty:
                 logging.warning(f"No data available for NIFTY 50")
                 return None
-            
-            # Cache the data
-            self.sector_data_cache[cache_key] = (data, current_time)
                 
             return data
             
@@ -2810,25 +2752,16 @@ class SectorBenchmarkingProvider:
     def get_comprehensive_sector_analysis(self, force_refresh: bool = False) -> Dict[str, Any]:
         """
         Get comprehensive sector analysis with inter-sector relationships.
-        Uses smart caching to avoid repeated API calls.
+        Layer 2 cache removed - always generates fresh analysis when called.
+        Layer 1 (file-based) cache handles caching at the endpoint level.
         
         Args:
-            force_refresh: Force refresh of cached data
+            force_refresh: Kept for API compatibility (but no longer used)
             
         Returns:
             Dict containing comprehensive sector analysis with rotation and correlation
         """
         try:
-            current_time = datetime.now()
-            
-            # Check if we have valid cached comprehensive data
-            if (not force_refresh and 
-                self.last_comprehensive_update and 
-                (current_time - self.last_comprehensive_update).total_seconds() < self.comprehensive_cache_duration):
-                
-                logging.info("Using cached comprehensive sector analysis")
-                return self.comprehensive_sector_cache
-            
             logging.info("Generating fresh comprehensive sector analysis (all sectors)")
             
             # Generate comprehensive analysis (all sectors)
@@ -2836,15 +2769,9 @@ class SectorBenchmarkingProvider:
                 'sector_rotation': self.analyze_sector_rotation("3M"),
                 'sector_correlation': self.generate_sector_correlation_matrix("6M"),
                 'market_overview': self._generate_market_overview(),
-                'last_updated': current_time.isoformat(),
-                'cache_duration_minutes': self.comprehensive_cache_duration // 60
+                'last_updated': datetime.now().isoformat()
             }
             
-            # Cache the comprehensive analysis
-            self.comprehensive_sector_cache = comprehensive_analysis
-            self.last_comprehensive_update = current_time
-            
-            logging.info("Comprehensive sector analysis cached successfully")
             return comprehensive_analysis
             
         except Exception as e:
@@ -3029,15 +2956,28 @@ class SectorBenchmarkingProvider:
             logging.error(f"Error generating market overview: {e}")
             return {} 
 
-    async def get_optimized_comprehensive_sector_analysis(self, symbol: str, stock_data: pd.DataFrame, sector: str, requested_period: int = None, use_all_sectors: bool = True) -> Dict[str, Any]:
+    async def get_optimized_comprehensive_sector_analysis(
+        self, 
+        symbol: str, 
+        stock_data: pd.DataFrame, 
+        sector: str, 
+        requested_period: int = None, 
+        use_all_sectors: bool = True,
+        cached_rotation: Optional[Dict[str, Any]] = None,
+        cached_correlation: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         OPTIMIZED: Unified sector data fetcher that minimizes API calls and maximizes data reuse.
+        
+        CRITICAL FIX: Now accepts cached rotation and correlation data to avoid redundant sector fetching.
+        Stock-specific benchmarking is ALWAYS calculated fresh.
         
         This method fetches all required sector data in a single optimized operation:
         - Uses optimized timeframes (1M, 3M, 6M instead of 3M, 6M, 1Y)
         - Fetches data once and reuses across all analyses
         - Implements smart caching and data sharing
         - Reduces API calls from 35 to 5-8 calls
+        - NEW: Accepts cached rotation/correlation to skip sector-to-sector fetching
         
         Args:
             symbol: Stock symbol
@@ -3045,6 +2985,8 @@ class SectorBenchmarkingProvider:
             sector: Stock's sector
             requested_period: Optional period for analysis (in days)
             use_all_sectors: If True, analyze all sectors instead of optimized subset (default: True)
+            cached_rotation: Optional cached sector rotation data (sector-agnostic)
+            cached_correlation: Optional cached sector correlation data (sector-agnostic)
             
         Returns:
             Dict containing all sector analysis data (benchmarking, rotation, correlation)
@@ -3125,59 +3067,76 @@ class SectorBenchmarkingProvider:
                     else:
                         return self._get_fallback_optimized_analysis(symbol, sector)
             
-                # STEP 3: Fetch sectors for analysis (optimized subset or all sectors)
-                # Select sectors based on relevance, performance, or comprehensive analysis flag
-                relevant_sectors = self._get_relevant_sectors_for_analysis(sector, current_use_all_sectors)
-                sector_type = "all sectors" if current_use_all_sectors else "relevant sectors"
-                logging.info(f"{analysis_type}: Fetching {len(relevant_sectors)} {sector_type}")
-            
+                # STEP 3: Fetch sectors for analysis ONLY if we don't have cached rotation/correlation
                 sector_data_dict = {}
-                async def fetch_relevant_sector_data(sector_name):
-                    try:
-                        data = await self._get_sector_data_async(sector_name, days + 20)
-                        # CRITICAL FIX: Use same flexible requirement as main data validation
-                        # Use 60% of requested days, minimum 30 days (same as line 2968)
-                        min_required = max(30, int(days * 0.6))
-                        logging.info(f"DEBUG: Fetching {sector_name} - Available: {len(data) if data is not None else 'None'}, Required: {min_required}")
-                        if data is not None and len(data) >= min_required:
-                            logging.info(f"✅ {sector_name} data accepted: {len(data)} >= {min_required}")
-                            return sector_name, data
-                        else:
-                            logging.warning(f"❌ {sector_name} data rejected: {len(data) if data is not None else 'None'} < {min_required}")
+                
+                # OPTIMIZATION: Skip sector fetching if we have both cached rotation and correlation
+                if cached_rotation and cached_correlation:
+                    logging.info(f"✅ {analysis_type}: Skipping sector fetching - using cached rotation & correlation")
+                    # No need to fetch other sectors since we have cached data
+                else:
+                    # Select sectors based on relevance, performance, or comprehensive analysis flag
+                    relevant_sectors = self._get_relevant_sectors_for_analysis(sector, current_use_all_sectors)
+                    sector_type = "all sectors" if current_use_all_sectors else "relevant sectors"
+                    logging.info(f"{analysis_type}: Fetching {len(relevant_sectors)} {sector_type}")
+                
+                    async def fetch_relevant_sector_data(sector_name):
+                        try:
+                            data = await self._get_sector_data_async(sector_name, days + 20)
+                            # CRITICAL FIX: Use same flexible requirement as main data validation
+                            # Use 60% of requested days, minimum 30 days (same as line 2968)
+                            min_required = max(30, int(days * 0.6))
+                            logging.info(f"DEBUG: Fetching {sector_name} - Available: {len(data) if data is not None else 'None'}, Required: {min_required}")
+                            if data is not None and len(data) >= min_required:
+                                logging.info(f"✅ {sector_name} data accepted: {len(data)} >= {min_required}")
+                                return sector_name, data
+                            else:
+                                logging.warning(f"❌ {sector_name} data rejected: {len(data) if data is not None else 'None'} < {min_required}")
+                                return None
+                        except Exception as e:
+                            logging.warning(f"Error fetching {sector_name}: {e}")
                             return None
-                    except Exception as e:
-                        logging.warning(f"Error fetching {sector_name}: {e}")
-                        return None
-                
-                # Fetch relevant sectors in parallel
-                tasks = [fetch_relevant_sector_data(s) for s in relevant_sectors]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                
-                for result in results:
-                    if result is not None and not isinstance(result, Exception):
-                        sector_name, data = result
-                        sector_data_dict[sector_name] = data
-                
-                # Check if we have sufficient sectors for analysis
-                if len(sector_data_dict) < 3 and current_use_all_sectors and current_attempt < max_attempts:
-                    error_msg = f"Insufficient sectors for {analysis_type.lower()} analysis. Got {len(sector_data_dict)} sectors, expected at least 3."
-                    logging.warning(error_msg)
-                    logging.info(f"Insufficient sectors for {analysis_type.lower()}, will retry with fallback approach")
-                    raise Exception(error_msg)
+                    
+                    # Fetch relevant sectors in parallel
+                    tasks = [fetch_relevant_sector_data(s) for s in relevant_sectors]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    for result in results:
+                        if result is not None and not isinstance(result, Exception):
+                            sector_name, data = result
+                            sector_data_dict[sector_name] = data
+                    
+                    # Check if we have sufficient sectors for analysis
+                    if len(sector_data_dict) < 3 and current_use_all_sectors and current_attempt < max_attempts:
+                        error_msg = f"Insufficient sectors for {analysis_type.lower()} analysis. Got {len(sector_data_dict)} sectors, expected at least 3."
+                        logging.warning(error_msg)
+                        logging.info(f"Insufficient sectors for {analysis_type.lower()}, will retry with fallback approach")
+                        raise Exception(error_msg)
                 
                 # STEP 4: Calculate all metrics using fetched data
                 logging.info(f"{analysis_type}: Calculating comprehensive sector metrics")
                 
-                # Calculate benchmarking metrics
+                # ALWAYS calculate benchmarking metrics (stock-specific, never cached)
+                logging.info(f"{analysis_type}: Calculating stock-specific benchmarking for {symbol}")
                 benchmarking = self._calculate_optimized_benchmarking(symbol, stock_data, sector, sector_data, nifty_data)
                 
-                # Calculate rotation metrics using relevant sectors
-                rotation_days = min(30, days // 2) if requested_period else 30  # Use half of sector analysis period, capped at 30 days
-                rotation = self._calculate_optimized_rotation(sector_data_dict, nifty_data, rotation_days)
+                # CRITICAL FIX: Use cached rotation if available, otherwise calculate fresh
+                if cached_rotation:
+                    logging.info(f"✅ Using cached rotation data for {sector} (skipping sector-to-sector fetching)")
+                    rotation = cached_rotation
+                else:
+                    logging.info(f"🔄 Calculating rotation metrics using relevant sectors")
+                    rotation_days = min(30, days // 2) if requested_period else 30
+                    rotation = self._calculate_optimized_rotation(sector_data_dict, nifty_data, rotation_days)
                 
-                # Calculate correlation metrics using relevant sectors
-                correlation_days = min(60, days) if requested_period else 60  # Use sector analysis period, capped at 60 days
-                correlation = self._calculate_optimized_correlation(sector_data_dict, correlation_days, sector)
+                # CRITICAL FIX: Use cached correlation if available, otherwise calculate fresh
+                if cached_correlation:
+                    logging.info(f"✅ Using cached correlation data for {sector} (skipping sector-to-sector fetching)")
+                    correlation = cached_correlation
+                else:
+                    logging.info(f"🔄 Calculating correlation metrics using relevant sectors")
+                    correlation_days = min(60, days) if requested_period else 60
+                    correlation = self._calculate_optimized_correlation(sector_data_dict, correlation_days, sector)
                 
                 # STEP 5: Build comprehensive result
                 comprehensive_result = {

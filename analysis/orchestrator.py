@@ -55,11 +55,21 @@ class StockAnalysisOrchestrator:
     """
     def __init__(self):
         self.data_client = ZerodhaDataClient()
-        self.gemini_client = GeminiClient()
+        # Use rotating API key for indicator summary and final decision calls
+        try:
+            from gemini.api_key_manager import get_api_key_manager
+            key_manager = get_api_key_manager()
+            api_key = key_manager.get_key("orchestrator_init")
+            self.gemini_client = GeminiClient(api_key=api_key, agent_name="orchestrator")
+            print(f"✅ Orchestrator initialized with API key rotation")
+        except Exception as e:
+            # Fallback to default initialization without specific key
+            print(f"⚠️ API key manager not available, using default: {e}")
+            self.gemini_client = GeminiClient()
         self.state_cache = {}
         self.indicators = TechnicalIndicators()
         self.visualizer = PatternVisualizer()
-        from ml.sector.benchmarking import SectorBenchmarkingProvider
+        from agents.sector import SectorBenchmarkingProvider
         self.sector_benchmarking_provider = SectorBenchmarkingProvider()
         # Initialize indicator agents integration manager
         self.indicator_agents_manager = indicator_agent_integration_manager

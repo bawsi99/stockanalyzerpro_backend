@@ -19,7 +19,7 @@ from core.config import Config
 from zerodha.client import ZerodhaDataClient
 
 # Add to existing IndianMarketMetricsProvider class
-from ml.sector.classifier import SectorClassifier
+# from agents.sector.classifier import SectorClassifier  # Import moved to method level to avoid circular import
 
 
 class TechnicalIndicators:
@@ -3020,6 +3020,7 @@ class DataCollector:
         }
         
         if stock_symbol:
+            from agents.sector.classifier import SectorClassifier
             sector_classifier = SectorClassifier()
             sector = sector_classifier.get_stock_sector(stock_symbol)
             metadata['sector'] = sector
@@ -3037,6 +3038,7 @@ class IndianMarketMetricsProvider:
         self.zerodha_client = ZerodhaDataClient()
         self.cache = {}
         self.cache_duration = 900  # 15 minutes cache
+        from agents.sector.classifier import SectorClassifier
         self.sector_classifier = SectorClassifier()  # Import from sector_classifier
         
         # Enhanced market indices with sector-specific indices

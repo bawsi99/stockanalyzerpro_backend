@@ -231,7 +231,8 @@ class CentralDataProvider:
         # If not in cache or expired, fetch new data
         try:
             # Import SectorClassifier here to avoid circular imports
-            from ml.sector_classifier import sector_classifier
+            from agents.sector import SectorClassifier
+            sector_classifier = SectorClassifier()
             
             # Get sector stocks and index
             stocks = sector_classifier.get_sector_stocks(sector)

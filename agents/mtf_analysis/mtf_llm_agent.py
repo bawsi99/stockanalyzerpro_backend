@@ -33,8 +33,19 @@ class MTFLLMAgent:
         self.agent_name = "mtf_llm_agent"
         # Import here to avoid circular dependencies
         from gemini.gemini_client import GeminiClient
-        self.gemini_client = GeminiClient()
-        logger.info(f"[{self.agent_name.upper()}] Initialized")
+        
+        # Use rotating API key with fallback
+        try:
+            from gemini.api_key_manager import get_api_key_manager
+            key_manager = get_api_key_manager()
+            api_key = key_manager.get_key("mtf_llm")
+            self.gemini_client = GeminiClient(api_key=api_key, agent_name="mtf_llm")
+            logger.info(f"[{self.agent_name.upper()}] Initialized with key rotation")
+        except Exception as e:
+            # Fallback to default initialization
+            logger.warning(f"[{self.agent_name.upper()}] Key manager unavailable, using default: {e}")
+            self.gemini_client = GeminiClient()
+            logger.info(f"[{self.agent_name.upper()}] Initialized with default key")
     
     async def analyze_mtf_with_llm(
         self, 

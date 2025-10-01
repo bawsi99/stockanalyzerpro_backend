@@ -6,9 +6,32 @@ This service is responsible for:
 - Stock analysis and AI processing
 - Technical indicator calculations
 - Chart generation and visualization
-- Sector analysis and benchmarking
+- Sector analysis orchestration (delegates to sector agent)
 - Pattern recognition
 - Real-time analysis callbacks
+
+ARCHITECTURE OVERVIEW - SECTOR ENDPOINTS:
+
+1. THIN CLIENT ENDPOINTS (Delegate to Sector Agent):
+   - /sector/benchmark -> /agents/sector/analyze-all
+   - /sector/{sector_name}/performance -> /agents/sector/performance/{sector_name}
+   - /sector/compare -> /agents/sector/compare
+   These endpoints are lightweight wrappers that delegate heavy data processing
+   to the sector agent service for caching and optimization.
+
+2. METADATA ENDPOINTS (Direct Access):
+   - /sector/list
+   - /sector/{sector_name}/stocks
+   - /stock/{symbol}/sector
+   These endpoints return lightweight metadata directly from SectorClassifier
+   without heavy data fetching.
+
+3. SECTOR AGENT ENDPOINTS (Heavy Processing):
+   - /agents/sector/analyze-all (PRIMARY - Use this for all sector analysis)
+   - /agents/sector/performance/{sector_name}
+   - /agents/sector/compare
+   These are the actual sector agent implementation endpoints that perform
+   all data fetching, caching, computation, and analysis autonomously.
 """
 
 import sys
@@ -31,6 +54,9 @@ from services.database_service import make_json_serializable # Importing the ser
 
 # Lightweight in-process cache to pass prefetched data between endpoints within the same service
 # Keyed by correlation_id; values contain {'stock_data': pd.DataFrame, 'indicators': Dict[str, Any], 'created_at': datetime}
+# OPTIMIZATION: Used by volume agents AND sector agents to avoid redundant data fetching
+# - Volume agents: Reuse stock_data and indicators from enhanced_analyze
+# - Sector agents: Reuse stock_data from enhanced_analyze (saves 200-500ms per request)
 VOLUME_PREFETCH_CACHE: dict[str, dict] = {}
 
 # Try to import optional dependencies
@@ -57,9 +83,7 @@ from pydantic import BaseModel, Field
 
 # Local imports (top-level, since backend/ is added to sys.path by start scripts)
 from analysis.orchestrator import StockAnalysisOrchestrator
-from ml.sector.benchmarking import SectorBenchmarkingProvider
-from ml.sector.classifier import SectorClassifier
-from ml.sector.enhanced_classifier import enhanced_sector_classifier
+from agents.sector import SectorClassifier, SectorBenchmarkingProvider, enhanced_sector_classifier, SectorCacheManager
 from patterns.recognition import PatternRecognition
 from ml.indicators.technical_indicators import TechnicalIndicators
 from api.responses import FrontendResponseBuilder
@@ -77,6 +101,11 @@ logger = logging.getLogger(__name__)
 # Database service URL - Updated for distributed services architecture
 DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "http://localhost:8003")
 print(f"🔗 Database Service URL: {DATABASE_SERVICE_URL}")
+
+# Sector Agent service URL - for delegating sector-related operations
+# Note: Sector agent endpoints are part of this service but treated as a separate logical agent
+SECTOR_AGENT_SERVICE_URL = os.getenv("ANALYSIS_SERVICE_URL", "http://localhost:8002")
+print(f"🔗 Sector Agent Service URL: {SECTOR_AGENT_SERVICE_URL}")
 
 async def _make_database_request_with_retry(
     client: httpx.AsyncClient,
@@ -115,6 +144,64 @@ async def _make_database_request_with_retry(
                 print(f"[DB_RETRY] Request error {e}. Max retries reached.")
                 raise
     raise Exception("Max retries reached for database request.")
+
+async def _make_sector_agent_request(
+    method: str,
+    endpoint: str,
+    json_data: Optional[Dict[str, Any]] = None,
+    timeout: float = 180.0,
+    max_retries: int = 3,
+    initial_delay: float = 1.0
+) -> httpx.Response:
+    """
+    Makes an HTTP request to the sector agent service with retry logic.
+    
+    Args:
+        method: HTTP method ("POST" or "GET")
+    endpoint: Endpoint path (e.g., "/agents/sector/analyze-all")
+        json_data: Optional JSON payload for POST requests
+        timeout: Request timeout in seconds (default: 180s for sector analysis)
+        max_retries: Maximum number of retry attempts
+        initial_delay: Initial delay between retries (exponential backoff)
+    
+    Returns:
+        httpx.Response object
+    """
+    url = f"{SECTOR_AGENT_SERVICE_URL}{endpoint}"
+    
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                if method == "POST":
+                    response = await client.post(url, json=json_data)
+                elif method == "GET":
+                    response = await client.get(url)
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
+                
+                response.raise_for_status()
+                return response
+                
+        except httpx.HTTPStatusError as e:
+            # For HTTP 5xx errors, retry. For 4xx, don't retry as it's likely a client error.
+            if 500 <= e.response.status_code < 600 and attempt < max_retries - 1:
+                delay = initial_delay * (2 ** attempt)
+                print(f"[SECTOR_RETRY] Attempt {attempt + 1}/{max_retries}: HTTP error {e.response.status_code}. Retrying in {delay:.2f}s...")
+                await asyncio.sleep(delay)
+            else:
+                print(f"[SECTOR_RETRY] HTTP error {e.response.status_code}. Not retrying or max retries reached.")
+                raise
+                
+        except httpx.RequestError as e:
+            if attempt < max_retries - 1:
+                delay = initial_delay * (2 ** attempt)
+                print(f"[SECTOR_RETRY] Attempt {attempt + 1}/{max_retries}: Request error {e}. Retrying in {delay:.2f}s...")
+                await asyncio.sleep(delay)
+            else:
+                print(f"[SECTOR_RETRY] Request error {e}. Max retries reached.")
+                raise
+                
+    raise Exception(f"Max retries reached for sector agent request: {endpoint}")
 
 # Load CORS origins from environment variable
 # CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:8080,http://127.0.0.1:5173,https://www.stockanalyzerpro.com,https://stock-analyzer-pro.vercel.app,https://stock-analyzer-pro-git-prototype-aaryan-manawats-projects.vercel.app,https://stock-analyzer-cl9o3tivx-aaryan-manawats-projects.vercel.app,https://stockanalyzer-pro.vercel.app").split(",")
@@ -189,6 +276,8 @@ app.add_middleware(
 
 # Global variables for initialization
 MAIN_EVENT_LOOP = None
+SECTOR_CACHE = None  # Sector cache manager for caching sector analysis
+SECTOR_BENCHMARKING_PROVIDER = None  # Singleton instance for sector benchmarking with caching
 
 @app.on_event("startup")
 async def startup_event():
@@ -244,12 +333,23 @@ async def startup_event():
         storage_info = StorageConfig.get_storage_info()
         print(f"✅ Storage initialized: {storage_info['storage_type']} storage in {storage_info['environment']} environment")
         
-        # Initialize sector classifiers
-        print("🏭 Initializing sector classifiers...")
-        sector_classifier = SectorClassifier(sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category'))
-        sector_classifier.get_all_sectors()
-        enhanced_sector_classifier.get_all_sectors()
-        print("✅ Sector classifiers initialized")
+        # Initialize sector classifiers (lazy loading - data loaded on first use)
+        print("🏭 Sector classifiers ready (lazy loading enabled)")
+        # Note: SectorClassifier and enhanced_sector_classifier are already instantiated on import
+        # No need to call get_all_sectors() here - it will load on first actual use
+        # This saves ~2-3 seconds and several MB of memory on startup
+        
+        # Initialize sector cache manager
+        print("💾 Initializing sector cache manager...")
+        global SECTOR_CACHE
+        SECTOR_CACHE = SectorCacheManager()
+        print(f"✅ Sector cache manager initialized - cache_enabled={SECTOR_CACHE.cache_enabled}, refresh_days={SECTOR_CACHE.refresh_days}")
+        
+        # Initialize global SectorBenchmarkingProvider for persistent caching across requests
+        print("🏭 Initializing global sector benchmarking provider...")
+        global SECTOR_BENCHMARKING_PROVIDER
+        SECTOR_BENCHMARKING_PROVIDER = SectorBenchmarkingProvider()
+        print(f"✅ Global sector benchmarking provider initialized - cache will persist across requests")
     except Exception as e:
         print(f"⚠️  Warning during initialization: {e}")
 
@@ -676,12 +776,13 @@ async def health_check():
         except Exception:
             gemini_status = "error"
         
-        # Check sector classifiers
+        # Check sector classifiers (use existing global instances)
         sector_status = "unknown"
         try:
-            sector_classifier = SectorClassifier(sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category'))
-            sectors = sector_classifier.get_all_sectors()
-            sector_status = f"loaded_{len(sectors)}_sectors"
+            # Use the global enhanced_sector_classifier instead of creating new instance
+            from agents.sector import enhanced_sector_classifier
+            # Don't call get_all_sectors() unless necessary - just check if available
+            sector_status = "available"
         except Exception:
             sector_status = "error"
 
@@ -841,6 +942,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         volume_agents_url = os.getenv("ANALYSIS_SERVICE_URL", "http://localhost:8002") + "/agents/volume/analyze-all"
         async def _call_volume_agents():
             try:
+                print(f"🔑 [VOLUME_AGENTS] Calling analyze-all with 5 distributed API keys (KEY1-5 for agents 0-4)")
                 async with httpx.AsyncClient(timeout=600.0) as client:
                     resp = await client.post(
                         volume_agents_url,
@@ -853,7 +955,9 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                         }
                     )
                     resp.raise_for_status()
-                    return resp.json()
+                    result = resp.json()
+                    print(f"✅ [VOLUME_AGENTS] All 5 agents completed (each with dedicated API key)")
+                    return result
             except Exception as e:
                 print(f"[VOLUME_AGENTS] Error calling analyze-all endpoint: {e}")
                 return {}
@@ -942,26 +1046,50 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
 
         advanced_task = asyncio.create_task(_with_logging("advanced", _advanced(), timeout=90.0))
 
-        # Sector context (optional)
+        # Sector agent via service endpoint (loopback) - runs in parallel with other agents
+        sector_agents_url = os.getenv("ANALYSIS_SERVICE_URL", "http://localhost:8002") + "/agents/sector/analyze-all"
         async def _sector():
             try:
-                if request.sector:
-                    from ml.sector.benchmarking import SectorBenchmarkingProvider
-                    provider = SectorBenchmarkingProvider()
-                    comprehensive = await provider.get_optimized_comprehensive_sector_analysis(
-                        request.stock, stock_data, request.sector, requested_period=request.period
-                    )
-                    if comprehensive:
-                        return {
-                            'sector': request.sector,
-                            'sector_benchmarking': comprehensive.get('sector_benchmarking', {}),
-                            'sector_rotation': comprehensive.get('sector_rotation', {}),
-                            'sector_correlation': comprehensive.get('sector_correlation', {}),
-                            'optimization_metrics': comprehensive.get('optimization_metrics', {})
+                print(f"[SECTOR_AGENT] Calling analyze-all endpoint for {request.stock} (correlation_id: {correlation_id})...")
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    resp = await client.post(
+                        sector_agents_url,
+                        json={
+                            "symbol": request.stock,
+                            "exchange": request.exchange,
+                            "interval": request.interval,
+                            "period": request.period,
+                            "sector": request.sector,  # Optional - auto-detected if not provided
+                            "correlation_id": correlation_id  # Pass correlation_id for prefetch cache lookup
                         }
-                return {}
+                    )
+                    resp.raise_for_status()
+                    result = resp.json()
+                    
+                    if result.get('success'):
+                        print(f"✅ [SECTOR_AGENT] Analysis completed for {request.stock} in sector {result.get('sector')}")
+                        # Transform response to match expected format
+                        return {
+                            'sector': result.get('sector'),
+                            'sector_display_name': result.get('sector_display_name'),
+                            'sector_benchmarking': result.get('sector_benchmarking', {}),
+                            'sector_rotation': result.get('sector_rotation', {}),
+                            'sector_correlation': result.get('sector_correlation', {}),
+                            'optimization_metrics': result.get('optimization_metrics', {}),
+                            'synthesis_bullets': result.get('synthesis', {}).get('bullets', ''),
+                            'synthesis_metadata': {
+                                'agent_name': result.get('synthesis', {}).get('agent_name', 'sector_synthesis'),
+                                'timestamp': result.get('synthesis', {}).get('timestamp', ''),
+                                'used_structured_metrics': result.get('synthesis', {}).get('used_structured_metrics', False)
+                            }
+                        }
+                    else:
+                        print(f"⚠️ [SECTOR_AGENT] Analysis failed: {result.get('error', 'Unknown error')}")
+                        return {}
             except Exception as e:
-                print(f"[SECTOR] Error: {e}")
+                print(f"[SECTOR_AGENT] Error calling analyze-all endpoint: {e}")
+                import traceback
+                traceback.print_exc()
                 return {}
 
         sector_task = asyncio.create_task(_with_logging("sector", _sector(), timeout=120.0))
@@ -969,6 +1097,10 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         # Indicator summary LLM (runs in parallel with volume/MTF/sector/advanced)
         async def _indicator_summary():
             try:
+                # Log which API key is being used
+                api_key_hint = orchestrator.gemini_client.core.api_key[-8:] if orchestrator.gemini_client.core.api_key else "unknown"
+                print(f"🔑 [INDICATOR_SUMMARY] Using API key ending in: ...{api_key_hint}")
+                
                 # Try curated indicators via agents manager
                 curated = None
                 try:
@@ -999,6 +1131,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                     mtf_context=None,
                     curated_indicators=curated
                 )
+                print(f"✅ [INDICATOR_SUMMARY] Completed with API key ...{api_key_hint}")
                 return md, ind_json
             except Exception as e:
                 print(f"[INDICATOR_SUMMARY] Error: {e}")
@@ -1066,7 +1199,11 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         knowledge_blocks = []
         try:
             if sector_context:
-                knowledge_blocks.append("SECTOR CONTEXT:\n" + json.dumps(sector_context))
+                # ONLY include sector synthesis bullets (not full technical context)
+                sector_bullets = sector_context.get('synthesis_bullets', '')
+                if sector_bullets:
+                    knowledge_blocks.append(f"SECTOR SYNTHESIS:\n{sector_bullets}")
+                    print(f"[SECTOR_CONTEXT] Added synthesis bullets to knowledge_context (no technical data)")
         except Exception:
             pass
         try:
@@ -1104,6 +1241,11 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         # Final decision with START/END logging
         fd_t0 = time.monotonic()
         print(f"[TASK-START] final_decision t={fd_t0 - start_base:+.3f}s")
+        
+        # Log which API key is being used for final decision
+        api_key_hint = orchestrator.gemini_client.core.api_key[-8:] if orchestrator.gemini_client.core.api_key else "unknown"
+        print(f"🔑 [FINAL_DECISION] Using API key ending in: ...{api_key_hint}")
+        
         try:
             ai_analysis = await orchestrator.gemini_client.run_final_decision(
                 ind_json=indicator_json or {},
@@ -1111,6 +1253,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 knowledge_context=knowledge_context
             )
             fd_dt = time.monotonic() - fd_t0
+            print(f"✅ [FINAL_DECISION] Completed with API key ...{api_key_hint}")
             print(f"[TASK-END] final_decision ok=True dt={fd_dt:.2f}s")
         except Exception as e:
             fd_dt = time.monotonic() - fd_t0
@@ -1185,7 +1328,15 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         except Exception as e:
             print(f"❌ Storage error (non-fatal): {e}")
 
-        # 8) Return
+        # 8) Cleanup prefetch cache to prevent memory leaks
+        try:
+            if correlation_id in VOLUME_PREFETCH_CACHE:
+                del VOLUME_PREFETCH_CACHE[correlation_id]
+                print(f"🗑️  [PREFETCH_CLEANUP] Removed correlation_id {correlation_id} from cache")
+        except Exception as cleanup_e:
+            print(f"⚠️  [PREFETCH_CLEANUP] Error cleaning up cache: {cleanup_e}")
+        
+        # 9) Return
         elapsed = time.monotonic() - start_ts
         print(f"[ANALYSIS-TIMER] {request.stock} completed in {elapsed:.2f}s")
         return JSONResponse(content=serialized_frontend_response or frontend_response, status_code=200)
@@ -1361,102 +1512,103 @@ async def enhanced_mtf_analyze(request: AnalysisRequest):
 
 @app.post("/sector/benchmark")
 async def sector_benchmark(request: AnalysisRequest):
-    """Get sector benchmarking for a specific stock."""
+    """
+    Get sector benchmarking for a specific stock.
+    
+    ARCHITECTURE NOTE:
+    This endpoint now delegates to /agents/sector/analyze-all for complete sector analysis.
+    The sector agent handles all data fetching, caching, computation, and analysis autonomously.
+    This is a thin client wrapper for backward compatibility.
+    """
+    start_ts = time.monotonic()
+    
     try:
-        # Get stock data
-        orchestrator = StockAnalysisOrchestrator()
-        if not orchestrator.authenticate():
-            raise HTTPException(status_code=401, detail="Authentication failed")
+        print(f"[SECTOR_BENCHMARK] Delegating request for {request.stock} to sector agent (analyze-all)")
         
-        try:
-            data = await orchestrator.retrieve_stock_data(
-                symbol=request.stock,
-                exchange=request.exchange,
-                period=request.period,
-                interval=request.interval
+        # Delegate to sector agent service (analyze-all)
+        response = await _make_sector_agent_request(
+            method="POST",
+            endpoint="/agents/sector/analyze-all",
+            json_data={
+                "symbol": request.stock,
+                "exchange": request.exchange,
+                "interval": request.interval,
+                "period": request.period,
+                "sector": request.sector
+            },
+            timeout=180.0
+        )
+        
+        result = response.json()
+        
+        # Transform response format for backward compatibility
+        if result.get("success"):
+            # Build backward-compatible response from analyze-all
+            response_data = {
+                "success": True,
+                "stock_symbol": request.stock,
+                "sector": result.get("sector"),
+                "results": result.get("sector_benchmarking", {}),
+                "synthesis": result.get("synthesis", {}),
+                "timestamp": result.get("timestamp", pd.Timestamp.now().isoformat()),
+                "delegated_to": "sector_agent_analyze_all",
+                "agent_response_time": round(time.monotonic() - start_ts, 2)
+            }
+            
+            elapsed = time.monotonic() - start_ts
+            print(f"[SECTOR_BENCHMARK] ✅ Completed (delegated to analyze-all) in {elapsed:.2f}s")
+            
+            return JSONResponse(content=response_data)
+        else:
+            # Agent returned error
+            error_msg = result.get("error", "Unknown error from sector agent")
+            elapsed = time.monotonic() - start_ts
+            print(f"[SECTOR_BENCHMARK] ❌ Sector agent error after {elapsed:.2f}s: {error_msg}")
+            
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "success": False,
+                    "error": error_msg,
+                    "stock_symbol": request.stock,
+                    "timestamp": pd.Timestamp.now().isoformat()
+                }
             )
-        except ValueError as e:
-            error_msg = f"Data retrieval failed for {request.stock}: {str(e)}"
-            raise HTTPException(status_code=400, detail=error_msg)
         
-        # Get comprehensive sector benchmarking
-        sector_benchmarking_provider = SectorBenchmarkingProvider()
-        benchmarking = await sector_benchmarking_provider.get_comprehensive_benchmarking_async(request.stock, data, user_sector=request.sector)
-        
-        # Make JSON serializable
-        serialized_benchmarking = make_json_serializable(benchmarking)
-        
-        response = {
-            "success": True,
-            "stock_symbol": request.stock,
-            "results": serialized_benchmarking,  # Frontend expects 'results' field
-            "timestamp": pd.Timestamp.now().isoformat()
-        }
-        
-        return JSONResponse(content=response)
-        
+    except HTTPException:
+        elapsed = time.monotonic() - start_ts
+        print(f"[SECTOR_BENCHMARK] ❌ HTTP exception after {elapsed:.2f}s")
+        print(f"{'='*80}\n")
+        raise
     except Exception as e:
+        elapsed = time.monotonic() - start_ts
+        print(f"[SECTOR_BENCHMARK] ❌ Error after {elapsed:.2f}s: {type(e).__name__}: {e!r}")
         traceback.print_exc()
+        print(f"{'='*80}\n")
+        
         error_response = {
             "success": False,
             "error": str(e),
+            "error_type": type(e).__name__,
             "stock_symbol": request.stock,
+            "sector": sector if 'sector' in locals() else None,
+            "performance_metrics": {
+                "total_time_seconds": round(elapsed, 2),
+                "failed": True
+            },
             "timestamp": pd.Timestamp.now().isoformat()
         }
         raise HTTPException(status_code=500, detail=error_response)
 
-@app.post("/sector/benchmark/async")
-async def sector_benchmark_async(request: AnalysisRequest):
-    """Get sector benchmarking with async index data fetching."""
-    try:
-        from ml.sector_benchmarking import SectorBenchmarkingProvider
-        
-        # Create sector benchmarking provider
-        provider = SectorBenchmarkingProvider()
-        
-        # Get stock data first
-        orchestrator = StockAnalysisOrchestrator()
-        auth_success = orchestrator.authenticate()
-        if not auth_success:
-            raise HTTPException(status_code=401, detail="Authentication failed")
-        
-        try:
-            stock_data = await orchestrator.retrieve_stock_data(
-                symbol=request.stock,
-                exchange=request.exchange,
-                interval=request.interval,
-                period=request.period
-            )
-        except ValueError as e:
-            error_msg = f"Data retrieval failed for {request.stock}: {str(e)}"
-            raise HTTPException(status_code=400, detail=error_msg)
-        
-        # Get comprehensive benchmarking with async index data
-        benchmarking_results = await provider.get_comprehensive_benchmarking_async(
-            request.stock, 
-            stock_data,
-            user_sector=request.sector  # Pass user-provided sector
-        )
-        
-        # Make data JSON serializable
-        serialized_results = make_json_serializable(benchmarking_results)
-        
-        return {
-            "success": True,
-            "data": serialized_results,
-            "analysis_type": "async_sector_benchmarking",
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in async sector benchmarking: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Sector benchmarking failed: {str(e)}")
-
 @app.get("/sector/list")
 async def get_sectors():
-    """Get list of all available sectors."""
+    """
+    Get list of all available sectors.
+    
+    ARCHITECTURE NOTE:
+    This is a lightweight metadata endpoint that returns sector information directly
+    from SectorClassifier. No heavy data fetching or computation required.
+    """
     try:
         sector_classifier = SectorClassifier(sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category'))
         sectors = sector_classifier.get_all_sectors()
@@ -1481,7 +1633,13 @@ async def get_sectors():
 
 @app.get("/sector/{sector_name}/stocks")
 async def get_sector_stocks(sector_name: str):
-    """Get all stocks in a specific sector."""
+    """
+    Get all stocks in a specific sector.
+    
+    ARCHITECTURE NOTE:
+    This is a lightweight metadata endpoint that returns stock lists directly
+    from SectorClassifier. No heavy data fetching or computation required.
+    """
     try:
         sector_classifier = SectorClassifier(sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category'))
         stocks = sector_classifier.get_sector_stocks(sector_name)
@@ -1513,61 +1671,34 @@ async def get_sector_stocks(sector_name: str):
 
 @app.get("/sector/{sector_name}/performance")
 async def get_sector_performance(sector_name: str, period: int = 365):
-    """Get sector performance data."""
+    """
+    Get sector performance data.
+    
+    ARCHITECTURE NOTE:
+    This endpoint delegates to the sector agent service at /agents/sector/performance/{sector_name}.
+    The sector agent handles all data fetching, caching, and computation.
+    This is a thin client wrapper for backward compatibility.
+    """
     try:
-        # Get sector index data
-        sector_classifier = SectorClassifier(sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category'))
-        sector_index = sector_classifier.get_primary_sector_index(sector_name)
-        if not sector_index:
-            raise HTTPException(status_code=404, detail=f"No index found for sector: {sector_name}")
+        print(f"[SECTOR_PERFORMANCE] Delegating request for {sector_name} to sector agent")
         
-        # Get sector data
-        orchestrator = StockAnalysisOrchestrator()
-        if not orchestrator.authenticate():
-            raise HTTPException(status_code=401, detail="Authentication failed")
+        # Delegate to sector agent service
+        response = await _make_sector_agent_request(
+            method="GET",
+            endpoint=f"/agents/sector/performance/{sector_name}?period={period}",
+            timeout=60.0
+        )
         
-        try:
-            sector_data = await orchestrator.retrieve_stock_data(
-                symbol=sector_index,
-                exchange="NSE",
-                period=period,
-                interval="day"
-            )
-        except ValueError as e:
-            error_msg = f"Data retrieval failed for sector {sector_name}: {str(e)}"
-            raise HTTPException(status_code=400, detail=error_msg)
+        result = response.json()
         
-        # Calculate sector performance metrics
-        sector_returns = sector_data['close'].pct_change().dropna()
-        cumulative_return = (1 + sector_returns).prod() - 1
-        volatility = sector_returns.std() * np.sqrt(252)
+        # Return the response directly (already in correct format)
+        print(f"[SECTOR_PERFORMANCE] ✅ Completed (delegated) for {sector_name}")
+        return JSONResponse(content=result)
         
-        # Get sector stocks
-        sector_classifier = SectorClassifier(sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category'))
-        sector_stocks = sector_classifier.get_sector_stocks(sector_name)
-        
-        performance_data = {
-            "sector": sector_name,
-            "sector_index": sector_index,
-            "display_name": sector_classifier.get_sector_display_name(sector_name),
-            "period_days": period,
-            "cumulative_return": float(cumulative_return),
-            "annualized_volatility": float(volatility),
-            "stock_count": len(sector_stocks),
-            "data_points": len(sector_data),
-            "last_price": float(sector_data['close'].iloc[-1]),
-            "last_date": sector_data.index[-1].isoformat()
-        }
-        
-        response = {
-            "success": True,
-            "sector_performance": performance_data,
-            "timestamp": pd.Timestamp.now().isoformat()
-        }
-        
-        return JSONResponse(content=response)
-        
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"[SECTOR_PERFORMANCE] ❌ Error: {e}")
         traceback.print_exc()
         error_response = {
             "success": False,
@@ -1579,82 +1710,35 @@ async def get_sector_performance(sector_name: str, period: int = 365):
 
 @app.post("/sector/compare")
 async def compare_sectors(request: SectorComparisonRequest):
-    """Compare multiple sectors."""
+    """
+    Compare multiple sectors.
+    
+    ARCHITECTURE NOTE:
+    This endpoint delegates to the sector agent service at /agents/sector/compare.
+    The sector agent handles all data fetching, caching, and computation.
+    This is a thin client wrapper for backward compatibility.
+    """
     try:
-        comparison_data = {}
-        sector_classifier = SectorClassifier(sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category'))
+        print(f"[SECTOR_COMPARE] Delegating request for {len(request.sectors)} sectors to sector agent")
         
-        for sector in request.sectors:
-            try:
-                # Get sector performance
-                sector_index = sector_classifier.get_primary_sector_index(sector)
-                if sector_index:
-                    orchestrator = StockAnalysisOrchestrator()
-                    if not orchestrator.authenticate():
-                        raise HTTPException(status_code=401, detail="Authentication failed")
-                    
-                    try:
-                        sector_data = await orchestrator.retrieve_stock_data(
-                            symbol=sector_index,
-                            exchange="NSE",
-                            period=request.period,
-                            interval="day"
-                        )
-                    except ValueError as e:
-                        # Skip this sector if data retrieval fails
-                        comparison_data[sector] = {
-                            "sector": sector,
-                            "display_name": sector_classifier.get_sector_display_name(sector),
-                            "sector_index": sector_index,
-                            "error": f"Data retrieval failed: {str(e)}",
-                            "cumulative_return": None,
-                            "annualized_volatility": None,
-                            "stock_count": len(sector_classifier.get_sector_stocks(sector)),
-                            "last_price": None
-                        }
-                        continue
-                    
-                    if sector_data is not None and not sector_data.empty:
-                        sector_returns = sector_data['close'].pct_change().dropna()
-                        cumulative_return = (1 + sector_returns).prod() - 1
-                        volatility = sector_returns.std() * np.sqrt(252)
-                        
-                        comparison_data[sector] = {
-                            "sector": sector,
-                            "display_name": sector_classifier.get_sector_display_name(sector),
-                            "sector_index": sector_index,
-                            "cumulative_return": float(cumulative_return),
-                            "annualized_volatility": float(volatility),
-                            "stock_count": len(sector_classifier.get_sector_stocks(sector)),
-                            "last_price": float(sector_data['close'].iloc[-1])
-                        }
-                    else:
-                        comparison_data[sector] = {
-                            "sector": sector,
-                            "error": "Data not available"
-                        }
-                else:
-                    comparison_data[sector] = {
-                        "sector": sector,
-                        "error": "Index not found"
-                    }
-                    
-            except Exception as e:
-                comparison_data[sector] = {
-                    "sector": sector,
-                    "error": str(e)
-                }
+        # Delegate to sector agent service
+        response = await _make_sector_agent_request(
+            method="POST",
+            endpoint="/agents/sector/compare",
+            json_data={"sectors": request.sectors, "period": request.period},
+            timeout=120.0
+        )
         
-        response = {
-            "success": True,
-            "sector_comparison": comparison_data,
-            "period_days": request.period,
-            "timestamp": pd.Timestamp.now().isoformat()
-        }
+        result = response.json()
         
-        return JSONResponse(content=response)
+        # Return the response directly (already in correct format)
+        print(f"[SECTOR_COMPARE] ✅ Completed (delegated) for {len(request.sectors)} sectors")
+        return JSONResponse(content=result)
         
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"[SECTOR_COMPARE] ❌ Error: {e}")
         traceback.print_exc()
         error_response = {
             "success": False,
@@ -1666,7 +1750,13 @@ async def compare_sectors(request: SectorComparisonRequest):
 
 @app.get("/stock/{symbol}/sector")
 async def get_stock_sector(symbol: str):
-    """Get sector information for a specific stock."""
+    """
+    Get sector information for a specific stock.
+    
+    ARCHITECTURE NOTE:
+    This is a lightweight metadata endpoint that returns sector classification directly
+    from SectorClassifier. No heavy data fetching or computation required.
+    """
     try:
         sector_classifier = SectorClassifier(sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category'))
         sector = sector_classifier.get_stock_sector(symbol)
@@ -2082,6 +2172,412 @@ async def get_charts(
         }
         raise HTTPException(status_code=500, detail=error_response)
 
+# --- Sector Agent Endpoints ---
+
+class SectorAgentRequest(BaseModel):
+    symbol: str = Field(..., description="Stock symbol")
+    exchange: str = Field(default="NSE", description="Stock exchange")
+    interval: str = Field(default="day", description="Data interval (internal mapping)")
+    period: int = Field(default=365, description="Analysis period in days")
+    sector: Optional[str] = Field(default=None, description="Optional sector override")
+    return_full_analysis: Optional[bool] = Field(default=True, description="Return comprehensive analysis")
+    correlation_id: Optional[str] = Field(default=None, description="Correlation ID for prefetch cache lookup")
+
+
+@app.post("/agents/sector/analyze-all")
+async def agents_sector_analyze_all(req: SectorAgentRequest):
+    """Get comprehensive sector analysis including synthesis, benchmarking, and all metrics."""
+    try:
+        orchestrator = StockAnalysisOrchestrator()
+        
+        # Check prefetch cache first to avoid redundant data fetching
+        if req.correlation_id and req.correlation_id in VOLUME_PREFETCH_CACHE:
+            cached_entry = VOLUME_PREFETCH_CACHE[req.correlation_id]
+            stock_data = cached_entry['stock_data']
+            cache_age = (datetime.now() - cached_entry['created_at']).total_seconds()
+            logging.info(f"✅ [SECTOR_PREFETCH] Using prefetched stock data for {req.symbol} (age: {cache_age:.1f}s, correlation_id: {req.correlation_id})")
+        else:
+            # Fallback: Retrieve stock data if not in prefetch cache
+            if req.correlation_id:
+                logging.info(f"🔄 [SECTOR_PREFETCH] Cache miss for correlation_id {req.correlation_id}, fetching fresh data for {req.symbol}")
+            else:
+                logging.info(f"🔄 [SECTOR_PREFETCH] No correlation_id provided, fetching fresh data for {req.symbol}")
+            
+            try:
+                stock_data = await orchestrator.retrieve_stock_data(
+                    symbol=req.symbol,
+                    exchange=req.exchange,
+                    interval=req.interval,
+                    period=req.period
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+        
+        # Determine sector
+        if req.sector:
+            sector = req.sector
+            logging.info(f"Using user-provided sector '{req.sector}' for {req.symbol}")
+        else:
+            sector_classifier = SectorClassifier()
+            sector = sector_classifier.get_stock_sector(req.symbol)
+            logging.info(f"Using auto-detected sector '{sector}' for {req.symbol}")
+        
+        if not sector or sector == 'UNKNOWN':
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": "Sector not found or unknown for this stock",
+                    "symbol": req.symbol,
+                    "timestamp": datetime.now().isoformat()
+                },
+                status_code=400
+            )
+        
+        # Check file-based cache first (persistent across restarts)
+        global SECTOR_CACHE, SECTOR_BENCHMARKING_PROVIDER
+        
+        # Try to get cached SECTOR-AGNOSTIC analysis from file cache
+        # CRITICAL FIX: Cache only contains sector rotation and correlation (not stock-specific benchmarking)
+        cached_sector_data = SECTOR_CACHE.get_cached_analysis(sector) if SECTOR_CACHE else None
+        
+        # Initialize variables for sector-agnostic and stock-specific data
+        sector_rotation = None
+        sector_correlation = None
+        cached_synthesis = None
+        
+        if cached_sector_data:
+            # Extract cached sector-agnostic data (reusable for all stocks in sector)
+            sector_rotation = cached_sector_data.get('sector_rotation')
+            sector_correlation = cached_sector_data.get('sector_correlation')
+            cached_synthesis = cached_sector_data.get('sector_synthesis')
+            cache_age = cached_sector_data.get('cache_metadata', {}).get('age_hours', 'N/A')
+            logging.info(f"✅ Using cached sector-agnostic data for {sector} (age: {cache_age}h) - rotation & correlation")
+            
+            if cached_synthesis:
+                logging.info(f"✅ Using cached synthesis for {sector} (avoiding redundant LLM call)")
+        else:
+            logging.info(f"🔄 Cache miss for {sector} - will fetch sector-agnostic data")
+        
+        # ALWAYS calculate stock-specific benchmarking (never cached)
+        logging.info(f"🔄 Calculating fresh stock-specific benchmarking for {req.symbol} vs {sector}")
+        
+        # Get comprehensive sector analysis
+        # If we have cached sector data, we'll reuse rotation/correlation but recalculate benchmarking
+        comprehensive = await SECTOR_BENCHMARKING_PROVIDER.get_optimized_comprehensive_sector_analysis(
+            req.symbol, 
+            stock_data, 
+            sector, 
+            requested_period=req.period,
+            cached_rotation=sector_rotation,      # Pass cached rotation if available
+            cached_correlation=sector_correlation  # Pass cached correlation if available
+        )
+        
+        if not comprehensive:
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": "Failed to generate comprehensive sector analysis",
+                    "symbol": req.symbol,
+                    "sector": sector,
+                    "timestamp": datetime.now().isoformat()
+                },
+                status_code=500
+            )
+        
+        # Extract key metrics (needed for both cached and fresh synthesis)
+        sector_benchmarking = comprehensive.get('sector_benchmarking', {})
+        sector_rotation = comprehensive.get('sector_rotation', {})
+        
+        # Generate synthesis only if not cached
+        if cached_synthesis:
+            synthesis_result = cached_synthesis
+        else:
+            # Generate synthesis using SectorSynthesisProcessor
+            from agents.sector import SectorSynthesisProcessor
+            sector_synthesis = SectorSynthesisProcessor()
+            
+            sector_data = {
+                'sector_name': sector,
+                'sector_outperformance_pct': sector_benchmarking.get('outperformance_pct'),
+                'market_outperformance_pct': sector_benchmarking.get('vs_market_pct'),
+                'sector_beta': sector_benchmarking.get('beta'),
+                'rotation_stage': sector_rotation.get('stage'),
+                'rotation_momentum': sector_rotation.get('momentum')
+            }
+            
+            print(f"[SECTOR_AGENT] Starting synthesis generation for {sector} (not cached)...")
+            synthesis_result = await sector_synthesis.analyze_async(
+                symbol=req.symbol,
+                sector_data=sector_data,
+                knowledge_context=""
+            )
+            print(f"[SECTOR_AGENT] Synthesis generation completed for {sector}")
+            
+            # Add synthesis to comprehensive dict
+            comprehensive['sector_synthesis'] = synthesis_result
+            
+            # CRITICAL FIX: Update cache with ONLY sector-agnostic data (no stock-specific benchmarking)
+            if SECTOR_CACHE:
+                try:
+                    # Build sector-agnostic cache data (reusable for all stocks in this sector)
+                    sector_agnostic_cache = {
+                        'sector_rotation': comprehensive.get('sector_rotation', {}),
+                        'sector_correlation': comprehensive.get('sector_correlation', {}),
+                        'sector_synthesis': synthesis_result,  # Synthesis is sector-agnostic (describes sector overall)
+                        'optimization_metrics': comprehensive.get('optimization_metrics', {}),
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    
+                    # Get current sector index price for cache metadata
+                    sector_index_name = comprehensive.get('sector_benchmarking', {}).get('sector_info', {}).get('sector_index')
+                    current_price = 0
+                    if sector_index_name:
+                        sector_index_data = comprehensive.get('sector_benchmarking', {}).get('sector_benchmarking', {})
+                        if isinstance(sector_index_data, dict) and 'sector_cumulative_return' in sector_index_data:
+                            # Approximate current price from sector data if available
+                            current_price = sector_index_data.get('sector_cumulative_return', 0) * 10000  # Placeholder
+                    
+                    SECTOR_CACHE.save_analysis(sector, sector_agnostic_cache, current_price)
+                    logging.info(f"💾 Saved SECTOR-AGNOSTIC data to cache for {sector} (rotation, correlation, synthesis)")
+                    logging.info(f"⚠️  Stock-specific benchmarking NOT cached (will be calculated fresh per stock)")
+                except Exception as cache_error:
+                    logging.warning(f"Failed to save sector-agnostic data to cache: {cache_error}")
+        
+        # Build comprehensive response
+        response = {
+            "success": True,
+            "symbol": req.symbol,
+            "sector": sector,
+            "sector_display_name": SECTOR_BENCHMARKING_PROVIDER.sector_classifier.get_sector_display_name(sector),
+            "synthesis": {
+                "bullets": synthesis_result.get('bullets', ''),
+                "agent_name": synthesis_result.get('agent_name', 'sector_synthesis'),
+                "timestamp": synthesis_result.get('analysis_timestamp', ''),
+                "used_structured_metrics": synthesis_result.get('used_structured_metrics', False)
+            },
+            "sector_benchmarking": sector_benchmarking,
+            "sector_rotation": sector_rotation,
+            "sector_correlation": comprehensive.get('sector_correlation', {}),
+            "optimization_metrics": comprehensive.get('optimization_metrics', {}),
+            "comprehensive_analysis": comprehensive,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return JSONResponse(content=make_json_serializable(response), status_code=200)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[SECTOR_AGENT] analyze-all endpoint error: {e}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "agent_group": "sector",
+                "endpoint": "/agents/sector/analyze-all",
+                "symbol": req.symbol,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+@app.get("/agents/sector/performance/{sector_name}")
+async def agents_sector_performance(sector_name: str, period: int = 365):
+    """
+    Get sector performance data with caching.
+    This endpoint handles all sector data fetching and computation.
+    """
+    try:
+        print(f"[SECTOR_AGENT] Performance request for {sector_name}, period={period}")
+        
+        # Get sector classifier
+        sector_classifier = SectorClassifier(
+            sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category')
+        )
+        
+        # Get sector index
+        sector_index = sector_classifier.get_primary_sector_index(sector_name)
+        if not sector_index:
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": f"No index found for sector: {sector_name}",
+                    "sector": sector_name,
+                    "timestamp": pd.Timestamp.now().isoformat()
+                },
+                status_code=404
+            )
+        
+        # Get sector data
+        orchestrator = StockAnalysisOrchestrator()
+        if not orchestrator.authenticate():
+            raise HTTPException(status_code=401, detail="Authentication failed")
+        
+        try:
+            sector_data = await orchestrator.retrieve_stock_data(
+                symbol=sector_index,
+                exchange="NSE",
+                period=period,
+                interval="day"
+            )
+        except ValueError as e:
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": f"Data retrieval failed for sector {sector_name}: {str(e)}",
+                    "sector": sector_name,
+                    "timestamp": pd.Timestamp.now().isoformat()
+                },
+                status_code=400
+            )
+        
+        # Calculate sector performance metrics
+        sector_returns = sector_data['close'].pct_change().dropna()
+        cumulative_return = (1 + sector_returns).prod() - 1
+        volatility = sector_returns.std() * np.sqrt(252)
+        
+        # Get sector stocks
+        sector_stocks = sector_classifier.get_sector_stocks(sector_name)
+        
+        performance_data = {
+            "sector": sector_name,
+            "sector_index": sector_index,
+            "display_name": sector_classifier.get_sector_display_name(sector_name),
+            "period_days": period,
+            "cumulative_return": float(cumulative_return),
+            "annualized_volatility": float(volatility),
+            "stock_count": len(sector_stocks),
+            "data_points": len(sector_data),
+            "last_price": float(sector_data['close'].iloc[-1]),
+            "last_date": sector_data.index[-1].isoformat()
+        }
+        
+        response = {
+            "success": True,
+            "sector_performance": performance_data,
+            "timestamp": pd.Timestamp.now().isoformat()
+        }
+        
+        print(f"[SECTOR_AGENT] Performance data generated for {sector_name}")
+        return JSONResponse(content=response)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[SECTOR_AGENT] performance endpoint error: {e}")
+        traceback.print_exc()
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "sector": sector_name,
+                "timestamp": pd.Timestamp.now().isoformat()
+            },
+            status_code=500
+        )
+
+@app.post("/agents/sector/compare")
+async def agents_sector_compare(request: SectorComparisonRequest):
+    """
+    Compare multiple sectors with caching.
+    This endpoint handles all sector comparison data fetching and computation.
+    """
+    try:
+        print(f"[SECTOR_AGENT] Compare request for {len(request.sectors)} sectors, period={request.period}")
+        
+        comparison_data = {}
+        sector_classifier = SectorClassifier(
+            sector_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'sector_category')
+        )
+        
+        for sector in request.sectors:
+            try:
+                # Get sector performance
+                sector_index = sector_classifier.get_primary_sector_index(sector)
+                if sector_index:
+                    orchestrator = StockAnalysisOrchestrator()
+                    if not orchestrator.authenticate():
+                        raise HTTPException(status_code=401, detail="Authentication failed")
+                    
+                    try:
+                        sector_data = await orchestrator.retrieve_stock_data(
+                            symbol=sector_index,
+                            exchange="NSE",
+                            period=request.period,
+                            interval="day"
+                        )
+                    except ValueError as e:
+                        # Skip this sector if data retrieval fails
+                        comparison_data[sector] = {
+                            "sector": sector,
+                            "display_name": sector_classifier.get_sector_display_name(sector),
+                            "sector_index": sector_index,
+                            "error": f"Data retrieval failed: {str(e)}",
+                            "cumulative_return": None,
+                            "annualized_volatility": None,
+                            "stock_count": len(sector_classifier.get_sector_stocks(sector)),
+                            "last_price": None
+                        }
+                        continue
+                    
+                    if sector_data is not None and not sector_data.empty:
+                        sector_returns = sector_data['close'].pct_change().dropna()
+                        cumulative_return = (1 + sector_returns).prod() - 1
+                        volatility = sector_returns.std() * np.sqrt(252)
+                        
+                        comparison_data[sector] = {
+                            "sector": sector,
+                            "display_name": sector_classifier.get_sector_display_name(sector),
+                            "sector_index": sector_index,
+                            "cumulative_return": float(cumulative_return),
+                            "annualized_volatility": float(volatility),
+                            "stock_count": len(sector_classifier.get_sector_stocks(sector)),
+                            "last_price": float(sector_data['close'].iloc[-1])
+                        }
+                    else:
+                        comparison_data[sector] = {
+                            "sector": sector,
+                            "error": "Data not available"
+                        }
+                else:
+                    comparison_data[sector] = {
+                        "sector": sector,
+                        "error": "Index not found"
+                    }
+                    
+            except Exception as e:
+                comparison_data[sector] = {
+                    "sector": sector,
+                    "error": str(e)
+                }
+        
+        response = {
+            "success": True,
+            "sector_comparison": comparison_data,
+            "period_days": request.period,
+            "timestamp": pd.Timestamp.now().isoformat()
+        }
+        
+        print(f"[SECTOR_AGENT] Comparison data generated for {len(request.sectors)} sectors")
+        return JSONResponse(content=response)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[SECTOR_AGENT] compare endpoint error: {e}")
+        traceback.print_exc()
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "sectors": request.sectors,
+                "timestamp": pd.Timestamp.now().isoformat()
+            },
+            status_code=500
+        )
+
 # --- Volume Agents Endpoints ---
 
 @app.post("/agents/volume/anomaly")
@@ -2440,7 +2936,8 @@ async def agents_volume_analyze_all(req: VolumeAgentRequest):
                 print(f"[VOLUME_AGENTS] Warning: indicator calculation failed: {ind_e}")
 
         # Run integration manager (runs all 5 agents concurrently and aggregates)
-        integ = VolumeAgentIntegrationManager(orchestrator.gemini_client)
+        # Pass None to enable distributed API keys (each agent gets its own key)
+        integ = VolumeAgentIntegrationManager(None)
         result = await integ.get_comprehensive_volume_analysis(stock_data, req.symbol, indicators)
 
         # Ensure JSON serializable

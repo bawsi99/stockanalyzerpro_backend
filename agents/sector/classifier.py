@@ -82,7 +82,7 @@ class SectorClassifier:
         # Use provided path or construct absolute path to data/sector_category
         if sector_folder is None:
             # Default to correct absolute path in backend/data/sector_category
-            backend_path = Path(__file__).parent.parent.parent  # ml/sector -> ml -> backend
+            backend_path = Path(__file__).parent.parent.parent  # agents/sector -> agents -> backend
             sector_folder = backend_path / "data" / "sector_category"
             
         self.sector_folder = Path(sector_folder)

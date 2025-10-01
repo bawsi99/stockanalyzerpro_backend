@@ -48,9 +48,7 @@ import uvicorn
 from zerodha.client import ZerodhaDataClient
 from ml.indicators.technical_indicators import TechnicalIndicators, IndianMarketMetricsProvider
 from patterns.recognition import PatternRecognition
-from ml.sector.classifier import SectorClassifier
-from ml.sector.enhanced_classifier import enhanced_sector_classifier
-from ml.sector.benchmarking import SectorBenchmarkingProvider
+from agents.sector import SectorClassifier, enhanced_sector_classifier, SectorBenchmarkingProvider
 from analysis.orchestrator import StockAnalysisOrchestrator
 # Note: These modules may not have the expected classes, using functions instead
 # from risk_scoring import RiskScorer
@@ -631,7 +629,8 @@ async def get_sector_info(request: SectorRequest):
             sector = enhanced_sector_classifier.get_stock_sector(request.symbol)
             if sector:
                 sector_info['enhanced_sector'] = sector
-                sector_info['enhanced_sector_data'] = enhanced_sector_classifier.get_sector_data(sector)
+                # Use the enhanced classifier's performance data helper
+                sector_info['enhanced_sector_data'] = enhanced_sector_classifier.get_sector_performance_data(sector)
         except Exception:
             pass
         
@@ -641,7 +640,15 @@ async def get_sector_info(request: SectorRequest):
             sector = sector_classifier.get_stock_sector(request.symbol)
             if sector:
                 sector_info['sector'] = sector
-                sector_info['sector_data'] = sector_classifier.get_sector_data(sector)
+                # Build sector data from available classifier methods
+                stocks = sector_classifier.get_sector_stocks(sector)
+                sector_info['sector_data'] = {
+                    "sector": sector,
+                    "display_name": sector_classifier.get_sector_display_name(sector),
+                    "primary_index": sector_classifier.get_primary_sector_index(sector),
+                    "stocks": stocks,
+                    "stock_count": len(stocks)
+                }
         except Exception:
             pass
         

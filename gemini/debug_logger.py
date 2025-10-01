@@ -94,11 +94,6 @@ class GeminiDebugLogger:
         #     self.logger.debug(f"📝 Full Prompt (truncated):\n{prompt[:config.max_prompt_length]}...")
         
         # self.logger.info("-" * 80)
-        
-        # Show time and token information at debug level
-        timestamp = datetime.now().strftime('%H:%M:%S')
-        prompt_tokens = len(prompt.split())  # Rough estimate
-        self.logger.debug(f"[{timestamp}] Gemini API call: {method} ({model}) - ~{prompt_tokens} tokens")
     
     def log_api_response(self, response: Any, response_time: float, method: str):
         """Log detailed API response information"""
@@ -211,13 +206,6 @@ class GeminiDebugLogger:
             self.logger.error(f"❌ Traceback:\n{traceback.format_exc()}")
         
         # self.logger.info("=" * 80)
-        
-        # Show time and token information at debug level
-        timestamp = datetime.now().strftime('%H:%M:%S')
-        if total_tokens > 0:
-            self.logger.debug(f"[{timestamp}] Gemini API response: {method} ({response_time:.3f}s) - {prompt_tokens}+{completion_tokens}={total_tokens} tokens")
-        else:
-            self.logger.debug(f"[{timestamp}] Gemini API response: {method} ({response_time:.3f}s) - tokens unknown")
         
         return text_response, code_results, execution_results
     
