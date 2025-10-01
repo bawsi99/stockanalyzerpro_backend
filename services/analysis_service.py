@@ -2243,18 +2243,13 @@ async def agents_sector_analyze_all(req: SectorAgentRequest):
         # Initialize variables for sector-agnostic and stock-specific data
         sector_rotation = None
         sector_correlation = None
-        cached_synthesis = None
         
         if cached_sector_data:
             # Extract cached sector-agnostic data (reusable for all stocks in sector)
             sector_rotation = cached_sector_data.get('sector_rotation')
             sector_correlation = cached_sector_data.get('sector_correlation')
-            cached_synthesis = cached_sector_data.get('sector_synthesis')
             cache_age = cached_sector_data.get('cache_metadata', {}).get('age_hours', 'N/A')
             logging.info(f"✅ Using cached sector-agnostic data for {sector} (age: {cache_age}h) - rotation & correlation")
-            
-            if cached_synthesis:
-                logging.info(f"✅ Using cached synthesis for {sector} (avoiding redundant LLM call)")
         else:
             logging.info(f"🔄 Cache miss for {sector} - will fetch sector-agnostic data")
         
@@ -2284,64 +2279,77 @@ async def agents_sector_analyze_all(req: SectorAgentRequest):
                 status_code=500
             )
         
-        # Extract key metrics (needed for both cached and fresh synthesis)
+        # Extract key metrics for synthesis generation
         sector_benchmarking = comprehensive.get('sector_benchmarking', {})
         sector_rotation = comprehensive.get('sector_rotation', {})
         
-        # Generate synthesis only if not cached
-        if cached_synthesis:
-            synthesis_result = cached_synthesis
-        else:
-            # Generate synthesis using SectorSynthesisProcessor
-            from agents.sector import SectorSynthesisProcessor
-            sector_synthesis = SectorSynthesisProcessor()
-            
-            sector_data = {
-                'sector_name': sector,
-                'sector_outperformance_pct': sector_benchmarking.get('outperformance_pct'),
-                'market_outperformance_pct': sector_benchmarking.get('vs_market_pct'),
-                'sector_beta': sector_benchmarking.get('beta'),
-                'rotation_stage': sector_rotation.get('stage'),
-                'rotation_momentum': sector_rotation.get('momentum')
-            }
-            
-            print(f"[SECTOR_AGENT] Starting synthesis generation for {sector} (not cached)...")
-            synthesis_result = await sector_synthesis.analyze_async(
-                symbol=req.symbol,
-                sector_data=sector_data,
-                knowledge_context=""
-            )
-            print(f"[SECTOR_AGENT] Synthesis generation completed for {sector}")
-            
-            # Add synthesis to comprehensive dict
-            comprehensive['sector_synthesis'] = synthesis_result
-            
-            # CRITICAL FIX: Update cache with ONLY sector-agnostic data (no stock-specific benchmarking)
-            if SECTOR_CACHE:
-                try:
-                    # Build sector-agnostic cache data (reusable for all stocks in this sector)
-                    sector_agnostic_cache = {
-                        'sector_rotation': comprehensive.get('sector_rotation', {}),
-                        'sector_correlation': comprehensive.get('sector_correlation', {}),
-                        'sector_synthesis': synthesis_result,  # Synthesis is sector-agnostic (describes sector overall)
-                        'optimization_metrics': comprehensive.get('optimization_metrics', {}),
-                        'timestamp': datetime.now().isoformat()
-                    }
-                    
-                    # Get current sector index price for cache metadata
-                    sector_index_name = comprehensive.get('sector_benchmarking', {}).get('sector_info', {}).get('sector_index')
-                    current_price = 0
-                    if sector_index_name:
-                        sector_index_data = comprehensive.get('sector_benchmarking', {}).get('sector_benchmarking', {})
-                        if isinstance(sector_index_data, dict) and 'sector_cumulative_return' in sector_index_data:
-                            # Approximate current price from sector data if available
-                            current_price = sector_index_data.get('sector_cumulative_return', 0) * 10000  # Placeholder
-                    
-                    SECTOR_CACHE.save_analysis(sector, sector_agnostic_cache, current_price)
-                    logging.info(f"💾 Saved SECTOR-AGNOSTIC data to cache for {sector} (rotation, correlation, synthesis)")
-                    logging.info(f"⚠️  Stock-specific benchmarking NOT cached (will be calculated fresh per stock)")
-                except Exception as cache_error:
-                    logging.warning(f"Failed to save sector-agnostic data to cache: {cache_error}")
+        # ALWAYS generate fresh synthesis (it contains stock-specific data and should never be cached)
+        # Generate synthesis using SectorSynthesisProcessor
+        from agents.sector import SectorSynthesisProcessor
+        sector_synthesis = SectorSynthesisProcessor()
+        
+        # Extract market and sector benchmarking metrics
+        market_benchmarking = comprehensive.get('market_benchmarking', {})
+        sector_benchmarking_raw = comprehensive.get('sector_benchmarking_raw', {})
+        
+        sector_data = {
+            'sector_name': sector,
+            'sector_outperformance_pct': sector_benchmarking.get('outperformance_pct'),
+            'market_outperformance_pct': sector_benchmarking.get('vs_market_pct'),
+            'sector_beta': sector_benchmarking.get('beta'),
+            'market_beta': market_benchmarking.get('beta'),
+            'rotation_stage': sector_rotation.get('stage'),
+            'rotation_momentum': sector_rotation.get('momentum'),
+            # Enhanced metrics
+            'sector_correlation': sector_benchmarking_raw.get('sector_correlation') * 100 if sector_benchmarking_raw.get('sector_correlation') else None,
+            'market_correlation': market_benchmarking.get('correlation') * 100 if market_benchmarking.get('correlation') else None,
+            'sector_sharpe': sector_benchmarking_raw.get('stock_sharpe'),
+            'market_sharpe': market_benchmarking.get('stock_sharpe'),
+            'sector_volatility': sector_benchmarking_raw.get('sector_volatility') * 100 if sector_benchmarking_raw.get('sector_volatility') else None,
+            'market_volatility': market_benchmarking.get('volatility') * 100 if market_benchmarking.get('volatility') else None,
+            'sector_return': sector_benchmarking_raw.get('stock_return') * 100 if sector_benchmarking_raw.get('stock_return') else None,
+            'market_return': market_benchmarking.get('stock_return') * 100 if market_benchmarking.get('stock_return') else None
+        }
+        
+        print(f"[SECTOR_AGENT] Generating fresh synthesis for {req.symbol} vs {sector} (includes stock-specific data)...")
+        synthesis_result = await sector_synthesis.analyze_async(
+            symbol=req.symbol,
+            sector_data=sector_data,
+            knowledge_context=""
+        )
+        print(f"[SECTOR_AGENT] Synthesis generation completed for {req.symbol}")
+        
+        # Add synthesis to comprehensive dict
+        comprehensive['sector_synthesis'] = synthesis_result
+        
+        # CRITICAL: Update cache with ONLY sector-agnostic data (rotation & correlation)
+        # DO NOT cache synthesis as it contains stock-specific benchmarking data
+        if SECTOR_CACHE:
+            try:
+                # Build sector-agnostic cache data (reusable for all stocks in this sector)
+                sector_agnostic_cache = {
+                    'sector_rotation': comprehensive.get('sector_rotation', {}),
+                    'sector_correlation': comprehensive.get('sector_correlation', {}),
+                    # NOTE: synthesis is NOT cached as it includes stock-specific metrics
+                    'optimization_metrics': comprehensive.get('optimization_metrics', {}),
+                    'timestamp': datetime.now().isoformat()
+                }
+                
+                # Get current sector index price for cache metadata
+                sector_index_name = comprehensive.get('sector_benchmarking', {}).get('sector_info', {}).get('sector_index')
+                current_price = 0
+                if sector_index_name:
+                    sector_index_data = comprehensive.get('sector_benchmarking', {}).get('sector_benchmarking', {})
+                    if isinstance(sector_index_data, dict) and 'sector_cumulative_return' in sector_index_data:
+                        # Approximate current price from sector data if available
+                        current_price = sector_index_data.get('sector_cumulative_return', 0) * 10000  # Placeholder
+                
+                SECTOR_CACHE.save_analysis(sector, sector_agnostic_cache, current_price)
+                logging.info(f"💾 Saved SECTOR-AGNOSTIC data to cache for {sector} (rotation, correlation only)")
+                logging.info(f"⚠️  Synthesis NOT cached (contains stock-specific data, will regenerate per stock)")
+                logging.info(f"⚠️  Stock-specific benchmarking NOT cached (will be calculated fresh per stock)")
+            except Exception as cache_error:
+                logging.warning(f"Failed to save sector-agnostic data to cache: {cache_error}")
         
         # Build comprehensive response
         response = {

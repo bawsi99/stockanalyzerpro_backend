@@ -534,6 +534,16 @@ Risk Analysis Data:
             rotation_stage = extract(r"-\s*Rotation\s*Stage:\s*([A-Za-z]+)")
             rotation_mom = extract(r"-\s*Rotation\s*Momentum:\s*([+-]?[0-9]+(?:\.[0-9]+)?)")
             sector_name = extract(r"-\s*Sector:\s*(.+)")
+            
+            # Extract additional metrics
+            sector_corr = extract(r"-\s*Sector\s*Correlation:\s*([+-]?[0-9]+(?:\.[0-9]+)?)") 
+            market_corr = extract(r"-\s*Market\s*Correlation:\s*([+-]?[0-9]+(?:\.[0-9]+)?)") 
+            sector_sharpe = extract(r"-\s*Sector\s*Sharpe:\s*([+-]?[0-9]+(?:\.[0-9]+)?)") 
+            market_sharpe = extract(r"-\s*Market\s*Sharpe:\s*([+-]?[0-9]+(?:\.[0-9]+)?)") 
+            sector_vol = extract(r"-\s*Sector\s*Volatility:\s*([+-]?[0-9]+(?:\.[0-9]+)?)") 
+            market_vol = extract(r"-\s*Market\s*Volatility:\s*([+-]?[0-9]+(?:\.[0-9]+)?)") 
+            sector_ret = extract(r"-\s*Sector\s*Return:\s*([+-]?[0-9]+(?:\.[0-9]+)?)") 
+            market_ret = extract(r"-\s*Market\s*Return:\s*([+-]?[0-9]+(?:\.[0-9]+)?)")
 
             # Build concise, explicit context with timeframes
             metrics_lines = []
@@ -553,6 +563,24 @@ Risk Analysis Data:
                 additional_lines.append(f"- Sector: {sector_name}")
             if market_beta is not None:
                 additional_lines.append(f"- Market Beta (12m): {market_beta}")
+            
+            # Enhanced metrics in additional context
+            if sector_corr is not None:
+                additional_lines.append(f"- Sector Correlation: {sector_corr}%")
+            if market_corr is not None:
+                additional_lines.append(f"- Market Correlation: {market_corr}%")
+            if sector_sharpe is not None:
+                additional_lines.append(f"- Sector Sharpe: {sector_sharpe}")
+            if market_sharpe is not None:
+                additional_lines.append(f"- Market Sharpe: {market_sharpe}")
+            if sector_vol is not None:
+                additional_lines.append(f"- Sector Volatility: {sector_vol}%")
+            if market_vol is not None:
+                additional_lines.append(f"- Market Volatility: {market_vol}%")
+            if sector_ret is not None:
+                additional_lines.append(f"- Sector Return: {sector_ret}%")
+            if market_ret is not None:
+                additional_lines.append(f"- Market Return: {market_ret}%")
 
             concise_context = f"""
 [Source: SectorContext]

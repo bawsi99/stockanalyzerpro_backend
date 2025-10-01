@@ -37,14 +37,26 @@ class SectorSynthesisProcessor:
             rot = sector_data.get("rotation_stage")
             rot_mom = sector_data.get("rotation_momentum")
             sector_name = sector_data.get("sector_name")
+            
+            # Additional metrics
+            sc = sector_data.get("sector_correlation")
+            mc = sector_data.get("market_correlation")
+            ss = sector_data.get("sector_sharpe")
+            ms = sector_data.get("market_sharpe")
+            sv = sector_data.get("sector_volatility")
+            mv = sector_data.get("market_volatility")
+            sr = sector_data.get("sector_return")
+            mr = sector_data.get("market_return")
 
+            # Core metrics (used by GeminiClient for extraction)
             if so is not None:
                 lines.append(f"- Sector Outperformance: {so}")
             if mo is not None:
                 lines.append(f"- Market Outperformance: {mo}")
             if sb is not None:
                 lines.append(f"- Sector Beta: {sb}")
-            # Extras (not directly filtered by Gemini lines-extractor, but included in Additional Context)
+            
+            # Additional Context metrics
             if mb is not None:
                 extras.append(f"- Market Beta: {mb}")
             if sector_name:
@@ -53,6 +65,24 @@ class SectorSynthesisProcessor:
                 extras.append(f"- Rotation Stage: {rot}")
             if rot_mom is not None:
                 extras.append(f"- Rotation Momentum: {rot_mom}")
+            
+            # Enhanced metrics
+            if sc is not None:
+                extras.append(f"- Sector Correlation: {sc}%")
+            if mc is not None:
+                extras.append(f"- Market Correlation: {mc}%")
+            if ss is not None:
+                extras.append(f"- Sector Sharpe: {ss}")
+            if ms is not None:
+                extras.append(f"- Market Sharpe: {ms}")
+            if sv is not None:
+                extras.append(f"- Sector Volatility: {sv}%")
+            if mv is not None:
+                extras.append(f"- Market Volatility: {mv}%")
+            if sr is not None:
+                extras.append(f"- Sector Return: {sr}%")
+            if mr is not None:
+                extras.append(f"- Market Return: {mr}%")
 
         # Build the final knowledge context
         header = [f"SECTOR CONTEXT for {symbol}".strip()]

@@ -90,6 +90,7 @@ class SectorPromptResponseTester:
     def __init__(self, symbols: List[str], sectors: List[str], output_dir: Optional[str], no_llm: bool, period: int, exchange: str, metrics_json: Optional[str], concurrency: int):
         self.prompt_manager = PromptManager()
         # Detect API key upfront unless --no-llm. Only use GEMINI_API_KEY from .env (no rotation).
+        # Note: Test mode uses single GEMINI_API_KEY; production GeminiClient uses APIKeyManager with key rotation.
         self._api_key = None if no_llm else os.environ.get("GEMINI_API_KEY")
         self.client = GeminiClient(api_key=self._api_key) if (self._api_key and not no_llm) else None
         # Resolve results directory robustly to avoid duplicated "backend/agents/sector" segments
@@ -149,7 +150,7 @@ class SectorPromptResponseTester:
 
     @staticmethod
     def _build_exact_sector_prompt(prompt_manager: PromptManager, knowledge_context: str) -> str:
-        """Recreate (concise) prompt assembly used by synthesize_sector_summary: explicit timeframes, rotation elevated."""
+        """Recreate (concise) prompt assembly used by synthesize_sector_summary with explicit timeframes for each metric."""
         import re
         ctx = knowledge_context or ""
 
