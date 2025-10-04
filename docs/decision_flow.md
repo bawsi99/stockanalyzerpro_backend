@@ -10,6 +10,11 @@
     - `mtf_agents.py` (MTFAgentsOrchestrator)
     - `integration_manager.py` (MTFAgentIntegrationManager)
     - Specialized agents: `intraday/`, `swing/`, `position/`
+  - `backend/agents/sector/` (new sector agent refactor)
+    - `benchmarking.py` (SectorBenchmarkingProvider)
+    - `processor.py` (SectorSynthesisProcessor)
+    - `cache_manager.py` (SectorCacheManager + `cache_config.json`)
+    - `classifier.py`, `enhanced_classifier.py`
   - `backend/ml/analysis/mtf_analysis.py` (legacy EnhancedMultiTimeframeAnalyzer - still available)
   - `backend/analysis/advanced_analysis.py`
   - `backend/ml/indicators/technical_indicators.py`
@@ -52,6 +57,16 @@
 
 ### In-process cache
 - `VOLUME_PREFETCH_CACHE` keyed by `correlation_id`, to reuse prefetched `stock_data` and `indicators` for volume agents.
+
+### File-based sector cache (agents/sector/cache_manager.py)
+- Managed by `SectorCacheManager` with manifest and `cache_config.json`
+- Caches only sector-agnostic data that is safe to reuse across stocks in the same sector:
+  - `sector_rotation` (stage, momentum)
+  - `sector_correlation` (summary/metrics)
+- Does NOT cache stock-specific data:
+  - Stock-vs-sector benchmarking outputs
+  - LLM sector synthesis bullets (these include stock-specific metrics)
+- Cache invalidation: time-based (refresh interval), scheduled refresh, or price-change threshold; manual invalidation supported.
 
 ---
 
@@ -152,12 +167,14 @@ Step-by-step:
 6) Join results and normalize
 - Any task failure → normalized to empty context; analysis continues.
 
-7) Build knowledge context
-- Concatenate JSON blocks from sector context, MTF results, and advanced digest.
+7) Prepare final decision inputs
+- Collect the context components: sector_bullets (from sector synthesis), an MTF subset (LLM insights or summary), and the advanced analysis digest.
+- The centralized FinalDecisionProcessor assembles the labeled knowledge context internally.
 
-8) Final decision LLM
-- `orchestrator.gemini_client.run_final_decision(ind_json, chart_insights_md="", knowledge_context)`
-- Returns `ai_analysis` (trend, confidence_pct, guidance, etc.)
+8) Final decision agent (centralized)
+- `agents.final_decision.processor.FinalDecisionProcessor.analyze_async(symbol, ind_json, mtf_context_subset, sector_bullets, advanced_digest, risk_bullets=None, chart_insights="", base_knowledge_context="")`
+- Internally builds labeled context (MultiTimeframeContext, AdvancedAnalysisDigest, SECTOR CONTEXT) and invokes Gemini via GeminiClient code-exec path
+- Returns `ai_analysis` via `fd_result['result']` (trend, confidence_pct, guidance, etc.)
 
 9) Optional ML predictions
 - `UnifiedMLManager` best-effort train/get prediction, then clear caches.
@@ -213,6 +230,20 @@ Inputs/Outputs:
   - Checks Zerodha credentials, Gemini key presence, sector classifier availability, Database Service connectivity, event loop status.
 
 ### Sector analytics
+- POST `/agents/sector/analyze-all` (New sector agent path)
+  - End-to-end sector analysis for a given stock and its sector using the refactored agents under `backend/agents/sector`
+  - Flow (summary):
+    1) Prefetch reuse (optional): If `correlation_id` provided and present in `VOLUME_PREFETCH_CACHE`, reuse `stock_data`
+    2) Sector detection: Use `SectorClassifier` (or user-provided `sector`)
+    3) File cache lookup: `SectorCacheManager.get_cached_analysis(sector)` to fetch sector-agnostic data (rotation/correlation)
+    4) Compute fresh stock-specific benchmarking: `SectorBenchmarkingProvider.get_optimized_comprehensive_sector_analysis(...)`
+       - Always computed fresh per stock (never cached)
+    5) Generate fresh sector synthesis bullets via `SectorSynthesisProcessor`
+       - Always regenerated per stock (LLM synthesis contains stock-specific metrics)
+       - Synthesis prompt includes enhanced metrics: correlation, Sharpe, volatility, returns for sector and market
+    6) Update file cache with sector-agnostic data only (rotation, correlation). Do NOT cache synthesis or benchmarking
+    7) Return comprehensive response: benchmarking, rotation, correlation, optimization metrics, synthesis bullets
+
 - POST `/sector/benchmark`
 - POST `/sector/benchmark/async`
   - Retrieves df via orchestrator and computes comprehensive benchmarking. Returns serialized results.
@@ -228,6 +259,17 @@ Inputs/Outputs:
 
 - POST `/sector/compare`
   - For each sector: fetches its index data, computes return/volatility; tolerates per-sector failures.
+
+#### Sector agent components (overview)
+- `agents/sector/benchmarking.py`: SectorBenchmarkingProvider (optimized comprehensive benchmarking)
+- `agents/sector/processor.py`: SectorSynthesisProcessor (LLM bullets via `GeminiClient.synthesize_sector_summary`)
+- `agents/sector/cache_manager.py`: SectorCacheManager (file-based cache for sector-agnostic data)
+- `agents/sector/cache_config.json`: Cache settings (enabled, refresh interval, price thresholds)
+- `agents/sector/classifier.py`, `enhanced_classifier.py`: Sector mapping and enhanced filters
+
+#### Caching policy (critical)
+- Cache only sector-agnostic context (rotation, correlation)
+- Never cache stock-specific benchmarking or sector synthesis (LLM) since they include stock-specific data
 
 ### Indicators, patterns, charts
 - GET `/stock/{symbol}/indicators?interval=1day&exchange=NSE&indicators=rsi,macd,sma,ema,bollinger`
@@ -414,7 +456,7 @@ The MTF system now follows an agent-based orchestration pattern similar to volum
   - Advanced analysis digest (timeout: 90s)
   - Sector context (if requested, timeout: 120s)
   - Indicator summary LLM (timeout: 120s)
-- Join → Build knowledge_context → Final decision LLM
+- Join → Prepare final-decision inputs → FinalDecisionProcessor.analyze_async (centralized)
 - Optional ML predictions
 - Build frontend response → Persist to Database Service → Return JSON
 

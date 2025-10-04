@@ -3070,10 +3070,15 @@ class SectorBenchmarkingProvider:
                 # STEP 3: Fetch sectors for analysis ONLY if we don't have cached rotation/correlation
                 sector_data_dict = {}
                 
+                # Initialize relevant_sectors to avoid UnboundLocalError
+                relevant_sectors = []
+                
                 # OPTIMIZATION: Skip sector fetching if we have both cached rotation and correlation
                 if cached_rotation and cached_correlation:
                     logging.info(f"✅ {analysis_type}: Skipping sector fetching - using cached rotation & correlation")
                     # No need to fetch other sectors since we have cached data
+                    # Still need to set relevant_sectors for metrics reporting
+                    relevant_sectors = [sector]  # At minimum, include the stock's sector
                 else:
                     # Select sectors based on relevance, performance, or comprehensive analysis flag
                     relevant_sectors = self._get_relevant_sectors_for_analysis(sector, current_use_all_sectors)

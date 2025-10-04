@@ -94,6 +94,7 @@ from config.storage_config import StorageConfig
 # Volume agents integration (we'll expose service endpoints that use the existing orchestrator-based implementation)
 from agents.volume import VolumeAgentIntegrationManager
 from agents.volume import VolumeAgentsOrchestrator
+from agents.final_decision.processor import FinalDecisionProcessor
 
 app = FastAPI(title="Stock Analysis Service", version="1.0.0")
 logger = logging.getLogger(__name__)
@@ -929,12 +930,22 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         # Prepare correlation ID and cache prefetched data to avoid duplicate fetch in volume analyze-all
         correlation_id = str(uuid.uuid4())
         try:
+            # Debug: Check stock_data before storing
+            print(f"[PREFETCH_DEBUG] Storing stock_data - type: {type(stock_data)}, shape: {getattr(stock_data, 'shape', 'N/A')}")
+            if hasattr(stock_data, 'empty'):
+                print(f"[PREFETCH_DEBUG] stock_data.empty: {stock_data.empty}")
+            if hasattr(stock_data, 'columns'):
+                print(f"[PREFETCH_DEBUG] stock_data.columns: {list(stock_data.columns)}")
+            if hasattr(stock_data, '__len__'):
+                print(f"[PREFETCH_DEBUG] stock_data length: {len(stock_data)}")
+            
             # Store prefetched stock_data and indicators in in-process cache for reuse by analyze-all
             VOLUME_PREFETCH_CACHE[correlation_id] = {
                 'stock_data': stock_data,
                 'indicators': indicators,
                 'created_at': datetime.now()
             }
+            print(f"[PREFETCH_DEBUG] ✅ Successfully stored in cache with correlation_id: {correlation_id}")
         except Exception as cache_e:
             print(f"[VOLUME_PREFETCH_CACHE] Failed to store prefetched data: {cache_e}")
 
@@ -987,7 +998,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 raise
 
         # Create tasks with logging + timeouts
-        volume_task = asyncio.create_task(_with_logging("volume_agents", _call_volume_agents(), timeout=200.0))
+        volume_task = asyncio.create_task(_with_logging("volume_agents", _call_volume_agents(), timeout=300.0))
 
         # MTF analysis with LLM agent
         async def _mtf():
@@ -1049,27 +1060,55 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         # Sector agent via service endpoint (loopback) - runs in parallel with other agents
         sector_agents_url = os.getenv("ANALYSIS_SERVICE_URL", "http://localhost:8002") + "/agents/sector/analyze-all"
         async def _sector():
+            sector_start_time = time.monotonic()
             try:
-                print(f"[SECTOR_AGENT] Calling analyze-all endpoint for {request.stock} (correlation_id: {correlation_id})...")
-                async with httpx.AsyncClient(timeout=180.0) as client:
-                    resp = await client.post(
-                        sector_agents_url,
-                        json={
-                            "symbol": request.stock,
-                            "exchange": request.exchange,
-                            "interval": request.interval,
-                            "period": request.period,
-                            "sector": request.sector,  # Optional - auto-detected if not provided
-                            "correlation_id": correlation_id  # Pass correlation_id for prefetch cache lookup
-                        }
-                    )
+                print(f"[SECTOR_HTTP_DEBUG] Starting sector HTTP call for {request.stock}")
+                print(f"[SECTOR_HTTP_DEBUG] URL: {sector_agents_url}")
+                print(f"[SECTOR_HTTP_DEBUG] Correlation ID: {correlation_id}")
+                
+                # Use longer HTTP timeout than task timeout to avoid race conditions
+                http_timeout = 200.0  # 200 seconds for HTTP client
+                print(f"[SECTOR_HTTP_DEBUG] HTTP timeout: {http_timeout}s")
+                
+                request_payload = {
+                    "symbol": request.stock,
+                    "exchange": request.exchange,
+                    "interval": request.interval,
+                    "period": request.period,
+                    "sector": request.sector,  # Optional - auto-detected if not provided
+                    "correlation_id": correlation_id  # Pass correlation_id for prefetch cache lookup
+                }
+                print(f"[SECTOR_HTTP_DEBUG] Request payload: {request_payload}")
+                
+                async with httpx.AsyncClient(timeout=http_timeout) as client:
+                    print(f"[SECTOR_HTTP_DEBUG] Making POST request...")
+                    resp = await client.post(sector_agents_url, json=request_payload)
+                    
+                    print(f"[SECTOR_HTTP_DEBUG] Response status: {resp.status_code}")
+                    print(f"[SECTOR_HTTP_DEBUG] Response headers: {dict(resp.headers)}")
+                    
                     resp.raise_for_status()
                     result = resp.json()
                     
+                    elapsed = time.monotonic() - sector_start_time
+                    print(f"[SECTOR_HTTP_DEBUG] HTTP call completed in {elapsed:.2f}s")
+                    print(f"[SECTOR_HTTP_DEBUG] Response success: {result.get('success')}")
+                    
                     if result.get('success'):
                         print(f"✅ [SECTOR_AGENT] Analysis completed for {request.stock} in sector {result.get('sector')}")
+                        
+                        # DEBUG: Check synthesis data
+                        synthesis = result.get('synthesis', {})
+                        agent_name = synthesis.get('agent_name', 'unknown')
+                        bullets = synthesis.get('bullets', '')
+                        print(f"[SECTOR_HTTP_DEBUG] Synthesis agent: {agent_name}")
+                        print(f"[SECTOR_HTTP_DEBUG] Synthesis bullets length: {len(bullets) if bullets else 0}")
+                        if bullets:
+                            first_line = bullets.split('\n')[0][:100] if bullets else ''
+                            print(f"[SECTOR_HTTP_DEBUG] First bullet line: {first_line}")
+                        
                         # Transform response to match expected format
-                        return {
+                        transformed_result = {
                             'sector': result.get('sector'),
                             'sector_display_name': result.get('sector_display_name'),
                             'sector_benchmarking': result.get('sector_benchmarking', {}),
@@ -1083,16 +1122,31 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                                 'used_structured_metrics': result.get('synthesis', {}).get('used_structured_metrics', False)
                             }
                         }
+                        
+                        print(f"[SECTOR_HTTP_DEBUG] Transformed result has synthesis_bullets: {bool(transformed_result['synthesis_bullets'])}")
+                        return transformed_result
                     else:
                         print(f"⚠️ [SECTOR_AGENT] Analysis failed: {result.get('error', 'Unknown error')}")
+                        print(f"[SECTOR_HTTP_DEBUG] Full error response: {result}")
                         return {}
+                        
+            except httpx.TimeoutException as e:
+                elapsed = time.monotonic() - sector_start_time
+                print(f"[SECTOR_HTTP_DEBUG] ❌ HTTP timeout after {elapsed:.2f}s: {e}")
+                return {}
+            except httpx.HTTPStatusError as e:
+                elapsed = time.monotonic() - sector_start_time
+                print(f"[SECTOR_HTTP_DEBUG] ❌ HTTP status error after {elapsed:.2f}s: {e.response.status_code}")
+                print(f"[SECTOR_HTTP_DEBUG] Error response: {e.response.text}")
+                return {}
             except Exception as e:
-                print(f"[SECTOR_AGENT] Error calling analyze-all endpoint: {e}")
+                elapsed = time.monotonic() - sector_start_time
+                print(f"[SECTOR_HTTP_DEBUG] ❌ General error after {elapsed:.2f}s: {type(e).__name__}: {e}")
                 import traceback
                 traceback.print_exc()
                 return {}
 
-        sector_task = asyncio.create_task(_with_logging("sector", _sector(), timeout=120.0))
+        sector_task = asyncio.create_task(_with_logging("sector", _sector(), timeout=220.0))  # Increased from 120s to 220s to be longer than HTTP timeout (200s)
 
         # Indicator summary LLM (runs in parallel with volume/MTF/sector/advanced)
         async def _indicator_summary():
@@ -1121,7 +1175,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                         "fallback_used": True,
                         "source": "enhanced_analyze_fallback"
                     }
-                md, ind_json = await orchestrator.gemini_client.build_indicators_summary(
+                md, ind_json, dbg = await orchestrator.gemini_client.build_indicators_summary(
                     symbol=request.stock,
                     indicators=indicators,
                     period=request.period,
@@ -1129,10 +1183,12 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                     knowledge_context="",
                     token_tracker=None,
                     mtf_context=None,
-                    curated_indicators=curated
+                    curated_indicators=curated,
+                    return_debug=True
                 )
                 print(f"✅ [INDICATOR_SUMMARY] Completed with API key ...{api_key_hint}")
-                return md, ind_json
+                # Return the markdown, parsed dict, and the extracted json blob for final decision prompt
+                return md, ind_json, dbg.get('json_blob', '')
             except Exception as e:
                 print(f"[INDICATOR_SUMMARY] Error: {e}")
                 # Fallback empty
@@ -1171,6 +1227,16 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         if isinstance(sector_context, Exception):
             print(f"[PARALLEL] sector failed: {type(sector_context).__name__}: {sector_context!r}")
             sector_context = {}
+        else:
+            # DEBUG: Log what we actually got from sector task
+            print(f"[PARALLEL] sector result type: {type(sector_context)}, has_data: {bool(sector_context)}")
+            if isinstance(sector_context, dict) and sector_context:
+                print(f"[PARALLEL] sector result keys: {list(sector_context.keys())}")
+                if 'synthesis_bullets' in sector_context:
+                    bullets_len = len(sector_context['synthesis_bullets']) if sector_context['synthesis_bullets'] else 0
+                    print(f"[PARALLEL] sector synthesis_bullets length: {bullets_len}")
+            else:
+                print(f"[PARALLEL] sector result is empty or not dict")
         if isinstance(indicator_summary_result, Exception):
             print(f"[PARALLEL] indicator_summary failed: {type(indicator_summary_result).__name__}: {indicator_summary_result!r}")
             indicator_summary_result = ("", {})
@@ -1185,73 +1251,198 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         if not isinstance(volume_agents_result, dict):
             volume_agents_result = {}
 
-        indicator_summary_md, indicator_json = ("", {})
-        if isinstance(indicator_summary_result, tuple) and len(indicator_summary_result) == 2:
-            indicator_summary_md, indicator_json = indicator_summary_result
+        indicator_summary_md, indicator_json, indicator_json_blob = ("", {}, "")
+        if isinstance(indicator_summary_result, tuple):
+            if len(indicator_summary_result) == 3:
+                indicator_summary_md, indicator_json, indicator_json_blob = indicator_summary_result
+            elif len(indicator_summary_result) == 2:
+                indicator_summary_md, indicator_json = indicator_summary_result
         elif isinstance(indicator_summary_result, dict):
             # In case a dict accidentally gets returned
             indicator_summary_md, indicator_json = "", indicator_summary_result
 
-        # 4) Final decision LLM (depends on prior results). No charts here.
+        # 4) Final decision (centralized agent) — depends on prior results; no charts here.
         chart_insights_md = ""
-        # Build minimal knowledge_context blocks (sector/MTF/advanced) as JSON labels
-        # NOTE: For MTF, we only send the LLM insights (interpretation), not raw technical data
-        knowledge_blocks = []
+
+        # Prepare minimal payloads for the final decision agent
+        # DEBUG: Print sector_context to see what we actually get
+        print(f"\n[SECTOR_DEBUG] sector_context type: {type(sector_context)}")
+        print(f"[SECTOR_DEBUG] sector_context has_data: {bool(sector_context)}")
+        if sector_context and isinstance(sector_context, dict):
+            print(f"[SECTOR_DEBUG] sector_context keys: {list(sector_context.keys())}")
+            if 'synthesis_bullets' in sector_context:
+                bullets_preview = sector_context['synthesis_bullets'][:100] if sector_context['synthesis_bullets'] else "(empty)"
+                print(f"[SECTOR_DEBUG] synthesis_bullets found: {bullets_preview}...")
+            else:
+                print(f"[SECTOR_DEBUG] synthesis_bullets NOT found in keys")
+        else:
+            print(f"[SECTOR_DEBUG] sector_context is empty or not dict")
+        
+        sector_bullets = None
         try:
             if sector_context:
-                # ONLY include sector synthesis bullets (not full technical context)
-                sector_bullets = sector_context.get('synthesis_bullets', '')
-                if sector_bullets:
-                    knowledge_blocks.append(f"SECTOR SYNTHESIS:\n{sector_bullets}")
-                    print(f"[SECTOR_CONTEXT] Added synthesis bullets to knowledge_context (no technical data)")
-        except Exception:
-            pass
+                sector_bullets = sector_context.get('synthesis_bullets') or None
+        except Exception as e:
+            print(f"[SECTOR_DEBUG] Error extracting sector_bullets: {e}")
+            sector_bullets = None
+
+        # Pass the entire MTF context directly to final decision agent
+        # This ensures the raw LLM response from MTF analysis is fully integrated
+        mtf_payload = None
         try:
-            if mtf_context:
-                # Extract only LLM insights for final decision
-                # The technical data stays in mtf_context for frontend/storage
+            if isinstance(mtf_context, dict) and mtf_context:
+                # Check if we have LLM insights from MTF LLM agent
                 mtf_llm_insights = mtf_context.get('llm_insights', {})
                 if mtf_llm_insights and mtf_llm_insights.get('success'):
-                    # Send only the LLM analysis text to final decision
-                    mtf_for_final_decision = {
-                        'agent': mtf_llm_insights.get('agent', 'mtf_llm_agent'),
-                        'llm_analysis': mtf_llm_insights.get('llm_analysis', ''),
-                        'confidence': mtf_llm_insights.get('confidence', 0.0),
-                        'mtf_summary': mtf_llm_insights.get('mtf_summary', {}),
-                        'cross_timeframe_validation': mtf_llm_insights.get('cross_timeframe_validation', {})
-                    }
-                    knowledge_blocks.append("MTF ANALYSIS INSIGHTS:\n" + json.dumps(mtf_for_final_decision))
+                    # Pass the complete LLM insights including the raw llm_analysis
+                    mtf_payload = mtf_llm_insights
+                    print(f"[MTF_INTEGRATION] Using MTF LLM insights with raw analysis ({len(mtf_llm_insights.get('llm_analysis', ''))} chars)")
                 else:
-                    # Fallback: if LLM insights not available, send summary only (not full technical data)
-                    mtf_summary_only = {
+                    # Fallback to technical MTF analysis only
+                    mtf_payload = {
                         'summary': mtf_context.get('summary', {}),
                         'cross_timeframe_validation': mtf_context.get('cross_timeframe_validation', {})
                     }
-                    knowledge_blocks.append("MTF SUMMARY:\n" + json.dumps(mtf_summary_only))
+                    print(f"[MTF_INTEGRATION] Using technical MTF analysis only (no LLM insights)")
         except Exception as e:
-            print(f"[MTF] Error building MTF knowledge context: {e}")
-            pass
-        try:
-            if advanced_analysis:
-                knowledge_blocks.append("AdvancedAnalysisDigest:\n" + json.dumps(advanced_analysis))
-        except Exception:
-            pass
-        knowledge_context = "\n\n".join(knowledge_blocks)
+            print(f"[MTF_INTEGRATION] Error preparing MTF payload for final decision: {e}")
+            mtf_payload = None
 
         # Final decision with START/END logging
         fd_t0 = time.monotonic()
         print(f"[TASK-START] final_decision t={fd_t0 - start_base:+.3f}s")
-        
-        # Log which API key is being used for final decision
-        api_key_hint = orchestrator.gemini_client.core.api_key[-8:] if orchestrator.gemini_client.core.api_key else "unknown"
-        print(f"🔑 [FINAL_DECISION] Using API key ending in: ...{api_key_hint}")
-        
+
+        # Use the same API key that orchestrator was using (for continuity and rate limits)
         try:
-            ai_analysis = await orchestrator.gemini_client.run_final_decision(
-                ind_json=indicator_json or {},
-                chart_insights_md=chart_insights_md,
-                knowledge_context=knowledge_context
+            fd_api_key = orchestrator.gemini_client.core.api_key if getattr(orchestrator, 'gemini_client', None) and getattr(orchestrator.gemini_client, 'core', None) else None
+        except Exception:
+            fd_api_key = None
+        api_key_hint = (fd_api_key[-8:] if isinstance(fd_api_key, str) and len(fd_api_key) >= 8 else "unknown")
+        print(f"🔑 [FINAL_DECISION] Using API key ending in: ...{api_key_hint}")
+
+        from agents.final_decision.processor import FinalDecisionProcessor
+        fd_processor = FinalDecisionProcessor(api_key=fd_api_key)
+        
+        # DEBUG: Print all inputs to final decision agent for debugging
+        print(f"\n{'='*80}")
+        print(f"[FINAL_DECISION_DEBUG] Final Decision Agent Inputs for {request.stock}")
+        print(f"{'='*80}")
+        print(f"Symbol: {request.stock}")
+        print(f"Exchange: {request.exchange}")
+        print(f"Period: {request.period}")
+        print(f"Interval: {request.interval}")
+        
+        # Debug: Indicator JSON
+        ind_json_input = indicator_json_blob or indicator_json or {}
+        print(f"\n[FD_INPUT] Indicator JSON (type: {type(ind_json_input)}, length: {len(str(ind_json_input)) if ind_json_input else 0}):")
+        if isinstance(ind_json_input, dict) and ind_json_input:
+            for key, value in list(ind_json_input.items())[:3]:  # Show first 3 keys only
+                print(f"  {key}: {str(value)[:100]}..." if len(str(value)) > 100 else f"  {key}: {value}")
+        elif isinstance(ind_json_input, str) and ind_json_input:
+            print(f"  {ind_json_input[:200]}..." if len(ind_json_input) > 200 else f"  {ind_json_input}")
+        else:
+            print(f"  (Empty or None)")
+        
+        # Debug: MTF Context
+        print(f"\n[FD_INPUT] MTF Context (type: {type(mtf_payload)}, has_data: {bool(mtf_payload)}):")
+        if mtf_payload and isinstance(mtf_payload, dict):
+            # Show if this contains raw LLM analysis from MTF agent
+            has_raw_llm = 'llm_analysis' in mtf_payload and isinstance(mtf_payload.get('llm_analysis'), str)
+            print(f"  Contains raw LLM analysis: {has_raw_llm}")
+            
+            for key, value in mtf_payload.items():
+                if key == 'llm_analysis' and isinstance(value, str):
+                    print(f"  {key}: {value[:150]}..." if len(value) > 150 else f"  {key}: {value}")
+                else:
+                    print(f"  {key}: {type(value).__name__} ({len(str(value)) if value else 0} chars)")
+        else:
+            print(f"  (Empty or None)")
+        
+        # Debug: Sector Bullets (THIS IS KEY FOR OUR FALLBACK TESTING)
+        print(f"\n[FD_INPUT] Sector Bullets (type: {type(sector_bullets)}, has_data: {bool(sector_bullets)}):")
+        if sector_bullets:
+            if isinstance(sector_bullets, str):
+                # Show first few lines of sector bullets
+                lines = sector_bullets.split('\n')[:5]  # First 5 lines
+                print(f"  Content (first 5 lines):")
+                for i, line in enumerate(lines, 1):
+                    print(f"    {i}. {line}")
+                total_lines = len(sector_bullets.split('\n'))
+                if total_lines > 5:
+                    remaining_lines = total_lines - 5
+                    print(f"    ... ({remaining_lines} more lines)")
+            else:
+                print(f"  {str(sector_bullets)[:200]}..." if len(str(sector_bullets)) > 200 else f"  {sector_bullets}")
+        else:
+            print(f"  (Empty or None)")
+        
+        # Debug: Advanced Analysis
+        print(f"\n[FD_INPUT] Advanced Analysis (type: {type(advanced_analysis)}, has_data: {bool(advanced_analysis)}):")
+        if advanced_analysis and isinstance(advanced_analysis, dict):
+            print(f"  Keys: {list(advanced_analysis.keys())[:5]}")
+            total_chars = sum(len(str(v)) for v in advanced_analysis.values())
+            print(f"  Total content size: {total_chars} characters")
+        else:
+            print(f"  (Empty or None)")
+        
+        # Debug: Volume Analysis  
+        print(f"\n[FD_INPUT] Volume Analysis (type: {type(volume_agents_result)}, has_data: {bool(volume_agents_result)}):")
+        if volume_agents_result and isinstance(volume_agents_result, dict):
+            print(f"  Success: {volume_agents_result.get('success', False)}")
+            if 'consensus_analysis' in volume_agents_result:
+                consensus = volume_agents_result['consensus_analysis']
+                print(f"  Successful Agents: {consensus.get('successful_agents', 0)}")
+                print(f"  Failed Agents: {consensus.get('failed_agents', 0)}")
+                print(f"  Overall Confidence: {consensus.get('overall_confidence', 0.0)}")
+                print(f"  LLM Responses Available: {consensus.get('llm_responses_available', 0)}")
+            if 'individual_agents' in volume_agents_result:
+                agent_count = len(volume_agents_result['individual_agents'])
+                successful_agents = [name for name, result in volume_agents_result['individual_agents'].items() if result.get('success', False)]
+                agents_with_llm = [name for name, result in volume_agents_result['individual_agents'].items() if result.get('has_llm_response', False)]
+                print(f"  Individual Agents: {agent_count} total, {len(successful_agents)} successful, {len(agents_with_llm)} with LLM responses")
+                print(f"  Successful Agent Names: {successful_agents}")
+                print(f"  Agents with LLM: {agents_with_llm}")
+            
+            # Show combined LLM analysis preview
+            combined_llm = volume_agents_result.get('combined_llm_analysis', '')
+            if combined_llm:
+                preview_length = min(200, len(combined_llm))
+                preview = combined_llm[:preview_length].replace('\n', ' ')
+                print(f"  Combined LLM Analysis: {len(combined_llm)} chars - \"{preview}...\"")
+            else:
+                print(f"  Combined LLM Analysis: Not available")
+            
+            volume_size = len(str(volume_agents_result))
+            print(f"  Total data size: {volume_size} characters")
+        else:
+            print(f"  (Empty or None)")
+        
+        # Debug: Risk Bullets
+        print(f"\n[FD_INPUT] Risk Bullets: {risk_bullets if 'risk_bullets' in locals() else None}")
+        
+        # Debug: Chart Insights
+        print(f"\n[FD_INPUT] Chart Insights (length: {len(chart_insights_md) if chart_insights_md else 0}):")
+        if chart_insights_md:
+            print(f"  {chart_insights_md[:200]}..." if len(chart_insights_md) > 200 else f"  {chart_insights_md}")
+        else:
+            print(f"  (Empty or None)")
+        
+        print(f"\n[FD_INPUT] Knowledge Context: (Empty string)")
+        print(f"{'='*80}\n")
+
+        try:
+            fd_result = await fd_processor.analyze_async(
+                symbol=request.stock,
+                ind_json=(indicator_json_blob or indicator_json or {}),
+                mtf_context=mtf_payload,
+                sector_bullets=sector_bullets,
+                advanced_digest=advanced_analysis or {},
+                risk_bullets=None,
+                chart_insights=chart_insights_md,
+                knowledge_context="",
+                volume_analysis=volume_agents_result or {}
             )
+            ai_analysis = fd_result.get('result', {})
             fd_dt = time.monotonic() - fd_t0
             print(f"✅ [FINAL_DECISION] Completed with API key ...{api_key_hint}")
             print(f"[TASK-END] final_decision ok=True dt={fd_dt:.2f}s")
@@ -1329,12 +1520,20 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             print(f"❌ Storage error (non-fatal): {e}")
 
         # 8) Cleanup prefetch cache to prevent memory leaks
-        try:
-            if correlation_id in VOLUME_PREFETCH_CACHE:
-                del VOLUME_PREFETCH_CACHE[correlation_id]
-                print(f"🗑️  [PREFETCH_CLEANUP] Removed correlation_id {correlation_id} from cache")
-        except Exception as cleanup_e:
-            print(f"⚠️  [PREFETCH_CLEANUP] Error cleaning up cache: {cleanup_e}")
+        # IMPORTANT: Delay cleanup to ensure all agents have finished using the cache
+        async def delayed_cache_cleanup(correlation_id, delay=350.0):
+            """Clean up prefetch cache after a delay to ensure all agents are done."""
+            await asyncio.sleep(delay)
+            try:
+                if correlation_id in VOLUME_PREFETCH_CACHE:
+                    del VOLUME_PREFETCH_CACHE[correlation_id]
+                    print(f"🗑️  [PREFETCH_CLEANUP] Removed correlation_id {correlation_id} from cache after {delay}s delay")
+            except Exception as cleanup_e:
+                print(f"⚠️  [PREFETCH_CLEANUP] Error cleaning up cache: {cleanup_e}")
+        
+        # Schedule cleanup as a background task (non-blocking)
+        # Extended to 350 seconds to allow for 300s cache usage + buffer
+        asyncio.create_task(delayed_cache_cleanup(correlation_id, delay=350.0))
         
         # 9) Return
         elapsed = time.monotonic() - start_ts
@@ -2191,15 +2390,33 @@ async def agents_sector_analyze_all(req: SectorAgentRequest):
         orchestrator = StockAnalysisOrchestrator()
         
         # Check prefetch cache first to avoid redundant data fetching
+        stock_data = None
         if req.correlation_id and req.correlation_id in VOLUME_PREFETCH_CACHE:
             cached_entry = VOLUME_PREFETCH_CACHE[req.correlation_id]
-            stock_data = cached_entry['stock_data']
             cache_age = (datetime.now() - cached_entry['created_at']).total_seconds()
-            logging.info(f"✅ [SECTOR_PREFETCH] Using prefetched stock data for {req.symbol} (age: {cache_age:.1f}s, correlation_id: {req.correlation_id})")
-        else:
-            # Fallback: Retrieve stock data if not in prefetch cache
+            
+            # Only use cache if it's fresh (less than 300 seconds old to handle long analysis times)
+            if cache_age < 300.0:
+                stock_data = cached_entry['stock_data']
+                logging.info(f"✅ [SECTOR_PREFETCH] Using prefetched stock data for {req.symbol} (age: {cache_age:.1f}s, correlation_id: {req.correlation_id})")
+                # Debug: Check what we got from cache
+                logging.info(f"[SECTOR_DEBUG] Cached stock_data type: {type(stock_data)}, shape: {stock_data.shape if hasattr(stock_data, 'shape') else 'N/A'}")
+                if hasattr(stock_data, 'empty'):
+                    logging.info(f"[SECTOR_DEBUG] Cached stock_data empty: {stock_data.empty}")
+                if hasattr(stock_data, 'columns'):
+                    logging.info(f"[SECTOR_DEBUG] Cached stock_data columns: {list(stock_data.columns)}")
+                    
+                # Validate cached data
+                if (not hasattr(stock_data, 'empty') or stock_data.empty or 
+                    not hasattr(stock_data, 'columns') or 'close' not in stock_data.columns):
+                    logging.warning(f"⚠️ [SECTOR_PREFETCH] Cached data invalid, will fetch fresh data")
+                    stock_data = None
+            else:
+                logging.info(f"⚠️ [SECTOR_PREFETCH] Cache too old ({cache_age:.1f}s), fetching fresh data for {req.symbol}")
+        # Fetch fresh data if not in cache or cache was invalid
+        if stock_data is None:
             if req.correlation_id:
-                logging.info(f"🔄 [SECTOR_PREFETCH] Cache miss for correlation_id {req.correlation_id}, fetching fresh data for {req.symbol}")
+                logging.info(f"🔄 [SECTOR_PREFETCH] Cache miss/invalid for correlation_id {req.correlation_id}, fetching fresh data for {req.symbol}")
             else:
                 logging.info(f"🔄 [SECTOR_PREFETCH] No correlation_id provided, fetching fresh data for {req.symbol}")
             
@@ -2210,6 +2427,12 @@ async def agents_sector_analyze_all(req: SectorAgentRequest):
                     interval=req.interval,
                     period=req.period
                 )
+                # Debug: Check what we fetched
+                logging.info(f"[SECTOR_DEBUG] Fetched stock_data type: {type(stock_data)}, shape: {stock_data.shape if hasattr(stock_data, 'shape') else 'N/A'}")
+                if hasattr(stock_data, 'empty'):
+                    logging.info(f"[SECTOR_DEBUG] Fetched stock_data empty: {stock_data.empty}")
+                if hasattr(stock_data, 'columns'):
+                    logging.info(f"[SECTOR_DEBUG] Fetched stock_data columns: {list(stock_data.columns)}")
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
         
@@ -2283,41 +2506,128 @@ async def agents_sector_analyze_all(req: SectorAgentRequest):
         sector_benchmarking = comprehensive.get('sector_benchmarking', {})
         sector_rotation = comprehensive.get('sector_rotation', {})
         
+        # Check if sector data quality is sufficient for LLM synthesis
+        def _is_sector_data_sufficient_for_synthesis(comprehensive_data: dict) -> bool:
+            """
+            Determine if sector data quality is sufficient for LLM synthesis.
+            Returns False if data is unreliable and we should skip LLM calls.
+            """
+            try:
+                sector_benchmarking = comprehensive_data.get('sector_benchmarking', {})
+                
+                # Check multiple indicators of insufficient data
+                data_quality = sector_benchmarking.get('data_quality', {})
+                market_benchmarking = sector_benchmarking.get('market_benchmarking', {})
+                sector_rotation = comprehensive_data.get('sector_rotation', {})
+                
+                # Primary indicators of insufficient data
+                insufficient_indicators = [
+                    # Data quality flags
+                    data_quality.get('sufficient_data') == False,
+                    data_quality.get('analysis_mode') == 'fallback',
+                    data_quality.get('reliability') == 'none',
+                    data_quality.get('data_points', 0) == 0,
+                    
+                    # Market benchmarking fallback indicators
+                    market_benchmarking.get('note') == 'Default values - insufficient data',
+                    market_benchmarking.get('data_points', 0) == 0,
+                    
+                    # Error indicators
+                    'error' in sector_benchmarking,
+                    sector_rotation.get('error') is not None,
+                    
+                    # Fallback calculation indicators
+                    'fallback_reason' in comprehensive_data.get('optimization_metrics', {})
+                ]
+                
+                # If any major indicator shows insufficient data, skip synthesis
+                if any(insufficient_indicators):
+                    logging.info(f"[SECTOR_SYNTHESIS] Insufficient data detected - skipping LLM synthesis")
+                    logging.info(f"[SECTOR_SYNTHESIS] Insufficient indicators: {[i for i, x in enumerate(insufficient_indicators) if x]}")
+                    return False
+                
+                logging.info(f"[SECTOR_SYNTHESIS] Data quality sufficient - proceeding with LLM synthesis")
+                return True
+                
+            except Exception as e:
+                logging.error(f"[SECTOR_SYNTHESIS] Error checking data quality: {e}")
+                # Default to skipping synthesis if we can't determine quality
+                return False
+        
         # ALWAYS generate fresh synthesis (it contains stock-specific data and should never be cached)
         # Generate synthesis using SectorSynthesisProcessor
         from agents.sector import SectorSynthesisProcessor
         sector_synthesis = SectorSynthesisProcessor()
         
         # Extract market and sector benchmarking metrics
-        market_benchmarking = comprehensive.get('market_benchmarking', {})
-        sector_benchmarking_raw = comprehensive.get('sector_benchmarking_raw', {})
-        
+        market_benchmarking = comprehensive.get('market_benchmarking', {}) or {}
+
+        # Derive rotation stage/momentum from sector_rotation data for this specific sector
+        rotation_stage = None
+        rotation_momentum = None
+        try:
+            perf = (sector_rotation.get('sector_performance') or {}) if isinstance(sector_rotation, dict) else {}
+            perf_entry = perf.get(sector)
+            if isinstance(perf_entry, dict):
+                rs = perf_entry.get('relative_strength')
+                mom = perf_entry.get('momentum')
+                if rs is not None and mom is not None:
+                    rs_val = float(rs)
+                    mom_val = float(mom)
+                    if rs_val >= 0 and mom_val >= 0:
+                        rotation_stage = 'Leading'
+                    elif rs_val < 0 and mom_val >= 0:
+                        rotation_stage = 'Improving'
+                    elif rs_val >= 0 and mom_val < 0:
+                        rotation_stage = 'Weakening'
+                    else:
+                        rotation_stage = 'Lagging'
+                    rotation_momentum = mom_val
+        except Exception:
+            rotation_stage = None
+            rotation_momentum = None
+
+        # Build sector_data with correct keys and units expected by SectorSynthesisProcessor
         sector_data = {
             'sector_name': sector,
-            'sector_outperformance_pct': sector_benchmarking.get('outperformance_pct'),
-            'market_outperformance_pct': sector_benchmarking.get('vs_market_pct'),
-            'sector_beta': sector_benchmarking.get('beta'),
+            # Convert decimals to percentages where applicable
+            'sector_outperformance_pct': (sector_benchmarking.get('sector_excess_return') * 100) if (isinstance(sector_benchmarking, dict) and sector_benchmarking.get('sector_excess_return') is not None) else None,
+            'market_outperformance_pct': (market_benchmarking.get('excess_return') * 100) if (market_benchmarking.get('excess_return') is not None) else None,
+            'sector_beta': sector_benchmarking.get('sector_beta') if isinstance(sector_benchmarking, dict) else None,
             'market_beta': market_benchmarking.get('beta'),
-            'rotation_stage': sector_rotation.get('stage'),
-            'rotation_momentum': sector_rotation.get('momentum'),
+            'rotation_stage': rotation_stage,
+            'rotation_momentum': rotation_momentum,
             # Enhanced metrics
-            'sector_correlation': sector_benchmarking_raw.get('sector_correlation') * 100 if sector_benchmarking_raw.get('sector_correlation') else None,
-            'market_correlation': market_benchmarking.get('correlation') * 100 if market_benchmarking.get('correlation') else None,
-            'sector_sharpe': sector_benchmarking_raw.get('stock_sharpe'),
+            'sector_correlation': (sector_benchmarking.get('sector_correlation') * 100) if (isinstance(sector_benchmarking, dict) and sector_benchmarking.get('sector_correlation') is not None) else None,
+            'market_correlation': (market_benchmarking.get('correlation') * 100) if (market_benchmarking.get('correlation') is not None) else None,
+            'sector_sharpe': sector_benchmarking.get('sector_sharpe_ratio') if isinstance(sector_benchmarking, dict) else None,
             'market_sharpe': market_benchmarking.get('stock_sharpe'),
-            'sector_volatility': sector_benchmarking_raw.get('sector_volatility') * 100 if sector_benchmarking_raw.get('sector_volatility') else None,
-            'market_volatility': market_benchmarking.get('volatility') * 100 if market_benchmarking.get('volatility') else None,
-            'sector_return': sector_benchmarking_raw.get('stock_return') * 100 if sector_benchmarking_raw.get('stock_return') else None,
-            'market_return': market_benchmarking.get('stock_return') * 100 if market_benchmarking.get('stock_return') else None
+            'sector_volatility': (sector_benchmarking.get('sector_volatility') * 100) if (isinstance(sector_benchmarking, dict) and sector_benchmarking.get('sector_volatility') is not None) else None,
+            'market_volatility': (market_benchmarking.get('volatility') * 100) if (market_benchmarking.get('volatility') is not None) else None,
+            'sector_return': (sector_benchmarking.get('sector_cumulative_return') * 100) if (isinstance(sector_benchmarking, dict) and sector_benchmarking.get('sector_cumulative_return') is not None) else None,
+            'market_return': (market_benchmarking.get('cumulative_return') * 100) if (market_benchmarking.get('cumulative_return') is not None) else None
         }
         
-        print(f"[SECTOR_AGENT] Generating fresh synthesis for {req.symbol} vs {sector} (includes stock-specific data)...")
-        synthesis_result = await sector_synthesis.analyze_async(
-            symbol=req.symbol,
-            sector_data=sector_data,
-            knowledge_context=""
-        )
-        print(f"[SECTOR_AGENT] Synthesis generation completed for {req.symbol}")
+        # Check if data quality is sufficient for LLM synthesis
+        if _is_sector_data_sufficient_for_synthesis(comprehensive):
+            print(f"[SECTOR_AGENT] Generating fresh synthesis for {req.symbol} vs {sector} (includes stock-specific data)...")
+            synthesis_result = await sector_synthesis.analyze_async(
+                symbol=req.symbol,
+                sector_data=sector_data,
+                knowledge_context=""
+            )
+            print(f"[SECTOR_AGENT] Synthesis generation completed for {req.symbol}")
+        else:
+            # Skip LLM synthesis due to insufficient data quality
+            print(f"[SECTOR_AGENT] ⚠️  Skipping LLM synthesis for {req.symbol} due to insufficient data quality")
+            synthesis_result = {
+                "bullets": "• Sector data unavailable - insufficient historical data for reliable analysis\n• Using fallback sector classification only\n• Recommend checking data availability and trying again later",
+                "agent_name": "sector_synthesis_fallback",
+                "analysis_timestamp": datetime.now().isoformat(),
+                "used_structured_metrics": False,
+                "data_quality_check": "insufficient",
+                "fallback_reason": "Data quality markers indicate unreliable sector analysis results"
+            }
         
         # Add synthesis to comprehensive dict
         comprehensive['sector_synthesis'] = synthesis_result
@@ -2914,7 +3224,7 @@ async def agents_volume_analyze_all(req: VolumeAgentRequest):
         indicators = None
         if req.correlation_id:
             try:
-                cached = VOLUME_PREFETCH_CACHE.pop(req.correlation_id, None)
+                cached = VOLUME_PREFETCH_CACHE.get(req.correlation_id, None)  # Use .get() instead of .pop()
                 if cached and isinstance(cached, dict):
                     stock_data = cached.get('stock_data')
                     indicators = cached.get('indicators')

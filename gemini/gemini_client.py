@@ -55,7 +55,7 @@ class GeminiClient:
         self.context_engineer = ContextEngineer(context_config)
         self.agent_name = agent_name
 
-    async def build_indicators_summary(self, symbol, indicators, period, interval, knowledge_context=None, token_tracker=None, mtf_context=None, curated_indicators: Optional[dict] = None):
+    async def build_indicators_summary(self, symbol, indicators, period, interval, knowledge_context=None, token_tracker=None, mtf_context=None, curated_indicators: Optional[dict] = None, return_debug: bool = False):
         """
         Build comprehensive indicator summary with multi-timeframe and sector analysis support.
         
@@ -67,6 +67,7 @@ class GeminiClient:
             knowledge_context: Additional context (includes sector context)
             token_tracker: Token usage tracker
             mtf_context: Multi-timeframe context data
+            return_debug: When True, also return raw_text and extracted json_blob for debugging
         """
         try:
             # NEW: Require curated indicators provided by the new indicator agents path
@@ -115,14 +116,11 @@ class GeminiClient:
         print("indicator summary agent request sent")
         try:
             try:
-                # Use code execution for enhanced mathematical analysis
-                response, code_results, execution_results = await self.core.call_llm_with_code_execution(prompt, return_full_response=True)
-                text_response = response.text if response else ""
-                
-                # Track token usage if tracker is provided
-                if token_tracker:
-                    token_tracker.add_token_usage("indicator_summary", response, "gemini-2.5-flash")
-                
+                # Use code execution for enhanced mathematical analysis (robust text extraction from core)
+                text_response, code_results, execution_results = await self.core.call_llm_with_code_execution(
+                    prompt, return_full_response=False
+                )
+                # Note: token tracking requires a full response object, so we only track on fallback path below
                 print(f"[DEBUG] LLM response length: {len(text_response) if text_response else 0}")
                 print(f"[DEBUG] Code results count: {len(code_results)}")
                 print(f"[DEBUG] Execution results count: {len(execution_results)}")
@@ -144,6 +142,8 @@ class GeminiClient:
                 print("[DEBUG] Empty response, using fallback JSON")
                 # Create a fallback response
                 fallback_json = self._create_fallback_json()
+                if return_debug:
+                    return "Analysis completed with fallback data due to empty response.", json.loads(fallback_json), {"raw_text": text_response or "", "json_blob": fallback_json}
                 return "Analysis completed with fallback data due to empty response.", json.loads(fallback_json)
             
             markdown_part, json_blob = self.extract_markdown_and_json(text_response)
@@ -157,6 +157,9 @@ class GeminiClient:
                 fallback_json = self._create_fallback_json()
                 parsed = json.loads(fallback_json)
                 print("Using fallback JSON due to parsing error")
+                if return_debug:
+                    return markdown_part, parsed, {"raw_text": text_response or "", "json_blob": fallback_json}
+                return markdown_part, parsed
             
             # Schema validation/coercion
             try:
@@ -167,11 +170,13 @@ class GeminiClient:
                 # Keep parsed but ensure minimal fallback keys exist
                 parsed.setdefault("trend", parsed.get("trend", "neutral"))
                 parsed.setdefault("confidence_pct", parsed.get("confidence_pct", 50))
-
+            
             # Enhance the parsed result with code execution results
             if code_results or execution_results:
                 parsed = self._enhance_with_calculations(parsed, code_results, execution_results)
             
+            if return_debug:
+                return markdown_part, parsed, {"raw_text": text_response or "", "json_blob": json_blob}
             return markdown_part, parsed
         except Exception as ex:
             import traceback; traceback.print_exc()
@@ -233,17 +238,25 @@ class GeminiClient:
             print(f"Error enhancing with calculations: {e}")
             return parsed_result
 
-    def _build_comprehensive_context(self, enhanced_ind_json: dict, chart_insights: str, knowledge_context: str) -> str:
+    def _build_comprehensive_context(self, enhanced_ind_json, chart_insights: str, knowledge_context: str) -> str:
         """
         Build comprehensive context for the optimized final decision template.
         This combines all analysis data into a structured format.
+        
+        Notes:
+        - If enhanced_ind_json is a string, it is assumed to be a raw JSON blob and will be embedded as-is.
+        - If it is a dict, it will be serialized to JSON.
         """
         try:
             context_sections = []
             
             # 1. Technical Indicators Analysis
             context_sections.append("## Technical Indicators Analysis")
-            context_sections.append(json.dumps(clean_for_json(self.convert_numpy_types(enhanced_ind_json)), indent=2))
+            if isinstance(enhanced_ind_json, str):
+                # Embed raw JSON blob as-is (no re-serialization)
+                context_sections.append(enhanced_ind_json)
+            else:
+                context_sections.append(json.dumps(clean_for_json(self.convert_numpy_types(enhanced_ind_json)), indent=2))
             
             # 2. Chart Pattern Insights
             if chart_insights and chart_insights.strip():
@@ -259,8 +272,11 @@ class GeminiClient:
             # 4. Sector Context
             if "SECTOR CONTEXT" in (knowledge_context or ""):
                 context_sections.append("\n## Sector Analysis Context")
-                sector_lines = [line for line in (knowledge_context or "").split('\n') if 'SECTOR' in line or 'Market Outperformance:' in line or 'Sector Outperformance:' in line or 'Sector Beta:' in line]
-                context_sections.append('\n'.join(sector_lines))
+                # Extract everything after "SECTOR CONTEXT:" 
+                sector_start = knowledge_context.find("SECTOR CONTEXT:")
+                if sector_start != -1:
+                    sector_content = knowledge_context[sector_start + len("SECTOR CONTEXT:"):].strip()
+                    context_sections.append(sector_content)
             
             # 5. Advanced Analysis Context
             adv_context = self._extract_labeled_json_block(knowledge_context or "", label="AdvancedAnalysisDigest:")
@@ -274,13 +290,14 @@ class GeminiClient:
                 context_sections.append("\n## ML System Context")
                 context_sections.append(json.dumps(clean_for_json(ml_context), indent=2))
             
-            # 7. Existing Trading Strategy (for consistency)
-            existing_strategy = enhanced_ind_json.get('existing_trading_strategy', {})
-            if existing_strategy:
-                context_sections.append("\n## EXISTING TRADING STRATEGY (Use as Foundation)")
-                context_sections.append("The following targets and stop losses were calculated in the previous analysis phase:")
-                context_sections.append(json.dumps(clean_for_json(existing_strategy), indent=2))
-                context_sections.append("IMPORTANT: Use these values as your foundation and only modify them if you have strong technical reasons based on the comprehensive analysis above.")
+            # 7. Existing Trading Strategy (for consistency) — only when indicators payload is a dict
+            if isinstance(enhanced_ind_json, dict):
+                existing_strategy = enhanced_ind_json.get('existing_trading_strategy', {})
+                if existing_strategy:
+                    context_sections.append("\n## EXISTING TRADING STRATEGY (Use as Foundation)")
+                    context_sections.append("The following targets and stop losses were calculated in the previous analysis phase:")
+                    context_sections.append(json.dumps(clean_for_json(existing_strategy), indent=2))
+                    context_sections.append("IMPORTANT: Use these values as your foundation and only modify them if you have strong technical reasons based on the comprehensive analysis above.")
             
             comprehensive_context = '\n'.join(context_sections)
             
@@ -1229,69 +1246,6 @@ JSON:
         print(f"[ASYNC-OPTIMIZED-ENHANCED] Total enhanced analysis completed in {total_elapsed_time:.2f} seconds")
         return result, ind_summary_md, chart_insights_md
 
-    async def run_final_decision(self, ind_json: dict, chart_insights_md: str, knowledge_context: str) -> dict:
-        """Run only the final decision LLM call given precomputed indicator JSON and chart insights.
-        Adds ML guidance if present in knowledge_context and applies parsing fallbacks.
-        """
-        final_knowledge_context = knowledge_context or ""
-        print("[ASYNC-OPTIMIZED-ENHANCED] Starting enhanced final decision analysis (standalone)...")
-        start_ts = time.time()
-
-        existing_trading_strategy = self._extract_existing_trading_strategy(ind_json)
-        enhanced_ind_json = ind_json.copy() if isinstance(ind_json, dict) else {}
-        if existing_trading_strategy:
-            enhanced_ind_json['existing_trading_strategy'] = existing_trading_strategy
-
-        decision_prompt = self.prompt_manager.format_prompt(
-            "optimized_final_decision",
-            context=self._build_comprehensive_context(enhanced_ind_json, chart_insights_md or "", final_knowledge_context)
-        )
-        try:
-            ml_block = self._extract_labeled_json_block(knowledge_context or "", label="MLSystemValidation:")
-            ml_guidance_text = self._build_ml_guidance_text(ml_block) if ml_block else ""
-            if ml_guidance_text:
-                decision_prompt += "\n\n" + ml_guidance_text
-        except Exception:
-            pass
-
-        # Simple retry for transient 503s
-        attempts = 0
-        while True:
-            attempts += 1
-            try:
-                text_response, code_results, execution_results = await self.core.call_llm_with_code_execution(decision_prompt)
-                if not text_response or not str(text_response).strip():
-                    result = json.loads(self._create_fallback_json())
-                    result.setdefault('analysis_metadata', {})
-                    result['analysis_metadata']['fallback_reason'] = 'empty_final_decision_response'
-                else:
-                    try:
-                        result = json.loads(text_response.strip())
-                    except json.JSONDecodeError:
-                        try:
-                            _, json_blob = self.extract_markdown_and_json(text_response)
-                            result = json.loads(json_blob)
-                        except Exception:
-                            result = json.loads(self._create_fallback_json())
-                            result.setdefault('analysis_metadata', {})
-                            result['analysis_metadata']['fallback_reason'] = 'unparsable_final_decision_response'
-                if code_results or execution_results:
-                    result = self._enhance_final_decision_with_calculations(result, code_results, execution_results)
-                if "ENHANCED MULTI-TIMEFRAME ANALYSIS CONTEXT" in (knowledge_context or ""):
-                    result = self._enhance_result_with_mtf_context(result, knowledge_context)
-                if "SECTOR CONTEXT" in (knowledge_context or ""):
-                    result = self._enhance_result_with_sector_context(result, knowledge_context)
-                break
-            except Exception as ex:
-                # Best-effort transient retry only once
-                if attempts < 2 and "503" in str(ex):
-                    await asyncio.sleep(1.0)
-                    continue
-                raise
-
-        elapsed = time.time() - start_ts
-        print(f"[ASYNC-OPTIMIZED-ENHANCED] Standalone final decision completed in {elapsed:.2f}s")
-        return result
 
 
     # DEPRECATED: This method has been replaced by the distributed volume agents system

@@ -31,6 +31,8 @@ class FinalDecisionProcessor:
         mtf_context: Optional[Dict[str, Any]],
         sector_bullets: Optional[str],
         risk_bullets: Optional[str],
+        advanced_digest: Optional[Dict[str, Any]] = None,
+        volume_analysis: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Inject labeled JSON blocks and synthesis sections into knowledge_context so the
@@ -42,6 +44,27 @@ class FinalDecisionProcessor:
         if mtf_context and isinstance(mtf_context, dict):
             try:
                 parts.append("MultiTimeframeContext:\n" + json.dumps(mtf_context))
+            except Exception:
+                pass
+
+        # Add Advanced analysis digest as a labeled JSON block
+        if advanced_digest and isinstance(advanced_digest, dict) and len(advanced_digest) > 0:
+            try:
+                parts.append("AdvancedAnalysisDigest:\n" + json.dumps(advanced_digest))
+            except Exception:
+                pass
+
+        # Add Volume analysis - prefer combined LLM analysis text over raw JSON structure
+        if volume_analysis and isinstance(volume_analysis, dict):
+            try:
+                # Check if we have combined LLM analysis (preferred)
+                combined_llm_analysis = volume_analysis.get('combined_llm_analysis', '')
+                if combined_llm_analysis and isinstance(combined_llm_analysis, str) and len(combined_llm_analysis.strip()) > 0:
+                    # Use the human-readable LLM analysis summary
+                    parts.append("VOLUME ANALYSIS CONTEXT\n" + combined_llm_analysis.strip())
+                else:
+                    # Fallback to structured JSON if no LLM analysis available
+                    parts.append("VolumeAnalysisContext:\n" + json.dumps(volume_analysis))
             except Exception:
                 pass
 
@@ -59,22 +82,27 @@ class FinalDecisionProcessor:
         ind_json: Dict[str, Any],
         mtf_context: Optional[Dict[str, Any]] = None,
         sector_bullets: Optional[str] = None,
+        advanced_digest: Optional[Dict[str, Any]] = None,
         risk_bullets: Optional[str] = None,
         chart_insights: str = "",
         knowledge_context: str = "",
+        volume_analysis: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         try:
             # Build knowledge context with injected blocks
-            kc = self._inject_context_blocks(knowledge_context, mtf_context, sector_bullets, risk_bullets)
+            kc = self._inject_context_blocks(knowledge_context, mtf_context, sector_bullets, risk_bullets, advanced_digest, volume_analysis)
 
-            # Add existing trading strategy to indicator JSON (for consistency rule)
-            enhanced_ind_json = deepcopy(ind_json) if isinstance(ind_json, dict) else {}
-            try:
-                existing_strategy = self.client._extract_existing_trading_strategy(enhanced_ind_json)
-                if existing_strategy:
-                    enhanced_ind_json["existing_trading_strategy"] = existing_strategy
-            except Exception:
-                pass
+            # Add existing trading strategy to indicator JSON (for consistency rule) only when dict input is provided
+            if isinstance(ind_json, dict):
+                enhanced_ind_json = deepcopy(ind_json)
+                try:
+                    existing_strategy = self.client._extract_existing_trading_strategy(enhanced_ind_json)
+                    if existing_strategy:
+                        enhanced_ind_json["existing_trading_strategy"] = existing_strategy
+                except Exception:
+                    pass
+            else:
+                enhanced_ind_json = ind_json  # pass through raw JSON blob string
 
             # Build comprehensive context for final decision
             context = self.client._build_comprehensive_context(enhanced_ind_json, chart_insights or "", kc)

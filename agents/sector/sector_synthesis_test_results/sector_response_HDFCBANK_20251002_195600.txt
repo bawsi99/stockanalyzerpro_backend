@@ -1,0 +1,13 @@
+SECTOR SYNTHESIS RESPONSE
+================================================================================
+
+Symbol: HDFCBANK
+Generated: 2025-10-02T19:56:00.723863
+Response Length: 645 characters
+
+COMPLETE LLM RESPONSE:
+----------------------------------------
+• Performance Positioning: Nifty Private Bank sector outperformed the market by +2.0% over the last 12 months, indicating prior strength.
+• Beta Analysis: The sector's market beta of 1.0 over 12 months suggests it moves largely in line with the broader market, offering no defensive or aggressive sensitivity.
+• Rotation Status: Currently, the Nifty Private Bank sector is in a lagging rotation stage with -0.6% momentum over 3 months, signaling it is rotating out of favor.
+• Strategic Implication: Despite long-term outperformance, the current lagging rotation and negative momentum suggest caution or a potential underweighting of the sector.

@@ -313,9 +313,37 @@ class VolumeAgentsOrchestrator:
                 tasks.append(task)
                 enabled_agents.append(agent_name)
         
-        # Execute all agents simultaneously
+        # Execute all agents simultaneously with partial result collection
         logger.info(f"Executing {len(tasks)} volume agents simultaneously...")
-        agent_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Use asyncio.wait to collect partial results even if some agents timeout
+        try:
+            done, pending = await asyncio.wait(tasks, timeout=280, return_when=asyncio.ALL_COMPLETED)
+            
+            # Collect results from completed tasks
+            agent_results = []
+            for i, task in enumerate(tasks):
+                if task in done:
+                    try:
+                        result = await task
+                        agent_results.append(result)
+                    except Exception as e:
+                        logger.error(f"Agent {enabled_agents[i]} failed: {e}")
+                        agent_results.append(e)
+                else:
+                    # Task didn't complete in time
+                    logger.warning(f"Agent {enabled_agents[i]} timed out after 280 seconds")
+                    task.cancel()  # Cancel the pending task
+                    agent_results.append(TimeoutError(f"Agent {enabled_agents[i]} timed out"))
+            
+            # Log partial results collection
+            completed_count = len([r for r in agent_results if not isinstance(r, Exception)])
+            logger.info(f"Volume agents execution completed: {completed_count}/{len(tasks)} agents finished, {len(pending)} timed out")
+            
+        except Exception as gather_error:
+            logger.error(f"Error in agent execution: {gather_error}")
+            # Fallback to original gather method
+            agent_results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # Process results with metrics tracking
         individual_results = {}
@@ -2828,7 +2856,7 @@ class VolumeAgentIntegrationManager:
             try:
                 # Add timeout protection for the entire orchestrator operation
                 import asyncio
-                timeout_seconds = 200  # 200 seconds timeout for volume agents analysis (no individual timeouts)
+                timeout_seconds = 300  # 300 seconds timeout for volume agents analysis (no individual timeouts)
                 
                 result = await asyncio.wait_for(
                     self.orchestrator.analyze_stock_volume_comprehensive(stock_data, symbol, indicators),
@@ -2875,18 +2903,23 @@ class VolumeAgentIntegrationManager:
                 logger.warning(f"High failure rate ({failure_rate:.1%}) for {symbol} volume agents")
                 print(f"[VOLUME_AGENT_DEBUG] High failure rate for {symbol}: {failure_rate:.1%}")
             
+            # Extract and combine LLM responses for final decision agent
+            combined_llm_analysis = self.extract_and_combine_llm_responses(result.individual_results)
+            
             # Format result for main system compatibility
             formatted_result = {
                 'success': result.successful_agents > 0,
                 'processing_time': result.total_processing_time,
                 'volume_analysis': result.unified_analysis,
+                'combined_llm_analysis': combined_llm_analysis,  # For final decision agent
                 'individual_agents': {
                     agent_name: {
                         'success': agent_result.success,
                         'confidence': agent_result.confidence_score or 0.0,
                         'key_data': agent_result.analysis_data or {},
                         'processing_time': agent_result.processing_time,
-                        'error_message': agent_result.error_message if not agent_result.success else None
+                        'error_message': agent_result.error_message if not agent_result.success else None,
+                        'has_llm_response': bool(agent_result.llm_response) if agent_result.success else False
                     }
                     for agent_name, agent_result in result.individual_results.items()
                 },
@@ -2897,7 +2930,8 @@ class VolumeAgentIntegrationManager:
                     'successful_agents': result.successful_agents,
                     'failed_agents': result.failed_agents,
                     'failure_rate': failure_rate,
-                    'quality_assessment': self._assess_result_quality(result)
+                    'quality_assessment': self._assess_result_quality(result),
+                    'llm_responses_available': len([r for r in result.individual_results.values() if r.success and r.llm_response])
                 }
             }
             
@@ -3344,6 +3378,117 @@ class VolumeAgentIntegrationManager:
         except Exception as e:
             logger.error(f"Error checking disable criteria for {agent_name}: {e}")
             return False, f"Error checking agent: {str(e)}"
+
+    def extract_and_combine_llm_responses(self, individual_results: Dict[str, VolumeAgentResult]) -> str:
+        """
+        Extract and combine LLM responses from successful volume agents into a comprehensive text summary
+        for use by the final decision agent.
+        """
+        try:
+            successful_results = {k: v for k, v in individual_results.items() if v.success and v.llm_response}
+            
+            if not successful_results:
+                return ""
+            
+            combined_analysis = f"# Volume Analysis Summary from {len(successful_results)} Volume Agents\n\n"
+            
+            # Sort agents by their configured weights (most important first)
+            agent_weights = {name: config.get('weight', 0.2) for name, config in self.orchestrator.agent_config.items()}
+            sorted_agents = sorted(successful_results.keys(), key=lambda x: agent_weights.get(x, 0.2), reverse=True)
+            
+            for agent_name in sorted_agents:
+                result = successful_results[agent_name]
+                agent_display_name = agent_name.replace('_', ' ').title()
+                weight = agent_weights.get(agent_name, 0.2)
+                confidence = result.confidence_score or 0.5
+                
+                combined_analysis += f"## {agent_display_name} Agent Analysis (Weight: {weight:.0%}, Confidence: {confidence:.0%})\n\n"
+                
+                # Clean up the LLM response
+                llm_response = result.llm_response.strip()
+                
+                # Remove any JSON formatting or technical artifacts
+                if llm_response.startswith('{') and llm_response.endswith('}'):
+                    try:
+                        import json
+                        parsed = json.loads(llm_response)
+                        if isinstance(parsed, dict) and 'analysis' in parsed:
+                            llm_response = parsed['analysis']
+                        elif isinstance(parsed, dict) and 'result' in parsed:
+                            llm_response = parsed['result']
+                    except json.JSONDecodeError:
+                        pass  # Keep original response
+                
+                combined_analysis += f"{llm_response}\n\n"
+                
+                # Add key metrics if available
+                if result.analysis_data:
+                    key_metrics = self._extract_key_metrics_for_summary(agent_name, result.analysis_data)
+                    if key_metrics:
+                        combined_analysis += f"**Key Metrics:** {key_metrics}\n\n"
+            
+            # Add overall summary
+            combined_analysis += f"## Volume Analysis Summary\n\n"
+            combined_analysis += f"Based on analysis from {len(successful_results)} volume agents: {', '.join([name.replace('_', ' ').title() for name in sorted_agents])}\n\n"
+            
+            # Calculate overall confidence
+            weighted_confidence = sum(result.confidence_score * agent_weights.get(agent_name, 0.2) 
+                                    for agent_name, result in successful_results.items() 
+                                    if result.confidence_score) / len(successful_results)
+            
+            combined_analysis += f"**Overall Volume Analysis Confidence:** {weighted_confidence:.0%}\n\n"
+            
+            return combined_analysis
+            
+        except Exception as e:
+            logger.error(f"Error combining LLM responses: {e}")
+            return f"Volume analysis available from {len(individual_results)} agents, but synthesis failed: {str(e)}"
+    
+    def _extract_key_metrics_for_summary(self, agent_name: str, analysis_data: Dict[str, Any]) -> str:
+        """
+        Extract key metrics from agent analysis data for summary
+        """
+        try:
+            metrics = []
+            
+            if agent_name == 'volume_anomaly':
+                anomalies = analysis_data.get('anomalies', [])
+                if anomalies:
+                    high_sig = len([a for a in anomalies if a.get('significance') == 'high'])
+                    metrics.append(f"{len(anomalies)} anomalies detected ({high_sig} high significance)")
+            
+            elif agent_name == 'institutional_activity':
+                activity_level = analysis_data.get('activity_level', 'unknown')
+                activity_pattern = analysis_data.get('activity_pattern', 'unknown')
+                if activity_level != 'unknown':
+                    metrics.append(f"Activity: {activity_level}")
+                if activity_pattern != 'unknown':
+                    metrics.append(f"Pattern: {activity_pattern}")
+            
+            elif agent_name == 'volume_confirmation':
+                confirmation = analysis_data.get('price_volume_confirmation', {})
+                status = confirmation.get('status', 'unknown')
+                if status != 'unknown':
+                    metrics.append(f"Price-Volume: {status}")
+            
+            elif agent_name == 'support_resistance':
+                levels = analysis_data.get('key_levels', [])
+                if levels:
+                    strong_levels = len([l for l in levels if l.get('strength', 0) > 0.7])
+                    metrics.append(f"{len(levels)} S/R levels ({strong_levels} strong)")
+            
+            elif agent_name == 'volume_momentum':
+                momentum = analysis_data.get('volume_momentum', {})
+                direction = momentum.get('direction', 'unknown')
+                strength = momentum.get('strength', 0)
+                if direction != 'unknown':
+                    metrics.append(f"Momentum: {direction} ({strength:.0%} strength)")
+            
+            return " | ".join(metrics) if metrics else ""
+            
+        except Exception as e:
+            logger.warning(f"Error extracting key metrics for {agent_name}: {e}")
+            return ""
 
     def _create_fallback_volume_analysis(self, stock_data: pd.DataFrame, symbol: str) -> Dict[str, Any]:
         """
