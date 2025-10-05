@@ -3,7 +3,7 @@
 ## Scope
 - Starting point: `backend/services/analysis_service.py`
 - Traced modules:
-  - `backend/analysis/orchestrator.py`
+  - `backend/core/orchestrator.py`
   - `backend/agents/mtf_analysis/` (new agent-based MTF system)
     - `core/processor.py` (CoreMTFProcessor)
     - `orchestrator.py` (MTFOrchestrator)
@@ -313,7 +313,7 @@ Inputs/Outputs:
 
 ---
 
-## Orchestrator Highlights (`analysis/orchestrator.py`)
+## Orchestrator Highlights (`core/orchestrator.py`)
 - `retrieve_stock_data`:
   - EDS → WebSocket snapshot (if market hours) → Zerodha historical; normalizes index and sets attrs.
 - `calculate_indicators`:

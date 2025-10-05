@@ -514,23 +514,6 @@ Multi-Timeframe Analysis Data:
         except Exception:
             return ""
 
-    async def synthesize_risk_summary(self, adv_json: dict) -> str:
-        """Single-purpose: Summarize risk/stress/scenario digest in 5 bullets."""
-        try:
-            prompt = self.prompt_manager.format_prompt(
-                "risk_synthesis_template",
-                context=f"""
-[Source: AdvancedAnalysisDigest]
-Analyze the following risk/stress/scenario analysis data and provide focused risk synthesis.
-
-Risk Analysis Data:
-{json.dumps(adv_json, indent=2)[:4000]}
-"""
-            ) + self.prompt_manager.SOLVING_LINE
-            text = await self.core.call_llm(prompt)
-            return text or ""
-        except Exception:
-            return ""
 
     async def synthesize_sector_summary(self, knowledge_context: str) -> str:
         """Single-purpose: Summarize sector context lines into 4 bullets (concise, timeframed).
@@ -1014,27 +997,17 @@ JSON:
 
         if parsed_mtf:
             aux_tasks.append(("mtf_synthesis", self.synthesize_mtf_summary(parsed_mtf)))
-        if parsed_adv:
-            aux_tasks.append(("risk_synthesis", self.synthesize_risk_summary(parsed_adv)))
+        # Risk synthesis now handled by dedicated risk analysis agent
+        # if parsed_adv:
+        #     aux_tasks.append(("risk_synthesis", self.synthesize_risk_summary(parsed_adv)))
         if has_sector:
             aux_tasks.append(("sector_synthesis", self.synthesize_sector_summary(knowledge_context)))
         
         # Add pattern detection as a parallel task
         try:
             from .parallel_pattern_detection import parallel_pattern_detection
-            # Fetch stock data for pattern detection via central data provider (non-blocking)
+            # Central data provider removed; no background fetch for pattern detection.
             stock_data_for_patterns = None
-            try:
-                from services.central_data_provider import CentralDataProvider
-                central_data_provider = CentralDataProvider()
-                stock_data_for_patterns = await central_data_provider.get_stock_data_async(
-                    symbol=symbol,
-                    exchange=exchange,
-                    interval=interval,
-                    period=period,
-                )
-            except Exception as e_fetch:
-                print(f"[ASYNC-OPTIMIZED-ENHANCED] Warning: could not fetch stock data for pattern detection: {e_fetch}")
 
             if stock_data_for_patterns is not None and not getattr(stock_data_for_patterns, 'empty', True):
                 pattern_task = parallel_pattern_detection.detect_patterns_async(stock_data_for_patterns)

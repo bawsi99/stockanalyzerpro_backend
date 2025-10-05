@@ -8,6 +8,9 @@ focusing on price-volume relationship charts with confirmation indicators.
 
 import pandas as pd
 import numpy as np
+# Set matplotlib backend for headless operation
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Rectangle
@@ -16,10 +19,6 @@ import io
 from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
-
-# Set matplotlib backend for headless operation
-import matplotlib
-matplotlib.use('Agg')
 
 class VolumeConfirmationChartGenerator:
     """
@@ -104,7 +103,8 @@ class VolumeConfirmationChartGenerator:
             
             # Convert to bytes
             buf = io.BytesIO()
-            plt.savefig(buf, format='png', dpi=self.chart_style['dpi'], 
+            fig.canvas.draw()
+            fig.savefig(buf, format='png', dpi=self.chart_style['dpi'], 
                        bbox_inches='tight', facecolor='white', edgecolor='none')
             buf.seek(0)
             chart_bytes = buf.getvalue()

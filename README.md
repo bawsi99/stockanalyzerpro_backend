@@ -35,7 +35,7 @@ The system is built as a collection of microservices that can be deployed indepe
 
 #### Core Components
 
-- **StockAnalysisOrchestrator** (`analysis/orchestrator.py`): Main orchestrator for the entire analysis workflow. Handles authentication, data retrieval, indicator calculation, pattern recognition, AI analysis, visualization, and sector benchmarking.
+- **StockAnalysisOrchestrator** (`core/orchestrator.py`): Main orchestrator for the entire analysis workflow. Handles authentication, data retrieval, indicator calculation, pattern recognition, AI analysis, visualization, and sector benchmarking.
 - **TechnicalIndicators** (`ml/indicators/technical_indicators.py`): Calculates 25+ technical indicators and market metrics.
 - **PatternRecognition** (`patterns/recognition.py`): Detects advanced chart patterns and anomalies.
 - **PatternVisualizer/ChartVisualizer** (`patterns/visualization.py`): Generates pattern and comparison charts.
@@ -43,6 +43,35 @@ The system is built as a collection of microservices that can be deployed indepe
 - **SectorBenchmarkingProvider** (`agents/sector/benchmarking.py`): Provides sector benchmarking, rotation, and correlation analysis.
 - **ZerodhaDataClient** (`zerodha/client.py`): Handles all data retrieval from Zerodha APIs.
 - **SectorClassifier/EnhancedSectorClassifier** (`agents/sector/`): Classifies stocks into sectors using JSON-driven mappings and advanced filtering.
+
+#### Module Placement Note: `advanced_analysis.py`
+
+- Status: Actively used, feature-rich provider for Advanced Tab features.
+- Used by: `core/orchestrator.py` (advanced digest), `services/analysis_service.py` (enhanced workflow). Exposes a global `advanced_analysis_provider` instance.
+- Capabilities:
+  - Advanced Risk Assessment (VaR, Sharpe, drawdown, risk scoring, mitigation)
+  - Complex Pattern Analysis (triple tops/bottoms, wedges, channels, quality/completion)
+  - Stress Testing (historical, Monte Carlo, market crash scenarios)
+  - Scenario Analysis (bull/bear/sideways, volatility spike; probability and impact scoring)
+
+Why it is not placed under `agents/risk_analysis` as-is:
+- The module spans multiple domains beyond risk (patterns, scenarios), so putting the whole file under `risk_analysis` would blur boundaries.
+
+Placement options (choose one):
+- Keep current: `backend/analysis/advanced_analysis.py` as a cross-domain provider used by the orchestrator. (Simple; reflects current role.)
+- Agents-aligned (recommended if moving): `agents/advanced/advanced_analysis.py` to house all advanced, cross-domain analysis behind an agent-style module.
+- Strict domain split (more work):
+  - Risk/Stress/Scenarios → `agents/risk_analysis/advanced_risk_provider.py`
+  - Complex Patterns → `agents/patterns/advanced_patterns_provider.py`
+  - Optional aggregator → `agents/advanced/aggregator.py` to compose both for the Advanced Tab.
+
+Safe migration plan (if moving):
+1) Create destination and move the module (or split per above).
+2) Add a backwards-compat shim at `analysis/advanced_analysis.py`:
+   - `from agents.advanced.advanced_analysis import AdvancedAnalysisProvider, advanced_analysis_provider`
+3) Update imports in callers:
+  - `services/analysis_service.py` and `core/orchestrator.py`
+4) Verify outputs still include: `advanced_risk`, `advanced_patterns`, `stress_testing`, `scenario_analysis`.
 
 #### ML & Quantitative System
 

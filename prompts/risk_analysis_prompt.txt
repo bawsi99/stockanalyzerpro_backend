@@ -1,0 +1,116 @@
+# ENHANCED QUANTITATIVE RISK ANALYSIS PROMPT
+# Generated: {timestamp}
+# Stock: {symbol} - {company}
+# Sector: {sector}
+# Context: {context}
+
+# MULTI-TIMEFRAME RISK ASSESSMENT for {symbol}
+
+## QUANTITATIVE RISK METRICS
+**Overall Risk**: {risk_level} (Score: {risk_score}/100)
+**Performance Risk**: Sharpe Ratio {sharpe_ratio:.2f} | Sortino Ratio {sortino_ratio:.2f} | Calmar Ratio {calmar_ratio:.2f}
+**Tail Risk**: VaR(95%) {var_95:.2%} | VaR(99%) {var_99:.2%} | ES(95%) {expected_shortfall_95:.2%}
+**Volatility Profile**: {annualized_volatility:.1%} annualized | Skewness {skewness:.2f} | Kurtosis {kurtosis:.2f}
+**Drawdown Analysis**: Max DD {max_drawdown:.1%} | Current DD {current_drawdown:.1%} | Duration {drawdown_duration} days
+
+## ADVANCED RISK COMPONENT BREAKDOWN
+- **Volatility Risk**: {volatility_risk} - Annualized volatility of {annualized_volatility:.1%}
+- **Drawdown Risk**: {drawdown_risk} - Current drawdown streak of {drawdown_duration} days
+- **Tail Risk**: {tail_risk} - {tail_frequency:.1%} tail events frequency  
+- **Liquidity Risk**: {liquidity_risk} - Volume and spread analysis
+- **Sector Risk**: {sector_risk} - Technical and fundamental sector factors
+
+## COMPREHENSIVE STRESS TESTING SCENARIOS
+### Historical Stress Events
+- **Worst 20-Day Period**: {worst_20_day_period:.1%}
+- **Second Worst Period**: {second_worst_period:.1%}
+- **Stress Event Frequency**: {stress_frequency:.1%}
+
+### Monte Carlo Stress Analysis
+- **Worst Case (1%ile)**: {worst_case:.1%}
+- **Fifth Percentile**: {fifth_percentile:.1%}
+- **Expected Loss Scenario**: {expected_loss:.1%}
+- **Probability of Loss**: {probability_of_loss:.0%}
+
+### Sector-Specific Stress Tests
+- **Sector Rotation Impact**: {sector_rotation_stress:.1%}
+- **Regulatory Stress**: {regulatory_stress:.1%}
+- **Economic Recession**: {economic_recession:.1%}
+
+### Market Crash Scenarios
+- **Black Swan Event**: {black_swan_event:.1%}
+- **Systemic Crisis**: {systemic_crisis:.1%}
+- **Geopolitical Crisis**: {geopolitical_crisis:.1%}
+
+## SCENARIO ANALYSIS WITH PROBABILITIES
+### Bull Market Scenario (Probability: {bull_probability:.1%})
+- **Timeframe**: {bull_timeframe}
+- **Price Target**: ${bull_price_target:.2f} ({bull_return_expectation:+.1%} return)
+- **Key Drivers**: {bull_key_drivers}
+- **Confidence**: {bull_confidence:.0%}
+
+### Bear Market Scenario (Probability: {bear_probability:.1%})
+- **Timeframe**: {bear_timeframe}  
+- **Price Target**: ${bear_price_target:.2f} ({bear_return_expectation:+.1%} return)
+- **Key Drivers**: {bear_key_drivers}
+- **Confidence**: {bear_confidence:.0%}
+
+### Sideways Market Scenario (Probability: {sideways_probability:.1%})
+- **Timeframe**: {sideways_timeframe}
+- **Price Target**: ${sideways_price_target:.2f} ({sideways_return_expectation:+.1%} return)
+- **Key Drivers**: {sideways_key_drivers}
+
+### Volatility Spike Scenario (Probability: {volatility_probability:.1%})
+- **Timeframe**: {volatility_timeframe}
+- **Expected Impact**: {volatility_return_expectation:+.1%}
+- **Key Triggers**: {volatility_key_drivers}
+
+---
+
+## INSTRUCTIONS: Multi-Timeframe Risk Assessment for Trading Decisions
+
+Analyze the comprehensive quantitative risk data above and provide **exactly 15 actionable risk bullets** structured as follows:
+
+### **SHORT-TERM RISK ASSESSMENT (1-3 months)** [5 bullets]
+Focus on immediate trading risks, volatility spikes, liquidity concerns, and near-term scenario probabilities.
+
+• **[Primary Short-Term Risk]**: [Level] - [Specific 1-3 month trading implication] ([Probability/Impact])
+• **[Liquidity & Execution Risk]**: [Level] - [Position entry/exit timing guidance] ([Market Conditions])
+• **[Volatility Regime Risk]**: [Analysis] - [Expected volatility patterns] ([Short-term Scenarios])
+• **[Technical Risk Factors]**: [Assessment] - [Key technical levels and breakdowns] ([Signal Reliability])
+• **[Short-Term Position Sizing]**: [Recommendation] - [Specific sizing for 1-3 month horizon] ([Risk Budget])
+
+### **MEDIUM-TERM RISK ASSESSMENT (3-12 months)** [5 bullets]  
+Focus on trend sustainability, scenario probabilities, sector rotation risks, and drawdown management.
+
+• **[Primary Medium-Term Risk]**: [Level] - [3-12 month strategic implications] ([Scenario Probability])
+• **[Trend & Momentum Risk]**: [Analysis] - [Trend sustainability and reversal risks] ([Technical Confluence])
+• **[Scenario Probability Risk]**: [Assessment] - [Most likely scenarios and transitions] ([Confidence Levels])
+• **[Sector & Correlation Risk]**: [Level] - [Sector rotation and correlation breakdown risks] ([Market Regime])
+• **[Medium-Term Hedging Strategy]**: [Recommendation] - [Optimal hedging for 3-12 month exposure] ([Cost-Benefit])
+
+### **LONG-TERM RISK ASSESSMENT (1+ years)** [5 bullets]
+Focus on structural risks, regime changes, maximum drawdown potential, and strategic positioning.
+
+• **[Structural Risk Factors]**: [Level] - [Long-term fundamental and structural risks] ([Regime Analysis])
+• **[Maximum Drawdown Risk]**: [Assessment] - [Worst-case drawdown scenarios and recovery] ([Historical Context])
+• **[Regime Change Risk]**: [Analysis] - [Market regime sustainability and transition risks] ([Macro Factors])
+• **[Strategic Position Risk]**: [Recommendation] - [Long-term position strategy and adjustments] ([Risk-Return Profile])
+• **[Long-Term Monitoring Framework]**: [Key Metrics] - [Critical indicators for regime/trend changes] ([Early Warning System])
+
+### Focus Areas:
+- **Quantitative Priority**: Utilize all VaR, stress test, and scenario analysis metrics
+- **Timeframe Specificity**: Tailor recommendations to each time horizon's unique characteristics
+- **Scenario Integration**: Incorporate probability-weighted scenario analysis into recommendations
+- **Risk Compounding**: Analyze how short-term risks can compound into medium/long-term issues
+- **Dynamic Positioning**: Provide guidance that adapts to changing market conditions
+- **Actionable Metrics**: Include specific thresholds, probabilities, and monitoring triggers
+
+### Avoid:
+- Generic timeframe-agnostic advice
+- Ignoring the rich scenario and stress test data
+- Vague probability assessments
+- Static risk recommendations
+- Fundamental analysis outside technical risk scope
+
+Provide concise, quantitative risk bullets that directly inform multi-timeframe trading and position management decisions. Each bullet should reference specific metrics from the comprehensive risk analysis above.

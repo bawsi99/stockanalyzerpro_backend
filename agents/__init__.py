@@ -19,7 +19,8 @@ Agents:
 from .volume import VolumeAgentsOrchestrator, VolumeAgentIntegrationManager
 from .patterns import PatternAgentsOrchestrator, patterns_orchestrator
 from .indicators import IndicatorAgentsOrchestrator, indicators_orchestrator
-from .risk_analysis import RiskAgentsOrchestrator, risk_orchestrator
+# Risk analysis now handled directly by analysis service
+# from .risk_analysis import RiskAgentsOrchestrator, risk_orchestrator
 
 __all__ = [
     'VolumeAgentsOrchestrator',
@@ -27,7 +28,6 @@ __all__ = [
     'PatternAgentsOrchestrator', 
     'patterns_orchestrator',
     'IndicatorAgentsOrchestrator',
-    'indicators_orchestrator',
-    'RiskAgentsOrchestrator',
-    'risk_orchestrator'
+    'indicators_orchestrator'
+    # Risk analysis components are imported directly by analysis service
 ]

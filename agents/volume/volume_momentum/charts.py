@@ -7,6 +7,8 @@ Creates comprehensive visualizations for Volume Trend Momentum analysis
 
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Rectangle
@@ -94,14 +96,15 @@ class VolumeTrendMomentumChartGenerator:
                         fontsize=16, fontweight='bold', y=0.95)
             
             # Save or return bytes
+            fig.canvas.draw()
             if save_path:
-                plt.savefig(save_path, dpi=self.dpi, bbox_inches='tight', 
+                fig.savefig(save_path, dpi=self.dpi, bbox_inches='tight', 
                            facecolor='white', edgecolor='none')
                 print(f"✅ Volume momentum chart saved to: {save_path}")
             
             # Return as bytes
             buffer = io.BytesIO()
-            plt.savefig(buffer, format='png', dpi=self.dpi, bbox_inches='tight',
+            fig.savefig(buffer, format='png', dpi=self.dpi, bbox_inches='tight',
                        facecolor='white', edgecolor='none')
             buffer.seek(0)
             chart_bytes = buffer.read()

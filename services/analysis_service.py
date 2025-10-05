@@ -82,7 +82,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 # Local imports (top-level, since backend/ is added to sys.path by start scripts)
-from analysis.orchestrator import StockAnalysisOrchestrator
+from core.orchestrator import StockAnalysisOrchestrator
 from agents.sector import SectorClassifier, SectorBenchmarkingProvider, enhanced_sector_classifier, SectorCacheManager
 from patterns.recognition import PatternRecognition
 from ml.indicators.technical_indicators import TechnicalIndicators
@@ -751,6 +751,16 @@ class VolumeAgentRequest(BaseModel):
     correlation_id: Optional[str] = Field(default=None, description="Optional correlation ID for tracing")
     return_prompt: Optional[bool] = Field(default=False, description="Return per-agent prompt where applicable")
 
+# --- Risk Analysis Agent API Models ---
+class RiskAnalysisRequest(BaseModel):
+    symbol: str = Field(..., description="Stock symbol")
+    exchange: str = Field(default="NSE", description="Stock exchange")
+    interval: str = Field(default="day", description="Data interval (internal mapping)")
+    period: int = Field(default=365, description="Analysis period in days")
+    correlation_id: Optional[str] = Field(default=None, description="Optional correlation ID for tracing")
+    return_prompt: Optional[bool] = Field(default=False, description="Return enhanced prompt where applicable")
+    timeframes: Optional[List[str]] = Field(default=["short", "medium", "long"], description="Risk analysis timeframes")
+
 # --- REST API Endpoints ---
 
 @app.get("/health")
@@ -1045,6 +1055,45 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 return {}
 
         mtf_task = asyncio.create_task(_with_logging("mtf", _mtf(), timeout=120.0))
+        
+        # Risk analysis agent via service endpoint (loopback)
+        risk_agents_url = os.getenv("ANALYSIS_SERVICE_URL", "http://localhost:8002") + "/agents/risk/analyze-all"
+        async def _risk():
+            try:
+                print(f"[RISK_DEBUG] Starting risk analysis for {request.stock}...")
+                
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    resp = await client.post(
+                        risk_agents_url,
+                        json={
+                            "symbol": request.stock,
+                            "exchange": request.exchange,
+                            "interval": request.interval,
+                            "period": request.period,
+                            "correlation_id": correlation_id,
+                            "return_prompt": False,  # Don't return prompt in parallel execution
+                            "timeframes": ["short", "medium", "long"]
+                        }
+                    )
+                    resp.raise_for_status()
+                    result = resp.json()
+                    
+                    print(f"[RISK_DEBUG] Risk analysis completed for {request.stock}. Success: {result.get('success')}")
+                    
+                    if result.get('success'):
+                        print(f"✅ [RISK_AGENT] Analysis completed for {request.stock}")
+                        print(f"   Risk Level: {result.get('risk_summary', {}).get('overall_risk_level', 'Unknown')}")
+                        print(f"   Risk Score: {result.get('risk_summary', {}).get('overall_risk_score', 0)}")
+                        return result
+                    else:
+                        print(f"⚠️ [RISK_AGENT] Analysis failed: {result.get('error', 'Unknown error')}")
+                        return {}
+                        
+            except Exception as e:
+                print(f"[RISK] Error calling risk analysis endpoint: {e}")
+                return {}
+
+        risk_task = asyncio.create_task(_with_logging("risk", _risk(), timeout=200.0))
 
         # Advanced analysis
         async def _advanced():
@@ -1198,11 +1247,11 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
 
         # Await all independent tasks with return_exceptions=True to avoid cancellation
         parallel_t0 = time.monotonic()
-        results = await asyncio.gather(volume_task, mtf_task, advanced_task, sector_task, indicator_task, return_exceptions=True)
+        results = await asyncio.gather(volume_task, mtf_task, advanced_task, sector_task, indicator_task, risk_task, return_exceptions=True)
         parallel_dt = time.monotonic() - parallel_t0
         print(f"[PARALLEL] Independent tasks completed in {parallel_dt:.2f}s")
         # One-line summary for quick glance
-        names = ["volume_agents", "mtf", "advanced", "sector", "indicator_summary"]
+        names = ["volume_agents", "mtf", "advanced", "sector", "indicator_summary", "risk"]
         summary = ", ".join(
             f"{n}={durations.get(n, float('nan')):.2f}s/{'OK' if statuses.get(n) else 'ERR'}" for n in names
         )
@@ -1213,6 +1262,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         advanced_analysis = results[2]
         sector_context = results[3]
         indicator_summary_result = results[4]
+        risk_context = results[5]
 
         # Normalize exceptions to empty fallbacks
         if isinstance(volume_agents_result, Exception):
@@ -1240,6 +1290,19 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         if isinstance(indicator_summary_result, Exception):
             print(f"[PARALLEL] indicator_summary failed: {type(indicator_summary_result).__name__}: {indicator_summary_result!r}")
             indicator_summary_result = ("", {})
+        if isinstance(risk_context, Exception):
+            print(f"[PARALLEL] risk failed: {type(risk_context).__name__}: {risk_context!r}")
+            risk_context = {}
+        else:
+            # DEBUG: Log what we actually got from risk task
+            print(f"[PARALLEL] risk result type: {type(risk_context)}, has_data: {bool(risk_context)}")
+            if isinstance(risk_context, dict) and risk_context:
+                print(f"[PARALLEL] risk result keys: {list(risk_context.keys())}")
+                if 'risk_bullets_for_decision' in risk_context:
+                    bullets_len = len(risk_context['risk_bullets_for_decision']) if risk_context['risk_bullets_for_decision'] else 0
+                    print(f"[PARALLEL] risk bullets_for_decision length: {bullets_len}")
+            else:
+                print(f"[PARALLEL] risk result is empty or not dict")
 
         # Normalize contexts
         if not isinstance(mtf_context, dict):
@@ -1250,6 +1313,8 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             sector_context = {}
         if not isinstance(volume_agents_result, dict):
             volume_agents_result = {}
+        if not isinstance(risk_context, dict):
+            risk_context = {}
 
         indicator_summary_md, indicator_json, indicator_json_blob = ("", {}, "")
         if isinstance(indicator_summary_result, tuple):
@@ -1263,6 +1328,15 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
 
         # 4) Final decision (centralized agent) — depends on prior results; no charts here.
         chart_insights_md = ""
+
+        # Extract risk bullets for final decision agent
+        risk_bullets = None
+        try:
+            if risk_context and isinstance(risk_context, dict):
+                risk_bullets = risk_context.get('risk_bullets_for_decision') or None
+        except Exception as e:
+            print(f"[RISK_INTEGRATION] Error extracting risk bullets: {e}")
+            risk_bullets = None
 
         # Prepare minimal payloads for the final decision agent
         # DEBUG: Print sector_context to see what we actually get
@@ -1417,8 +1491,24 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         else:
             print(f"  (Empty or None)")
         
-        # Debug: Risk Bullets
-        print(f"\n[FD_INPUT] Risk Bullets: {risk_bullets if 'risk_bullets' in locals() else None}")
+        # Debug: Risk Bullets (NEW - ENHANCED MULTI-TIMEFRAME RISK ANALYSIS)
+        print(f"\n[FD_INPUT] Risk Bullets (type: {type(risk_bullets)}, has_data: {bool(risk_bullets)}):")
+        if risk_bullets:
+            if isinstance(risk_bullets, str):
+                # Show first few lines of risk bullets
+                lines = risk_bullets.split('\n')[:5]  # First 5 lines
+                print(f"  Content (first 5 lines):")
+                for i, line in enumerate(lines, 1):
+                    print(f"    {i}. {line}")
+                total_lines = len(risk_bullets.split('\n'))
+                if total_lines > 5:
+                    remaining_lines = total_lines - 5
+                    print(f"    ... ({remaining_lines} more lines)")
+                print(f"  Total length: {len(risk_bullets)} characters")
+            else:
+                print(f"  {str(risk_bullets)[:200]}..." if len(str(risk_bullets)) > 200 else f"  {risk_bullets}")
+        else:
+            print(f"  (Empty or None)")
         
         # Debug: Chart Insights
         print(f"\n[FD_INPUT] Chart Insights (length: {len(chart_insights_md) if chart_insights_md else 0}):")
@@ -1437,7 +1527,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 mtf_context=mtf_payload,
                 sector_bullets=sector_bullets,
                 advanced_digest=advanced_analysis or {},
-                risk_bullets=None,
+                risk_bullets=risk_bullets,  # NEW: Pass enhanced multi-timeframe risk bullets
                 chart_insights=chart_insights_md,
                 knowledge_context="",
                 volume_analysis=volume_agents_result or {}
@@ -3273,6 +3363,192 @@ async def agents_volume_analyze_all(req: VolumeAgentRequest):
                 "agent_group": "volume",
                 "endpoint": "/agents/volume/analyze-all",
                 "symbol": req.symbol,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+# ===== RISK ANALYSIS AGENT ENDPOINTS =====
+
+@app.post("/agents/risk/analyze-all")
+async def agents_risk_analyze_all(req: RiskAnalysisRequest):
+    """
+    Comprehensive Risk Analysis Agent endpoint.
+    
+    This endpoint performs multi-timeframe quantitative risk analysis using:
+    - Advanced risk metrics (VaR, Expected Shortfall, Sharpe ratios, etc.)
+    - Comprehensive stress testing (Historical, Monte Carlo, Sector-specific, Market crash scenarios)
+    - Scenario analysis (Bull/Bear/Sideways/Volatility spike scenarios)
+    - Enhanced LLM analysis for 15 structured risk bullets across timeframes
+    
+    The analysis provides actionable risk insights for short-term (1-3 months),
+    medium-term (3-12 months), and long-term (1+ years) trading decisions.
+    """
+    start_time = time.monotonic()
+    print(f"[RISK_AGENT] Starting comprehensive risk analysis for {req.symbol}")
+    
+    try:
+        # Import risk analysis components
+        from agents.risk_analysis.quantitative_risk.processor import QuantitativeRiskProcessor
+        from agents.risk_analysis.risk_llm_agent import risk_llm_agent
+        
+        # Attempt to reuse prefetched data if provided via correlation_id
+        stock_data = None
+        indicators = None
+        if req.correlation_id:
+            try:
+                cached = VOLUME_PREFETCH_CACHE.get(req.correlation_id, None)
+                if cached and isinstance(cached, dict):
+                    stock_data = cached.get('stock_data')
+                    indicators = cached.get('indicators')
+                    print(f"[RISK_AGENT] Using prefetched data for correlation_id={req.correlation_id}")
+            except Exception as cache_e:
+                print(f"[RISK_AGENT] Error retrieving prefetched data: {cache_e}")
+        
+        # Retrieve stock data only if not provided
+        if stock_data is None:
+            try:
+                orchestrator = StockAnalysisOrchestrator()
+                stock_data = await orchestrator.retrieve_stock_data(
+                    symbol=req.symbol,
+                    exchange=req.exchange,
+                    interval=req.interval,
+                    period=req.period
+                )
+                print(f"[RISK_AGENT] Retrieved {len(stock_data)} days of data for {req.symbol}")
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+        
+        # Calculate indicators only if not provided
+        if indicators is None:
+            try:
+                indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, req.symbol)
+                print(f"[RISK_AGENT] Calculated {len(indicators)} indicators for {req.symbol}")
+            except Exception as ind_e:
+                # Non-fatal: proceed with minimal indicators
+                indicators = {}
+                print(f"[RISK_AGENT] Warning: indicator calculation failed: {ind_e}")
+        
+        # Step 1: Run Quantitative Risk Processor
+        processor_start = time.monotonic()
+        processor = QuantitativeRiskProcessor()
+        
+        context = f"Enhanced multi-timeframe risk analysis for {req.symbol}"
+        risk_analysis_result = await processor.analyze_async(
+            stock_data=stock_data,
+            indicators=indicators,
+            context=context
+        )
+        
+        processor_time = time.monotonic() - processor_start
+        print(f"[RISK_AGENT] Quantitative analysis completed in {processor_time:.2f}s")
+        
+        # Add metadata to quantitative result
+        risk_analysis_result['symbol'] = req.symbol
+        risk_analysis_result['company'] = f"{req.symbol} Company"  # Could be enhanced with actual company lookup
+        risk_analysis_result['sector'] = "Unknown"  # Could be enhanced with sector lookup
+        risk_analysis_result['timestamp'] = datetime.now().isoformat()
+        
+        # Step 2: Run Risk LLM Agent for enhanced analysis
+        llm_start = time.monotonic()
+        llm_success, risk_llm_analysis = await risk_llm_agent.analyze_risk_with_llm(
+            symbol=req.symbol,
+            risk_analysis_result=risk_analysis_result,
+            context=context
+        )
+        
+        llm_time = time.monotonic() - llm_start
+        print(f"[RISK_AGENT] LLM analysis completed in {llm_time:.2f}s. Success: {llm_success}")
+        
+        # Step 3: Build comprehensive response
+        total_time = time.monotonic() - start_time
+        
+        # Extract key metrics for summary
+        advanced_metrics = risk_analysis_result.get('advanced_risk_metrics', {})
+        overall_assessment = risk_analysis_result.get('overall_risk_assessment', {})
+        
+        comprehensive_response = {
+            "success": True,
+            "agent": "risk_analysis",
+            "symbol": req.symbol,
+            "exchange": req.exchange,
+            "timestamp": datetime.now().isoformat(),
+            "processing_time": total_time,
+            
+            # Quantitative Risk Analysis Results
+            "quantitative_analysis": {
+                "success": "error" not in risk_analysis_result,
+                "processing_time": processor_time,
+                "advanced_metrics": advanced_metrics,
+                "stress_testing": risk_analysis_result.get('stress_testing', {}),
+                "scenario_analysis": risk_analysis_result.get('scenario_analysis', {}),
+                "overall_assessment": overall_assessment,
+                "error": risk_analysis_result.get('error', None)
+            },
+            
+            # LLM Analysis Results (Enhanced 15-bullet format)
+            "llm_analysis": {
+                "success": llm_success,
+                "processing_time": llm_time,
+                "enhanced_risk_bullets": risk_llm_analysis.get('risk_bullets', '') if llm_success else '',
+                "prompt_length": risk_llm_analysis.get('prompt_length', 0) if llm_success else 0,
+                "response_length": risk_llm_analysis.get('response_length', 0) if llm_success else 0,
+                "confidence": risk_llm_analysis.get('confidence', 0.0) if llm_success else 0.0,
+                "error": risk_llm_analysis.get('error', None) if not llm_success else None
+            },
+            
+            # Summary metrics for final decision agent integration
+            "risk_summary": {
+                "overall_risk_score": advanced_metrics.get('risk_score', 0),
+                "overall_risk_level": advanced_metrics.get('risk_level', 'Medium'),
+                "combined_risk_score": overall_assessment.get('combined_risk_score', 0),
+                "key_risk_factors": overall_assessment.get('key_risk_factors', []),
+                "sharpe_ratio": advanced_metrics.get('sharpe_ratio', 0),
+                "max_drawdown": advanced_metrics.get('max_drawdown', 0),
+                "var_95": advanced_metrics.get('var_95', 0),
+                "stress_level": risk_analysis_result.get('stress_testing', {}).get('stress_level', 'Medium')
+            },
+            
+            # For final decision agent integration
+            "risk_bullets_for_decision": risk_llm_analysis.get('risk_bullets', '') if llm_success else None,
+            
+            # Optional: Return prompt if requested
+            "prompt_details": {
+                "returned": req.return_prompt and llm_success,
+                "prompt_content": risk_llm_analysis.get('generated_prompt', '') if req.return_prompt and llm_success else None
+            } if req.return_prompt else None,
+            
+            # Metadata
+            "request_metadata": {
+                "timeframes": req.timeframes,
+                "correlation_id": req.correlation_id,
+                "used_prefetched_data": bool(req.correlation_id and cached)
+            }
+        }
+        
+        # Ensure JSON serializable
+        serializable_response = make_json_serializable(comprehensive_response)
+        
+        print(f"[RISK_AGENT] ✅ Comprehensive risk analysis completed for {req.symbol} in {total_time:.2f}s")
+        print(f"[RISK_AGENT] - Quantitative: {processor_time:.2f}s, LLM: {llm_time:.2f}s")
+        print(f"[RISK_AGENT] - Risk Level: {advanced_metrics.get('risk_level', 'Unknown')}, Score: {advanced_metrics.get('risk_score', 0)}")
+        
+        return JSONResponse(content=serializable_response, status_code=200)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        total_time = time.monotonic() - start_time
+        error_msg = f"Risk analysis failed for {req.symbol}: {str(e)}"
+        print(f"[RISK_AGENT] ❌ {error_msg} (after {total_time:.2f}s)")
+        
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": error_msg,
+                "agent": "risk_analysis",
+                "symbol": req.symbol,
+                "processing_time": total_time,
                 "timestamp": datetime.now().isoformat()
             },
             status_code=500

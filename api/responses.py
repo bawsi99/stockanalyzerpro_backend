@@ -1132,7 +1132,7 @@ class FrontendResponseBuilder:
 
             # Import the orchestrator to use its pattern recognition
             try:
-                from analysis.orchestrator import StockAnalysisOrchestrator
+                from core.orchestrator import StockAnalysisOrchestrator
                 ORCHESTRATOR_AVAILABLE = True
             except ImportError as e:
                 logger.warning(f"Analysis orchestrator not available: {e}")
@@ -1158,17 +1158,7 @@ class FrontendResponseBuilder:
             # all required computations for pattern detection.
             # Prefer precomputed patterns from central cache if available to avoid recomputation
             cached_patterns = None
-            if symbol:
-                try:
-                    from services.central_data_provider import CentralDataProvider
-                    central_data_provider = CentralDataProvider()
-                    cached_patterns = central_data_provider.get_patterns(symbol=symbol, exchange=exchange, interval=interval, data=data)
-                except ImportError as e:
-                    logger.warning(f"Central data provider not available: {e}")
-                    cached_patterns = None
-                except Exception as e:
-                    logger.warning(f"Error getting cached patterns: {e}")
-                    cached_patterns = None
+            # Central data provider removed; skipping cached patterns.
 
             if isinstance(cached_patterns, dict) and cached_patterns:
                 overlays = {

@@ -2,45 +2,20 @@
 """
 Risk Analysis Agents Package
 
-Comprehensive risk analysis system with specialized agents for different risk categories:
-- Market Risk: Systemic risks, correlation breakdowns, regime changes
-- Volatility Risk: Volatility clustering, regime changes, spillovers
-- Liquidity Risk: Execution risks, market depth, bid-ask spreads
-- Technical Risk: Signal reliability, indicator divergences, pattern failures
+Modern risk analysis system with:
+- Quantitative Risk Processor: Advanced metrics, stress testing, scenario analysis
+- Risk LLM Agent: Natural language risk synthesis and insights
 
-The orchestrator coordinates all agents for unified risk assessment.
+Integrated with the analysis service for comprehensive risk assessment.
 """
 
-# Import individual risk agents
-from .market_risk import MarketRiskProcessor
-from .volatility_risk import VolatilityRiskProcessor
-from .liquidity_risk import LiquidityRiskProcessor
-from .technical_risk import TechnicalRiskProcessor
-# Optional synthesis agent (LLM wrapper)
-try:  # pragma: no cover - optional import
-    from .synthesis import RiskSynthesisProcessor  # type: ignore
-except Exception:  # noqa: E722
-    RiskSynthesisProcessor = None
-
-# Import orchestrator and result classes
-from .orchestrator import (
-    RiskAgentsOrchestrator,
-    RiskAgentResult,
-    RiskAnalysisResult,
-    risk_orchestrator
-)
+# Import core risk analysis components
+from .quantitative_risk.processor import QuantitativeRiskProcessor
+from .risk_llm_agent import RiskLLMAgent, risk_llm_agent
 
 __all__ = [
-    # Individual Risk Agents
-    'MarketRiskProcessor',
-    'VolatilityRiskProcessor', 
-    'LiquidityRiskProcessor',
-    'TechnicalRiskProcessor',
-    'RiskSynthesisProcessor',
-    
-    # Orchestrator and Results
-    'RiskAgentsOrchestrator',
-    'RiskAgentResult',
-    'RiskAnalysisResult',
-    'risk_orchestrator'
+    # Core Risk Analysis Components
+    'QuantitativeRiskProcessor',
+    'RiskLLMAgent',
+    'risk_llm_agent'
 ]

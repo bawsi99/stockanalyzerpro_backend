@@ -7,6 +7,8 @@ Creates volume profile and institutional activity visualizations
 
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Rectangle
@@ -14,10 +16,6 @@ from typing import Dict, List, Any, Optional
 import io
 import warnings
 warnings.filterwarnings('ignore')
-
-# Set matplotlib backend
-import matplotlib
-matplotlib.use('Agg')
 
 class InstitutionalActivityChartGenerator:
     """Chart generator for Institutional Activity Agent"""
@@ -81,7 +79,8 @@ class InstitutionalActivityChartGenerator:
             
             # Convert to bytes
             buf = io.BytesIO()
-            plt.savefig(buf, format='png', dpi=self.chart_style['dpi'],
+            fig.canvas.draw()
+            fig.savefig(buf, format='png', dpi=self.chart_style['dpi'],
                        bbox_inches='tight', facecolor='white', edgecolor='none')
             buf.seek(0)
             chart_bytes = buf.getvalue()
