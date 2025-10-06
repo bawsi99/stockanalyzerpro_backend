@@ -48,101 +48,6 @@ def get_env_value(key: str, env_path: str = str(ENV_PATH)) -> str:
         logger.info(f"Using system environment variable for {key}")
     return system_value
 
-class CacheManager:
-    """Manages caching of stock data with expiration and invalidation policies."""
-    
-    def __init__(self, cache_dir: str = "cache"):
-        self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(exist_ok=True)
-        self.metadata_file = self.cache_dir / "cache_metadata.json"
-        self._lock = RLock()
-        self.metadata = self._load_metadata()
-    
-    def _load_metadata(self) -> Dict:
-        """Load cache metadata from file."""
-        if self.metadata_file.exists():
-            try:
-                with open(self.metadata_file, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.error(f"Error loading cache metadata: {e}")
-        return {}
-    
-    def _save_metadata(self):
-        """Save cache metadata to file."""
-        try:
-            with self._lock:
-                # Take a snapshot to avoid 'dictionary changed size during iteration'
-                metadata_copy = dict(self.metadata)
-                # Write atomically via temp file and replace
-                with tempfile.NamedTemporaryFile('w', delete=False, dir=str(self.cache_dir)) as tmp_file:
-                    json.dump(metadata_copy, tmp_file)
-                    tmp_file.flush()
-                    os.fsync(tmp_file.fileno())
-                    temp_path = tmp_file.name
-                os.replace(temp_path, str(self.metadata_file))
-        except Exception as e:
-            logger.error(f"Error saving cache metadata: {e}")
-    
-    def _generate_cache_key(self, symbol: str, exchange: str, interval: str, 
-                          from_date: datetime, to_date: datetime) -> str:
-        """Generate a unique cache key for the data request."""
-        key_str = f"{symbol}:{exchange}:{interval}:{from_date.strftime('%Y%m%d')}:{to_date.strftime('%Y%m%d')}"
-        return hashlib.md5(key_str.encode()).hexdigest()
-    
-    def get_cached_data(self, symbol: str, exchange: str, interval: str,
-                       from_date: datetime, to_date: datetime) -> Optional[pd.DataFrame]:
-        """Get cached data if available and valid."""
-        if not self._is_market_closed():
-            return None
-            
-        cache_key = self._generate_cache_key(symbol, exchange, interval, from_date, to_date)
-        cache_file = self.cache_dir / f"{cache_key}.csv"
-        
-        with self._lock:
-            key_present = cache_key in self.metadata
-        if key_present and cache_file.exists():
-            try:
-                data = pd.read_csv(cache_file, parse_dates=['date'])
-                data.set_index('date', inplace=True)
-                return data
-            except Exception as e:
-                logger.error(f"Error reading cached data: {e}")
-                return None
-        return None
-    
-    def cache_data(self, data: pd.DataFrame, symbol: str, exchange: str, interval: str,
-                  from_date: datetime, to_date: datetime):
-        """Cache the data with metadata."""
-        if not self._is_market_closed():
-            return
-            
-        cache_key = self._generate_cache_key(symbol, exchange, interval, from_date, to_date)
-        cache_file = self.cache_dir / f"{cache_key}.csv"
-        
-        try:
-            data.to_csv(cache_file)
-            with self._lock:
-                self.metadata[cache_key] = {
-                    'symbol': symbol,
-                    'exchange': exchange,
-                    'interval': interval,
-                    'from_date': from_date.isoformat(),
-                    'to_date': to_date.isoformat(),
-                    'cached_at': datetime.now().isoformat()
-                }
-                self._save_metadata()
-        except Exception as e:
-            logger.error(f"Error caching data: {e}")
-    
-    def _is_market_closed(self) -> bool:
-        """Check if the market is currently closed (after 3:30 PM IST or before 9:15 AM IST)."""
-        now = datetime.now()
-        ist_time = now + timedelta(hours=5, minutes=30)  # Convert to IST
-        market_open = dt_time(9, 15)  # 9:15 AM IST
-        market_close = dt_time(15, 30)  # 3:30 PM IST
-        
-        return ist_time.time() < market_open or ist_time.time() > market_close
 
 def auto_refresh_token(func):
     def wrapper(self, *args, **kwargs):
@@ -203,8 +108,6 @@ class ZerodhaDataClient:
             self.kite.set_access_token(self.access_token)
             logger.info("Session initialized with existing access token")
 
-        # Initialize cache manager
-        self.cache_manager = CacheManager()
 
         # Rate limiting
         self.last_request_time = datetime.now()
@@ -686,13 +589,6 @@ class ZerodhaDataClient:
                 logger.info(f"Cache hit (LRU) for {exchange}:{symbol} {interval} {from_date.date()}->{to_date.date()}")
                 return cached_df
 
-            # 2) Disk cache when market is closed
-            disk_cached_df = self.cache_manager.get_cached_data(symbol, exchange, interval, from_date, to_date)
-            if disk_cached_df is not None:
-                logger.info(f"Cache hit (disk) for {exchange}:{symbol} {interval} {from_date.date()}->{to_date.date()}")
-                # Place into LRU for faster subsequent access
-                self._lru_put(cache_key, disk_cached_df)
-                return disk_cached_df
 
             logger.info(f"Fetching historical data for {symbol} from {from_date} to {to_date} (interval: {interval})")
 
@@ -732,8 +628,6 @@ class ZerodhaDataClient:
                 logger.info(f"Retrieved {len(df)} records for {symbol}")
                 # Save to caches
                 self._lru_put(cache_key, df)
-                # Persist to disk cache only when market is closed
-                self.cache_manager.cache_data(df, symbol, exchange, interval, from_date, to_date)
                 return df
 
             # --- Aggregation for week/month ---
@@ -758,7 +652,6 @@ class ZerodhaDataClient:
             logger.info(f"Aggregated {len(resampled)} {interval} records for {symbol}")
             # Save to caches
             self._lru_put(cache_key, resampled)
-            self.cache_manager.cache_data(resampled, symbol, exchange, interval, from_date, to_date)
             return resampled
 
         except TokenException as e:

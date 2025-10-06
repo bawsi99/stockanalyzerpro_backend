@@ -2610,24 +2610,27 @@ async def agents_sector_analyze_all(req: SectorAgentRequest):
                 market_benchmarking = sector_benchmarking.get('market_benchmarking', {})
                 sector_rotation = comprehensive_data.get('sector_rotation', {})
                 
-                # Primary indicators of insufficient data
+                # Primary indicators of insufficient data - FOCUS ON CORE SECTOR BENCHMARKING QUALITY
+                # Only skip LLM synthesis if the core sector benchmarking data is unreliable
                 insufficient_indicators = [
-                    # Data quality flags
+                    # CRITICAL: Core data quality flags (if these fail, skip synthesis)
                     data_quality.get('sufficient_data') == False,
-                    data_quality.get('analysis_mode') == 'fallback',
+                    data_quality.get('analysis_mode') == 'fallback', 
                     data_quality.get('reliability') == 'none',
                     data_quality.get('data_points', 0) == 0,
                     
-                    # Market benchmarking fallback indicators
+                    # CRITICAL: Market benchmarking fallback indicators (core functionality)
                     market_benchmarking.get('note') == 'Default values - insufficient data',
                     market_benchmarking.get('data_points', 0) == 0,
                     
-                    # Error indicators
+                    # CRITICAL: Core sector benchmarking errors
                     'error' in sector_benchmarking,
-                    sector_rotation.get('error') is not None,
                     
-                    # Fallback calculation indicators
-                    'fallback_reason' in comprehensive_data.get('optimization_metrics', {})
+                    # CRITICAL: System-level fallback (entire analysis failed)
+                    comprehensive_data.get('optimization_metrics', {}).get('fallback_reason') == 'Insufficient market/sector data for optimized analysis'
+                    
+                    # REMOVED: sector_rotation.get('error') - auxiliary feature failures shouldn't skip LLM synthesis
+                    # The sector rotation is supplementary data - if core benchmarking works, proceed with synthesis
                 ]
                 
                 # If any major indicator shows insufficient data, skip synthesis

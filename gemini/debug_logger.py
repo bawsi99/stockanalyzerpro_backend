@@ -175,6 +175,50 @@ class GeminiDebugLogger:
                     completion_tokens = getattr(usage, 'candidates_token_count', 0) or 0
                     total_tokens = getattr(usage, 'total_token_count', 0) or 0
             
+            # Additional fallback methods if no text found yet
+            if not text_response:
+                # Try to extract from response object using introspection
+                for attr_name in ['text', 'content', 'message', 'body']:
+                    if hasattr(response, attr_name):
+                        try:
+                            attr_value = getattr(response, attr_name)
+                            if isinstance(attr_value, str) and len(attr_value.strip()) > 0:
+                                text_response = attr_value
+                                self.logger.info(f"✅ Text extracted from response.{attr_name}")
+                                break
+                        except Exception:
+                            continue
+                
+                # If still no text, try to access nested attributes
+                if not text_response and hasattr(response, 'candidates') and response.candidates:
+                    for candidate in response.candidates:
+                        if hasattr(candidate, 'content'):
+                            content = candidate.content
+                            # Try different content attributes
+                            for content_attr in ['text', 'message', 'body', 'content']:
+                                if hasattr(content, content_attr):
+                                    try:
+                                        attr_value = getattr(content, content_attr)
+                                        if isinstance(attr_value, str) and len(attr_value.strip()) > 0:
+                                            text_response = attr_value
+                                            self.logger.info(f"✅ Text extracted from candidate.content.{content_attr}")
+                                            break
+                                    except Exception:
+                                        continue
+                            if text_response:
+                                break
+                
+                # Try to convert the entire response to string as last resort
+                if not text_response:
+                    try:
+                        response_str = str(response)
+                        if len(response_str) > 50 and 'object at' not in response_str:
+                            # Only use if it looks like actual content, not just object repr
+                            text_response = response_str
+                            self.logger.info("✅ Text extracted from str(response)")
+                    except Exception:
+                        pass
+            
             # Log text response details
             if text_response:
                 # self.logger.info(f"📝 Text Response Length: {len(text_response)} characters")
@@ -188,6 +232,13 @@ class GeminiDebugLogger:
                 pass
             else:
                 self.logger.warning("⚠️ No text response extracted")
+                # Log response structure for debugging
+                self.logger.warning(f"Response type: {type(response).__name__}")
+                if hasattr(response, '__dict__'):
+                    attrs = [attr for attr in dir(response) if not attr.startswith('_') and not callable(getattr(response, attr, None))]
+                    self.logger.warning(f"Available attributes: {attrs[:10]}")
+                else:
+                    self.logger.warning(f"Response string representation: {str(response)[:200]}")
             
             # Log code execution results
             # if code_results:

@@ -115,28 +115,34 @@ class GeminiClient:
         loop = asyncio.get_event_loop()
         print("indicator summary agent request sent")
         try:
-            try:
-                # Use code execution for enhanced mathematical analysis (robust text extraction from core)
-                text_response, code_results, execution_results = await self.core.call_llm_with_code_execution(
-                    prompt, return_full_response=False
-                )
-                # Note: token tracking requires a full response object, so we only track on fallback path below
-                print(f"[DEBUG] LLM response length: {len(text_response) if text_response else 0}")
-                print(f"[DEBUG] Code results count: {len(code_results)}")
-                print(f"[DEBUG] Execution results count: {len(execution_results)}")
-            except Exception as ex:
-                print(f"[DEBUG-ERROR] Exception during LLM call with code execution: {ex}")
-                # Fallback to regular LLM call without code execution
-                print("[DEBUG] Falling back to regular LLM call...")
-                response = await loop.run_in_executor(None, lambda: self.core.call_llm(prompt, return_full_response=True))
-                text_response = response.text if response else ""
-                code_results, execution_results = [], []
-                
-                # Track token usage for fallback call
-                if token_tracker and response:
-                    token_tracker.add_token_usage("indicator_summary_fallback", response, "gemini-2.5-flash")
-                
-                print(f"[DEBUG] Fallback response length: {len(text_response) if text_response else 0}")
+            # Prefer the robust path with retries and tolerant extraction (same as sector agent)
+            text_response, code_results, execution_results = await self.core.call_llm_with_code_execution(
+                prompt, return_full_response=False
+            )
+            
+            print(f"[DEBUG] LLM response length: {len(text_response) if text_response else 0}")
+            print(f"[DEBUG] Code results count: {len(code_results)}")
+            print(f"[DEBUG] Execution results count: {len(execution_results)}")
+            
+            # If no text from code execution path, fallback to basic call (same as sector agent)
+            if not text_response or not isinstance(text_response, str) or not text_response.strip():
+                print("[DEBUG] Empty response from code execution, falling back to basic call...")
+                try:
+                    # Use call_llm's internal text extraction logic (not response.text directly)
+                    fallback_text = await loop.run_in_executor(None, lambda: self.core.call_llm(prompt, return_full_response=False))
+                    if fallback_text and isinstance(fallback_text, str) and fallback_text.strip():
+                        text_response = fallback_text
+                        print(f"[DEBUG] Fallback response length: {len(text_response)}")
+                    else:
+                        print("[DEBUG] Fallback also returned empty response")
+                        
+                    # Track token usage for the fallback call if we have a tracker
+                    if token_tracker:
+                        full_response = await loop.run_in_executor(None, lambda: self.core.call_llm(prompt, return_full_response=True))
+                        if full_response:
+                            token_tracker.add_token_usage("indicator_summary_fallback", full_response, "gemini-2.5-flash")
+                except Exception as fallback_ex:
+                    print(f"[DEBUG-ERROR] Exception during fallback LLM call: {fallback_ex}")
             
             if not text_response or not isinstance(text_response, str) or text_response.strip() == "":
                 print("[DEBUG] Empty response, using fallback JSON")
