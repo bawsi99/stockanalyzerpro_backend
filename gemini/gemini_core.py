@@ -240,25 +240,27 @@ class GeminiCore:
             # Log API response
             debug_logger.log_api_response(response, response_time, "call_llm_with_image")
             
-            if response and hasattr(response, 'candidates') and response.candidates:
-                # Extract text from response parts, ignoring executable_code parts
-                text_response = ""
+            # Robust text extraction: prefer response.text, then parts[].text, then content.text (same as call_llm)
+            text_response = ""
+            
+            # 1. Try response.text convenience field first
+            if hasattr(response, 'text') and response.text:
+                text_response = response.text
+            
+            # 2. If empty, iterate candidates and concatenate all parts[].text
+            if not text_response and hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
                 if hasattr(candidate, 'content') and candidate.content:
                     if hasattr(candidate.content, 'parts') and candidate.content.parts:
                         for part in candidate.content.parts:
                             if hasattr(part, 'text') and part.text:
                                 text_response += part.text
-                    else:
-                        if hasattr(candidate.content, 'text'):
-                            text_response = candidate.content.text
-                
-                if text_response:
-                    return text_response
-                else:
-                    raise Exception("No text content found in LLM response")
-            else:
-                raise Exception("Empty or invalid response from LLM (multi-modal)")
+                    # 3. Fallback to direct content.text if parts missing or empty
+                    if not text_response and hasattr(candidate.content, 'text'):
+                        text_response = candidate.content.text or ""
+            
+            # Return text or empty string (no exception on missing text - same pattern as call_llm)
+            return text_response
         except Exception as ex:
             response_time = time.time() - start_time
             debug_logger.log_error(ex, "call_llm_with_image", prompt)
@@ -311,25 +313,27 @@ class GeminiCore:
             # Log API response
             debug_logger.log_api_response(response, response_time, "call_llm_with_images")
             
-            if response and hasattr(response, 'candidates') and response.candidates:
-                # Extract text from response parts, ignoring executable_code parts
-                text_response = ""
+            # Robust text extraction: prefer response.text, then parts[].text, then content.text (same as call_llm)
+            text_response = ""
+            
+            # 1. Try response.text convenience field first
+            if hasattr(response, 'text') and response.text:
+                text_response = response.text
+            
+            # 2. If empty, iterate candidates and concatenate all parts[].text
+            if not text_response and hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
                 if hasattr(candidate, 'content') and candidate.content:
                     if hasattr(candidate.content, 'parts') and candidate.content.parts:
                         for part in candidate.content.parts:
                             if hasattr(part, 'text') and part.text:
                                 text_response += part.text
-                    else:
-                        if hasattr(candidate.content, 'text'):
-                            text_response = candidate.content.text
-                
-                if text_response:
-                    return text_response
-                else:
-                    raise Exception("No text content found in LLM response")
-            else:
-                raise Exception("Empty or invalid response from LLM (multi-modal, multi-image)")
+                    # 3. Fallback to direct content.text if parts missing or empty
+                    if not text_response and hasattr(candidate.content, 'text'):
+                        text_response = candidate.content.text or ""
+            
+            # Return text or empty string (no exception on missing text - same pattern as call_llm)
+            return text_response
         except Exception as ex:
             response_time = time.time() - start_time
             debug_logger.log_error(ex, "call_llm_with_images", prompt)

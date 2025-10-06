@@ -107,7 +107,7 @@ class CoreMTFProcessor:
             ),
             '5min': MTFTimeframeConfig(
                 interval='5minute',
-                period_days=3,  # 3 days - for day trading precision (reduced from 60 to reduce data overload)
+                period_days=5,  # 5 days - for day trading precision (increased from 3 for better data coverage)
                 min_data_points=80,
                 indicators=['sma_20', 'ema_12', 'rsi_14', 'macd', 'bollinger_bands', 'volume_ratio', 'atr', 'stochastic'],
                 weight=0.10,

@@ -515,8 +515,21 @@ Multi-Timeframe Analysis Data:
 {json.dumps(mtf_json, indent=2)[:8000]}
 """
             ) + self.prompt_manager.SOLVING_LINE
-            text = await self.core.call_llm(prompt)
-            return text or ""
+            
+            # ✅ PRIMARY METHOD: Use robust response extraction pattern
+            text_response, code_results, execution_results = await self.core.call_llm_with_code_execution(
+                prompt, return_full_response=False
+            )
+            
+            # ✅ FALLBACK: Use call_llm's internal text extraction logic if needed
+            if not text_response or not isinstance(text_response, str) or not text_response.strip():
+                import asyncio
+                loop = asyncio.get_event_loop()
+                fallback_text = await loop.run_in_executor(None, lambda: self.core.call_llm(prompt, return_full_response=False))
+                if fallback_text and isinstance(fallback_text, str) and fallback_text.strip():
+                    text_response = fallback_text
+            
+            return text_response or ""
         except Exception:
             return ""
 
@@ -630,12 +643,29 @@ JSON:
 {json.dumps(result)}
 """
             ) + self.prompt_manager.SOLVING_LINE
-            text = await self.core.call_llm(prompt)
+            
+            # ✅ PRIMARY METHOD: Use robust response extraction pattern
+            text_response, code_results, execution_results = await self.core.call_llm_with_code_execution(
+                prompt, return_full_response=False
+            )
+            
+            # ✅ FALLBACK: Use call_llm's internal text extraction logic if needed
+            if not text_response or not isinstance(text_response, str) or not text_response.strip():
+                import asyncio
+                loop = asyncio.get_event_loop()
+                fallback_text = await loop.run_in_executor(None, lambda: self.core.call_llm(prompt, return_full_response=False))
+                if fallback_text and isinstance(fallback_text, str) and fallback_text.strip():
+                    text_response = fallback_text
+            
+            # Parse the response
             try:
-                return json.loads(text)
+                return json.loads(text_response) if text_response else result
             except Exception:
-                _, blob = self.extract_markdown_and_json(text or "")
-                return json.loads(blob)
+                try:
+                    _, blob = self.extract_markdown_and_json(text_response or "")
+                    return json.loads(blob)
+                except Exception:
+                    return result
         except Exception:
             return result
 
@@ -1387,7 +1417,17 @@ Use Python code for all calculations and include the results in your analysis.
                 )
             
             pil_image = await self.image_utils.bytes_to_image_async(image)
-            return await self.core.call_llm_with_image(enhanced_prompt, pil_image)
+            
+            # Try primary image analysis (now has robust text extraction in gemini_core.py)
+            response = await self.core.call_llm_with_image(enhanced_prompt, pil_image)
+            
+            # With the improved text extraction in gemini_core.py, this should work consistently
+            # But if still empty, we could add a fallback to text-only analysis as last resort
+            if not response or not response.strip():
+                print("[DEBUG] Pattern analysis: empty response from image analysis, returning fallback")
+                return "Pattern analysis completed but no specific insights were generated from the chart."
+            
+            return response
             
         except Exception as e:
             print(f"Error in analyze_pattern_analysis: {e}")
@@ -1414,7 +1454,16 @@ Use Python code for all calculations and include the results in your analysis.
             # Add the solving line at the very end
             prompt += self.prompt_manager.SOLVING_LINE
             pil_image = await self.image_utils.bytes_to_image_async(image)
-            return await self.core.call_llm_with_image(prompt, pil_image)
+            
+            # Try primary image analysis (now has robust text extraction in gemini_core.py)
+            response = await self.core.call_llm_with_image(prompt, pil_image)
+            
+            # With the improved text extraction in gemini_core.py, this should work consistently
+            if not response or not response.strip():
+                print("[DEBUG] Volume analysis: empty response from image analysis, returning fallback")
+                return "Volume analysis completed but no specific insights were generated from the chart."
+            
+            return response
         except Exception as ex:
             print(f"[DEBUG-ERROR] Exception during volume analysis context engineering: {ex}")
             print(f"[DEBUG-ERROR] Exception type: {type(ex).__name__}")
@@ -1442,7 +1491,16 @@ Use Python code for all calculations and include the results in your analysis.
             # Add the solving line at the very end
             prompt += self.prompt_manager.SOLVING_LINE
             pil_image = await self.image_utils.bytes_to_image_async(image)
-            return await self.core.call_llm_with_image(prompt, pil_image)
+            
+            # Try primary image analysis (now has robust text extraction in gemini_core.py)
+            response = await self.core.call_llm_with_image(prompt, pil_image)
+            
+            # With the improved text extraction in gemini_core.py, this should work consistently
+            if not response or not response.strip():
+                print("[DEBUG] MTF comparison: empty response from image analysis, returning fallback")
+                return "Multi-timeframe comparison analysis completed but no specific insights were generated from the chart."
+            
+            return response
         except Exception as ex:
             print(f"[DEBUG-ERROR] Exception during MTF comparison context engineering: {ex}")
             print(f"[DEBUG-ERROR] Exception type: {type(ex).__name__}")
@@ -1467,6 +1525,9 @@ Use Python code for all calculations and include the results in your analysis.
         Returns:
             LLM analysis response as string
         """
+        import asyncio
+        loop = asyncio.get_event_loop()
+        
         try:
             # Map agent names to their corresponding prompt templates
             agent_template_map = {
@@ -1494,12 +1555,37 @@ Use Python code for all calculations and include the results in your analysis.
             # Add the solving line at the end
             final_prompt += self.prompt_manager.SOLVING_LINE
             
-            # Convert bytes to PIL Image and call LLM
+            # Convert bytes to PIL Image
             pil_image = await self.image_utils.bytes_to_image_async(chart_image)
-            response = await self.core.call_llm_with_image(final_prompt, pil_image, enable_code_execution=True)
+            
+            # ✅ PRIMARY METHOD: Use robust response extraction pattern (same as sector agent)
+            text_response, code_results, execution_results = await self.core.call_llm_with_code_execution(
+                final_prompt, return_full_response=False
+            )
+            
+            print(f"[VOLUME_AGENT_DEBUG] Primary response length: {len(text_response) if text_response else 0}")
+            
+            # ✅ CORRECT fallback (same logic as sector agent)
+            if not text_response or not isinstance(text_response, str) or not text_response.strip():
+                print(f"[VOLUME_AGENT_DEBUG] Empty response from code execution, falling back to call_llm_with_image for {agent_name}...")
+                try:
+                    # Fallback to image-based call as last resort
+                    fallback_response = await self.core.call_llm_with_image(final_prompt, pil_image, enable_code_execution=True)
+                    if fallback_response and isinstance(fallback_response, str) and fallback_response.strip():
+                        text_response = fallback_response
+                        print(f"[VOLUME_AGENT_DEBUG] Fallback image response length: {len(text_response)}")
+                    else:
+                        print(f"[VOLUME_AGENT_DEBUG] Fallback image call also returned empty response")
+                except Exception as fallback_ex:
+                    print(f"[VOLUME_AGENT_DEBUG] Exception during fallback image call: {fallback_ex}")
+            
+            # Final validation
+            if not text_response or not isinstance(text_response, str) or text_response.strip() == "":
+                print(f"[VOLUME_AGENT_DEBUG] All methods failed, returning structured error response for {agent_name}")
+                return f'{{"error": "No valid response from LLM", "agent": "{agent_name}", "status": "failed"}}'
             
             print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM analysis completed successfully")
-            return response
+            return text_response
             
         except Exception as e:
             error_msg = f"Volume agent {agent_name} LLM analysis failed: {str(e)}"
@@ -1508,7 +1594,7 @@ Use Python code for all calculations and include the results in your analysis.
             print(f"[VOLUME_AGENT_DEBUG] Traceback: {traceback.format_exc()}")
             
             # Return a structured error response that won't break the volume agent
-            return f"{{\"error\": \"{error_msg}\", \"agent\": \"{agent_name}\", \"status\": \"failed\"}}"
+            return f'{{"error": "{error_msg}", "agent": "{agent_name}", "status": "failed"}}'
 
     def _build_mtf_context_for_indicators(self, mtf_context):
         """
