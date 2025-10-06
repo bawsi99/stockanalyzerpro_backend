@@ -321,8 +321,8 @@ async def startup_event():
         print("💾 Initializing Redis cache manager...")
         try:
             redis_cache_config = DeploymentConfig.get_redis_cache_config()
-            from core.redis_cache_manager import initialize_redis_cache_manager
-            redis_cache_manager = initialize_redis_cache_manager(**redis_cache_config)
+            from core.redis_unified_cache_manager import initialize_unified_redis_cache_manager
+            redis_cache_manager = initialize_unified_redis_cache_manager(**redis_cache_config)
             print(f"✅ Redis cache manager initialized: compression={redis_cache_manager.enable_compression}")
         except Exception as cache_e:
             print(f"⚠️  Warning: Could not initialize Redis cache manager: {cache_e}")
@@ -3699,8 +3699,8 @@ async def cleanup_all_charts():
 async def get_redis_cache_stats():
     """Get Redis cache statistics."""
     try:
-        from core.redis_cache_manager import get_redis_cache_manager
-        cache_manager = get_redis_cache_manager()
+        from core.redis_unified_cache_manager import get_unified_redis_cache_manager
+        cache_manager = get_unified_redis_cache_manager()
         stats = cache_manager.get_stats()
         return {
             "success": True,
@@ -3714,8 +3714,8 @@ async def get_redis_cache_stats():
 async def clear_redis_cache(data_type: str = None):
     """Clear Redis cache entries."""
     try:
-        from core.redis_cache_manager import get_redis_cache_manager
-        cache_manager = get_redis_cache_manager()
+        from core.redis_unified_cache_manager import get_unified_redis_cache_manager
+        cache_manager = get_unified_redis_cache_manager()
         deleted_counts = cache_manager.clear(data_type)
         return {
             "success": True,
@@ -3729,7 +3729,7 @@ async def clear_redis_cache(data_type: str = None):
 async def clear_stock_cache(symbol: str, exchange: str = "NSE"):
     """Clear cache for a specific stock."""
     try:
-        from core.redis_cache_manager import clear_stock_cache
+        from core.redis_unified_cache_manager import clear_stock_cache
         stats = clear_stock_cache(symbol, exchange)
         return {
             "success": True,
@@ -3743,7 +3743,7 @@ async def clear_stock_cache(symbol: str, exchange: str = "NSE"):
 async def get_cached_stock_data(symbol: str, exchange: str = "NSE", interval: str = "day", period: int = 365):
     """Get cached stock data."""
     try:
-        from core.redis_cache_manager import get_cached_stock_data
+        from core.redis_unified_cache_manager import get_cached_stock_data
         data = get_cached_stock_data(symbol, exchange, interval, period)
         if data is not None:
             return {
