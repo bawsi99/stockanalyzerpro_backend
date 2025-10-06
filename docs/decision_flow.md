@@ -15,16 +15,19 @@
     - `processor.py` (SectorSynthesisProcessor)
     - `cache_manager.py` (SectorCacheManager + `cache_config.json`)
     - `classifier.py`, `enhanced_classifier.py`
+  - `backend/agents/risk_analysis/`
+    - `quantitative_risk/processor.py` (QuantitativeRiskProcessor)
+    - `risk_llm_agent.py` (LLM risk synthesis)
   - `backend/ml/analysis/mtf_analysis.py` (legacy EnhancedMultiTimeframeAnalyzer - still available)
   - `backend/analysis/advanced_analysis.py`
   - `backend/ml/indicators/technical_indicators.py`
   - `backend/api/responses.py`
-- Includes volume agents endpoints and database service integration
+- Includes volume and risk agents endpoints and database service integration
 
 ---
 
 ## High-level Responsibilities
-- Orchestrates stock analysis: data retrieval, indicator computation, optional charts, sector context, pattern recognition, ML predictions, and AI-based decision.
+- Orchestrates stock analysis: data retrieval, indicator computation, optional charts, sector context, pattern recognition, risk analysis, ML predictions, and AI-based decision.
 - Exposes REST endpoints for:
   - Enhanced analysis, async analysis, enhanced MTF
   - Indicators, patterns, charts
@@ -38,7 +41,7 @@
 ## Configuration and Dependencies
 
 ### Environment variables
-- `DATABASE_SERVICE_URL` (default: `http://localhost/8003`)
+- `DATABASE_SERVICE_URL` (default: `http://localhost:8003`)
 - `ANALYSIS_SERVICE_URL` (loopback, default: `http://localhost:8002`)
 - `CORS_ORIGINS` (comma-separated list)
 - Zerodha: `ZERODHA_API_KEY`, `ZERODHA_ACCESS_TOKEN`
@@ -56,7 +59,7 @@
 - Sector classification and benchmarking providers
 
 ### In-process cache
-- `VOLUME_PREFETCH_CACHE` keyed by `correlation_id`, to reuse prefetched `stock_data` and `indicators` for volume agents.
+- `VOLUME_PREFETCH_CACHE` keyed by `correlation_id`, to reuse prefetched `stock_data` and `indicators` for volume agents and risk analysis (sector agent may also reuse `stock_data`).
 
 ### File-based sector cache (agents/sector/cache_manager.py)
 - Managed by `SectorCacheManager` with manifest and `cache_config.json`
@@ -98,6 +101,8 @@
   - `symbol`, `exchange="NSE"`, `interval="1d"`, `indicators` (CSV)
 - VolumeAgentRequest
   - `symbol`, `exchange="NSE"`, `interval="day"`, `period=365`, `correlation_id?`, `return_prompt?`
+- RiskAnalysisRequest
+  - `symbol`, `exchange="NSE"`, `interval="day"`, `period=365`, `correlation_id?`, `return_prompt?`, `timeframes=["short","medium","long"]`
 
 ---
 
@@ -137,6 +142,9 @@ Step-by-step:
 5) Launch independent tasks in parallel
 - Volume agents (loopback REST): POST `/agents/volume/analyze-all`
   - Reuses `stock_data`/`indicators` via `VOLUME_PREFETCH_CACHE` (using `correlation_id`)
+- Risk analysis (loopback REST): POST `/agents/risk/analyze-all`
+  - Reuses `stock_data`/`indicators` via `VOLUME_PREFETCH_CACHE` (using `correlation_id`)
+  - Computes quantitative metrics (VaR/ES/Sharpe), stress tests (historical/Monte Carlo/sector/market), scenarios, and LLM risk bullets for short/medium/long horizons
 - Multi-timeframe analysis (MTF) - **New Agent-Based Architecture**:
   - `mtf_agent_integration_manager.get_comprehensive_mtf_analysis(symbol, exchange)`
   - Uses `MTFAgentsOrchestrator` which coordinates:
@@ -168,7 +176,7 @@ Step-by-step:
 - Any task failure → normalized to empty context; analysis continues.
 
 7) Prepare final decision inputs
-- Collect the context components: sector_bullets (from sector synthesis), an MTF subset (LLM insights or summary), and the advanced analysis digest.
+- Collect the context components: sector_bullets (from sector synthesis), an MTF subset (LLM insights or summary), risk bullets (if available), and the advanced analysis digest.
 - The centralized FinalDecisionProcessor assembles the labeled knowledge context internally.
 
 8) Final decision agent (centralized)
@@ -184,7 +192,7 @@ Step-by-step:
   - Normalizes OHLCV
   - Computes price delta/%, pivots inferred from interval anchor (D/W/M/Q)
   - Adds volume bands where available
-  - Integrates ai_analysis, indicator_summary, chart_insights, indicators, sector_context, mtf_context, advanced_analysis, ml_predictions
+- Integrates ai_analysis, indicator_summary, chart_insights, indicators, sector_context, mtf_context, risk_context, advanced_analysis, ml_predictions
 
 11) Persist to Database Service
 - `make_json_serializable(frontend_response)`
@@ -295,6 +303,12 @@ Inputs/Outputs:
   - `/agents/volume/momentum`
   - Each retrieves df, computes indicators, runs a single agent via `VolumeAgentsOrchestrator._execute_agent`, returns structured result; can include prompt when `return_prompt=True`.
 
+### Risk analysis
+- POST `/agents/risk/analyze-all`
+  - Reuses prefetched data via `VOLUME_PREFETCH_CACHE` using `correlation_id`.
+  - Performs quantitative metrics (VaR, Expected Shortfall, Sharpe), multi-scenario stress tests, and produces LLM-synthesized risk bullets across timeframes.
+  - Returns a structured risk summary with scores and decision-ready bullets; integrated into the final decision agent via `risk_bullets`.
+
 ### Storage and cache
 - Charts storage:
   - GET `/charts/storage/stats`, POST `/charts/cleanup`, DELETE `/charts/{symbol}/{interval}`, DELETE `/charts/all`
@@ -312,6 +326,20 @@ Inputs/Outputs:
 - Global `OPTIONS /{path:path}` returns 200 for CORS preflights.
 
 ---
+
+## Quick Endpoint Reference
+- POST `/analyze` → shim to `/analyze/enhanced`
+- POST `/analyze/enhanced` → orchestrates parallel tasks:
+  - Volume agents → POST `/agents/volume/analyze-all` → VolumeAgentIntegrationManager.get_comprehensive_volume_analysis
+  - Risk analysis → POST `/agents/risk/analyze-all` → QuantitativeRiskProcessor + risk_llm_agent
+  - MTF analysis → mtf_agent_integration_manager.get_comprehensive_mtf_analysis → MTFAgentsOrchestrator
+  - Advanced analysis → advanced_analysis_provider.generate_advanced_analysis
+  - Sector analysis → POST `/agents/sector/analyze-all` → SectorBenchmarkingProvider + SectorSynthesisProcessor (+ SectorCacheManager)
+  - Indicator summary → GeminiClient.build_indicators_summary
+  - Final decision → FinalDecisionProcessor.analyze_async
+- POST `/analyze/enhanced-mtf` → mtf_agent_integration_manager.get_comprehensive_mtf_analysis (returns aggregated MTF results)
+- Volume single-agent endpoints → VolumeAgentsOrchestrator._execute_agent
+- Sector metadata endpoints → SectorClassifier
 
 ## Orchestrator Highlights (`core/orchestrator.py`)
 - `retrieve_stock_data`:
@@ -446,6 +474,7 @@ The MTF system now follows an agent-based orchestration pattern similar to volum
 - Retrieve data → Compute indicators
 - Parallel (with logging + timeouts):
   - Volume agents (loopback REST, reuse prefetched data, timeout: 200s)
+  - Risk analysis (timeout: 200s)
   - **MTF analysis** (timeout: 120s):
     - `mtf_agent_integration_manager.get_comprehensive_mtf_analysis()`
     - → `MTFAgentsOrchestrator.analyze_comprehensive_mtf()`

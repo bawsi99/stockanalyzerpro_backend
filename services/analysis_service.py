@@ -1,12 +1,14 @@
 """
 analysis_service.py
 
-Analysis Service - Handles all analysis, AI processing, and chart generation.
+Analysis Service - Handles all analysis, AI processing, chart generation, and risk analysis.
 This service is responsible for:
 - Stock analysis and AI processing
 - Technical indicator calculations
 - Chart generation and visualization
 - Sector analysis orchestration (delegates to sector agent)
+- Volume analysis (multi-agent)
+- Risk analysis (quantitative + LLM synthesis)
 - Pattern recognition
 - Real-time analysis callbacks
 
@@ -32,6 +34,21 @@ ARCHITECTURE OVERVIEW - SECTOR ENDPOINTS:
    - /agents/sector/compare
    These are the actual sector agent implementation endpoints that perform
    all data fetching, caching, computation, and analysis autonomously.
+
+4. VOLUME AGENT ENDPOINTS (Heavy Processing):
+   - /agents/volume/analyze-all (runs all volume agents and aggregates)
+   - /agents/volume/anomaly
+   - /agents/volume/institutional
+   - /agents/volume/confirmation
+   - /agents/volume/support-resistance
+   - /agents/volume/momentum
+   These endpoints perform single- or multi-agent volume analysis with
+   in-process prefetch reuse using correlation_id where available.
+
+5. RISK AGENT ENDPOINTS (Heavy Processing):
+   - /agents/risk/analyze-all (comprehensive risk analysis)
+   Performs quantitative metrics (VaR, ES, Sharpe), stress tests, scenarios,
+   and LLM-synthesized risk bullets across short/medium/long horizons.
 """
 
 import sys
@@ -964,7 +981,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         async def _call_volume_agents():
             try:
                 print(f"🔑 [VOLUME_AGENTS] Calling analyze-all with 5 distributed API keys (KEY1-5 for agents 0-4)")
-                async with httpx.AsyncClient(timeout=600.0) as client:
+                async with httpx.AsyncClient(timeout=200.0) as client:
                     resp = await client.post(
                         volume_agents_url,
                         json={
@@ -1008,7 +1025,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 raise
 
         # Create tasks with logging + timeouts
-        volume_task = asyncio.create_task(_with_logging("volume_agents", _call_volume_agents(), timeout=300.0))
+        volume_task = asyncio.create_task(_with_logging("volume_agents", _call_volume_agents(), timeout=180.0))
 
         # MTF analysis with LLM agent
         async def _mtf():

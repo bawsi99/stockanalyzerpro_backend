@@ -318,7 +318,7 @@ class VolumeAgentsOrchestrator:
         
         # Use asyncio.wait to collect partial results even if some agents timeout
         try:
-            done, pending = await asyncio.wait(tasks, timeout=280, return_when=asyncio.ALL_COMPLETED)
+            done, pending = await asyncio.wait(tasks, timeout=150, return_when=asyncio.ALL_COMPLETED)
             
             # Collect results from completed tasks
             agent_results = []
@@ -332,13 +332,13 @@ class VolumeAgentsOrchestrator:
                         agent_results.append(e)
                 else:
                     # Task didn't complete in time
-                    logger.warning(f"Agent {enabled_agents[i]} timed out after 280 seconds")
+                    logger.warning(f"Agent {enabled_agents[i]} timed out after 150 seconds")
                     task.cancel()  # Cancel the pending task
                     agent_results.append(TimeoutError(f"Agent {enabled_agents[i]} timed out"))
             
             # Log partial results collection
             completed_count = len([r for r in agent_results if not isinstance(r, Exception)])
-            logger.info(f"Volume agents execution completed: {completed_count}/{len(tasks)} agents finished, {len(pending)} timed out")
+            logger.info(f"Volume agents execution completed: {completed_count}/{len(tasks)} agents finished, {len(pending)} timed out after 150s")
             
         except Exception as gather_error:
             logger.error(f"Error in agent execution: {gather_error}")
@@ -2856,7 +2856,7 @@ class VolumeAgentIntegrationManager:
             try:
                 # Add timeout protection for the entire orchestrator operation
                 import asyncio
-                timeout_seconds = 300  # 300 seconds timeout for volume agents analysis (no individual timeouts)
+                timeout_seconds = 180  # 180 seconds timeout for volume agents analysis (reduced from 300s)
                 
                 result = await asyncio.wait_for(
                     self.orchestrator.analyze_stock_volume_comprehensive(stock_data, symbol, indicators),

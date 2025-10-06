@@ -814,11 +814,18 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                         # Use configurable quality threshold instead of hard 0
                         quality_score = pattern.get('quality_score', 0)
                         min_quality = DEFAULT_PATTERN_MIN_QUALITY.get("head_and_shoulders", 0.0)
+                        print(f"🔍 DEBUG: Head and Shoulders pattern quality: {quality_score}, min_quality: {min_quality}")
                         if quality_score < min_quality:
+                            print(f"🔍 DEBUG: Head and Shoulders pattern filtered out (quality {quality_score} < {min_quality})")
                             continue
                             
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
+                        # Calculate stop level for head and shoulders (bearish pattern)
+                        neckline_price = pattern.get('neckline', {}).get('level', pattern.get('end_price', 0))
+                        pattern_height = abs(pattern.get('head', {}).get('price', pattern.get('start_price', 0)) - neckline_price)
+                        stop_level = neckline_price + (pattern_height * 0.1)  # Stop 10% above neckline
+                        
                         advanced_patterns["head_and_shoulders"].append({
                             "start_date": str(data.index[start_index]) if start_index < len(data) else str(data.index[0]),
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
@@ -828,6 +835,9 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "confidence": float(quality_score),
                             "pattern_type": "head_and_shoulders",  # Fixed: explicit pattern type
                             "type": "head_and_shoulders",  # Also set type for compatibility
+                            "target": float(pattern.get('target', 0)) if pattern.get('target') is not None else None,
+                            "stop_level": float(stop_level) if stop_level else None,
+                            "completion_status": pattern.get('completion_status', 'forming'),
                             "description": f"Head and Shoulders pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -847,6 +857,11 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
+                        # Calculate stop level for inverse head and shoulders (bullish pattern)
+                        neckline_price = pattern.get('neckline', {}).get('level', pattern.get('end_price', 0))
+                        pattern_height = abs(neckline_price - pattern.get('head', {}).get('price', pattern.get('start_price', 0)))
+                        stop_level = neckline_price - (pattern_height * 0.1)  # Stop 10% below neckline
+                        
                         advanced_patterns["inverse_head_and_shoulders"].append({
                             "start_date": str(data.index[start_index]) if start_index < len(data) else str(data.index[0]),
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
@@ -856,6 +871,9 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "confidence": float(quality_score),
                             "pattern_type": "inverse_head_and_shoulders",  # Fixed: explicit pattern type
                             "type": "inverse_head_and_shoulders",  # Also set type for compatibility
+                            "target": float(pattern.get('target', 0)) if pattern.get('target') is not None else None,
+                            "stop_level": float(stop_level) if stop_level else None,
+                            "completion_status": pattern.get('completion_status', 'forming'),
                             "description": f"Inverse Head and Shoulders pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -879,6 +897,10 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
+                        # Calculate stop level for triple tops (bearish pattern)
+                        highest_price = max(pattern.get('start_price', 0), pattern.get('end_price', 0))
+                        stop_level = highest_price * 1.02  # Stop 2% above highest peak
+                        
                         advanced_patterns["triple_tops"].append({
                             "start_date": str(data.index[start_index]) if start_index < len(data) else str(data.index[0]),
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
@@ -888,6 +910,9 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "confidence": float(quality_score),
                             "pattern_type": "triple_tops",  # Fixed: explicit pattern type
                             "type": "triple_tops",  # Also set type for compatibility
+                            "target": float(pattern.get('target', 0)) if pattern.get('target') is not None else None,
+                            "stop_level": float(stop_level) if stop_level else None,
+                            "completion_status": pattern.get('completion_status', 'forming'),
                             "description": f"Triple Top pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -901,11 +926,19 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                         # Use configurable quality threshold
                         quality_score = pattern.get('quality_score', 0)
                         min_quality = DEFAULT_PATTERN_MIN_QUALITY.get("triple_patterns", 0.0)
+                        print(f"🔍 DEBUG: Triple Bottom pattern quality: {quality_score}, min_quality: {min_quality}")
                         if quality_score < min_quality:
+                            print(f"🔍 DEBUG: Triple Bottom pattern filtered out (quality {quality_score} < {min_quality})")
                             continue
                             
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
+                        # Calculate stop level for triple bottoms (bullish pattern)
+                        lowest_price = min(pattern.get('start_price', float('inf')), pattern.get('end_price', float('inf')))
+                        if lowest_price == float('inf'):
+                            lowest_price = data['low'].iloc[start_index:end_index+1].min() if start_index < len(data) else data['low'].min()
+                        stop_level = lowest_price * 0.98  # Stop 2% below lowest point
+                        
                         advanced_patterns["triple_bottoms"].append({
                             "start_date": str(data.index[start_index]) if start_index < len(data) else str(data.index[0]),
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
@@ -915,6 +948,9 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "confidence": float(quality_score),
                             "pattern_type": "triple_bottoms",  # Fixed: explicit pattern type
                             "type": "triple_bottoms",  # Also set type for compatibility
+                            "target": float(pattern.get('target', 0)) if pattern.get('target') is not None else None,
+                            "stop_level": float(stop_level) if stop_level else None,
+                            "completion_status": pattern.get('completion_status', 'forming'),
                             "description": f"Triple Bottom pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -934,6 +970,22 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
+                        # Calculate stop level for wedge patterns
+                        wedge_type = pattern.get('type', 'wedge')
+                        start_price = pattern.get('start_price', 0)
+                        end_price = pattern.get('end_price', 0)
+                        
+                        if wedge_type == 'rising_wedge':  # Bearish pattern
+                            # Stop above the upper trend line
+                            stop_level = max(start_price, end_price) * 1.015  # 1.5% above highest point
+                        elif wedge_type == 'falling_wedge':  # Bullish pattern
+                            # Stop below the lower trend line  
+                            stop_level = min(start_price, end_price) * 0.985  # 1.5% below lowest point
+                        else:
+                            # Generic wedge - use average
+                            avg_price = (start_price + end_price) / 2
+                            stop_level = avg_price * 0.98  # 2% stop
+                        
                         advanced_patterns["wedge_patterns"].append({
                             "start_date": str(data.index[start_index]) if start_index < len(data) else str(data.index[0]),
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
@@ -943,6 +995,9 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "confidence": float(quality_score),
                             "pattern_type": pattern.get('type', 'wedge'),  # Use pattern's own type
                             "type": pattern.get('type', 'wedge'),  # Also set type for compatibility
+                            "target": float(pattern.get('target', 0)) if pattern.get('target') is not None else None,
+                            "stop_level": float(stop_level) if stop_level else None,
+                            "completion_status": pattern.get('completion_status', 'forming'),
                             "description": f"Wedge pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
@@ -962,6 +1017,29 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             
                         start_index = pattern.get('start_index', 0)
                         end_index = pattern.get('end_index', len(data) - 1)
+                        # Calculate stop level for channel patterns
+                        channel_type = pattern.get('type', 'channel')
+                        start_price = pattern.get('start_price', 0)
+                        end_price = pattern.get('end_price', 0)
+                        
+                        # Get current price to determine likely breakout direction
+                        current_price = data['close'].iloc[-1] if not data.empty else (start_price + end_price) / 2
+                        
+                        if channel_type == 'ascending_channel':  # Bullish bias
+                            # Stop below lower channel line
+                            stop_level = min(start_price, end_price) * 0.985  # 1.5% below lower boundary
+                        elif channel_type == 'descending_channel':  # Bearish bias
+                            # Stop above upper channel line
+                            stop_level = max(start_price, end_price) * 1.015  # 1.5% above upper boundary
+                        else:  # horizontal_channel or generic
+                            # Stop outside channel based on current price position
+                            if current_price > (start_price + end_price) / 2:
+                                # Above midline, expect upward breakout, stop below
+                                stop_level = min(start_price, end_price) * 0.985
+                            else:
+                                # Below midline, expect downward breakout, stop above
+                                stop_level = max(start_price, end_price) * 1.015
+                        
                         advanced_patterns["channel_patterns"].append({
                             "start_date": str(data.index[start_index]) if start_index < len(data) else str(data.index[0]),
                             "end_date": str(data.index[end_index]) if end_index < len(data) else str(data.index[-1]),
@@ -971,13 +1049,21 @@ IMPORTANT: Consider this multi-timeframe context when analyzing the stock. Pay s
                             "confidence": float(quality_score),
                             "pattern_type": pattern.get('type', 'channel'),  # Use pattern's own type
                             "type": pattern.get('type', 'channel'),  # Also set type for compatibility
+                            "target": float(pattern.get('target', 0)) if pattern.get('target') is not None else None,
+                            "stop_level": float(stop_level) if stop_level else None,
+                            "completion_status": pattern.get('completion_status', 'forming'),
                             "description": f"Channel pattern with {quality_score:.1f}% confidence"
                         })
                     except Exception as e:
                         print(f"Warning: Error processing Channel pattern: {e}")
                         continue
                 
-                print(f"🔍 DEBUG: Total advanced patterns detected: {sum(len(patterns) for patterns in advanced_patterns.values())}")
+                total_patterns = sum(len(patterns) for patterns in advanced_patterns.values())
+                print(f"🔍 DEBUG: Total advanced patterns detected: {total_patterns}")
+                for pattern_type, patterns in advanced_patterns.items():
+                    print(f"🔍 DEBUG: {pattern_type}: {len(patterns)} patterns")
+                    for i, pattern in enumerate(patterns):
+                        print(f"  Pattern {i+1}: quality={pattern.get('quality_score', 'N/A')}, start_date={pattern.get('start_date', 'N/A')}, end_date={pattern.get('end_date', 'N/A')}")
 
             except Exception as e:
                 print(f"Warning: Error detecting advanced patterns: {e}")

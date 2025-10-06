@@ -10,6 +10,7 @@ A state-of-the-art, AI-powered stock analysis backend providing technical analys
 - **Sector Benchmarking**: Hybrid approach for sector-specific and market-wide benchmarking, with sector rotation and correlation analysis.
 - **Real-Time Data**: Live market data and streaming via Zerodha API and WebSocket with multi-service architecture.
 - **Advanced ML System**: Reorganized quantitative trading system with pattern ML, raw data ML, and hybrid approaches.
+- **Agent-Based Analysis**: Modular Volume Agents, Risk Analysis Agent, and Multi-Timeframe (MTF) Agents running in parallel.
 - **Microservices Architecture**: Scalable service-oriented architecture with consolidated and individual service deployment options.
 - **Enhanced Visualization**: Chart generation with pattern overlays, multi-pane charts, and real-time updates.
 - **Comprehensive Backtesting**: Advanced backtesting framework with realistic constraints and performance analysis.
@@ -41,8 +42,12 @@ The system is built as a collection of microservices that can be deployed indepe
 - **PatternVisualizer/ChartVisualizer** (`patterns/visualization.py`): Generates pattern and comparison charts.
 - **GeminiClient** (`gemini/gemini_client.py`): Interfaces with Gemini LLM for AI-powered analysis and summary generation.
 - **SectorBenchmarkingProvider** (`agents/sector/benchmarking.py`): Provides sector benchmarking, rotation, and correlation analysis.
+- **SectorCacheManager** (`agents/sector/cache_manager.py`): File-based cache for sector-agnostic context (rotation/correlation).
 - **ZerodhaDataClient** (`zerodha/client.py`): Handles all data retrieval from Zerodha APIs.
 - **SectorClassifier/EnhancedSectorClassifier** (`agents/sector/`): Classifies stocks into sectors using JSON-driven mappings and advanced filtering.
+- **VolumeAgentIntegrationManager** (`agents/volume/__init__.py`): Runs 5 volume agents concurrently and aggregates results.
+- **MTFAgentsOrchestrator/CoreMTFProcessor** (`agents/mtf_analysis/`): New agent-based multi-timeframe analysis engine.
+- **FinalDecisionProcessor** (`agents/final_decision/processor.py`): Centralized final decision agent combining deterministic and LLM contexts.
 
 #### Module Placement Note: `advanced_analysis.py`
 
@@ -85,12 +90,17 @@ Safe migration plan (if moving):
 
 ### Analysis Flow
 
-1. **Data Retrieval**: Fetch historical OHLCV data from Zerodha.
-2. **Technical Analysis**: Calculate all technical indicators.
-3. **Pattern Recognition**: Detect chart and volume patterns.
-4. **AI Analysis**: Generate insights and trading recommendations using Gemini LLM.
-5. **Sector Context**: Apply sector benchmarking, rotation, and correlation context.
-6. **Results Assembly**: Compile and serialize results for API response.
+1. **Data Retrieval**: Fetch historical OHLCV data (EDS → WebSocket snapshot → Zerodha fallback).
+2. **Indicators**: Calculate optimized indicators; handle minimal fallback for low bars.
+3. **Parallel Agents**: Launch independent tasks in parallel:
+   - Volume Agents: POST `/agents/volume/analyze-all` (reuses prefetched data via correlation_id)
+   - Risk Analysis Agent: POST `/agents/risk/analyze-all` (quant metrics, stress tests, LLM bullets)
+   - MTF Analysis: `mtf_agent_integration_manager.get_comprehensive_mtf_analysis`
+   - Advanced Analysis Digest: scenario probabilities, stress summaries
+   - Sector Context: benchmarking, rotation, correlation (with file-based cache)
+   - Indicator Summary LLM: curated indicators to markdown + JSON
+4. **Final Decision**: Centralized FinalDecisionProcessor combines labeled contexts (indicators, MTF, risk, sector, advanced) via Gemini.
+5. **Response Assembly**: Build UI response and persist to Database Service.
 
 ---
 
@@ -103,20 +113,34 @@ All endpoints are served via FastAPI through the consolidated service or individ
 The system can be deployed as:
 - **Consolidated Service**: Single FastAPI app with all endpoints
 - **Microservices**: Individual services on different ports
-  - Analysis Service: Port 8001
+- Analysis Service: Port 8002
   - Data Service: Port 8000
   - Database Service: Port 8003
   - WebSocket Service: Port 8081
 
-### Main Analysis Endpoints
+### Main Analysis Endpoints (Analysis Service)
 
-- `POST /analysis/full` — Run full AI-powered analysis for a stock.
-  - **Request:** `{ "symbol": "RELIANCE", "exchange": "NSE", "period": 365, "interval": "day" }`
-  - **Response:** Complete analysis results with AI insights
+- `POST /analyze` — Backward-compatible shim; forwards to `/analyze/enhanced`.
+- `POST /analyze/enhanced` — Enhanced analysis; runs volume, risk, MTF, sector, advanced in parallel; final decision via LLM.
+- `POST /analyze/enhanced-mtf` — Returns comprehensive multi-timeframe analysis (agent-based).
+- `POST /analyze/async` — Async index-data analysis path.
 
-- `POST /analysis/enhanced` — Enhanced analysis with advanced ML features
-- `POST /analysis/risk` — Risk assessment for a stock
-- `POST /analysis/backtest` — Backtesting analysis
+Indicators, Patterns, Charts
+- `GET /stock/{symbol}/indicators?interval=1day&exchange=NSE&indicators=rsi,macd,sma,ema,bollinger`
+- `GET /patterns/{symbol}?interval=1day&exchange=NSE&pattern_types=all`
+- `GET /charts/{symbol}?interval=1day&…&chart_types=all`
+
+Sector
+- `POST /agents/sector/analyze-all` — Comprehensive sector context (benchmarking, rotation, correlation, synthesis bullets).
+- `POST /sector/benchmark` — Thin wrapper delegating to analyze-all (compat).
+- `GET /sector/list`, `GET /sector/{sector_name}/stocks`, `GET /sector/{sector_name}/performance`, `POST /sector/compare`
+
+Volume Agents
+- `POST /agents/volume/analyze-all` — Aggregated multi-agent volume analysis (uses prefetch cache via correlation_id).
+- Single-agent: `/agents/volume/anomaly`, `/agents/volume/institutional`, `/agents/volume/confirmation`, `/agents/volume/support-resistance`, `/agents/volume/momentum`
+
+Risk Agent
+- `POST /agents/risk/analyze-all` — Quantitative risk metrics, stress tests, scenarios, and LLM risk bullets.
 
 ### Data Service Endpoints
 
@@ -460,7 +484,7 @@ JWT_SECRET=your_jwt_secret
 
 # Service URLs (for microservices deployment)
 DATABASE_SERVICE_URL=http://localhost:8003
-ANALYSIS_SERVICE_URL=http://localhost:8001
+ANALYSIS_SERVICE_URL=http://localhost:8002
 DATA_SERVICE_URL=http://localhost:8000
 
 # Test Mode Configuration (Optional)

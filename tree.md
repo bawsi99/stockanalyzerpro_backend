@@ -350,6 +350,30 @@ backend/
 │   ├── optimized_reversal_patterns.txt
 │   ├── optimized_technical_overview.txt
 │   └── optimized_volume_analysis.txt
+├── agents/
+│   ├── __init__.py
+│   ├── final_decision/
+│   │   └── processor.py
+│   ├── mtf_analysis/
+│   │   ├── __init__.py
+│   │   ├── core/
+│   │   │   └── processor.py
+│   │   ├── integration_manager.py
+│   │   ├── mtf_agents.py
+│   │   └── orchestrator.py
+│   ├── risk_analysis/
+│   │   ├── __init__.py
+│   │   ├── quantitative_risk/
+│   │   │   └── processor.py
+│   │   └── risk_llm_agent.py
+│   ├── sector/
+│   │   ├── benchmarking.py
+│   │   ├── cache_manager.py
+│   │   ├── classifier.py
+│   │   └── enhanced_classifier.py
+│   └── volume/
+│       ├── __init__.py
+│       └── volume_agents.py
 ├── risk/
 │   ├── bayesian_scorer.py
 │   └── scoring.py
@@ -393,6 +417,7 @@ The backend directory contains a comprehensive stock analysis and trading system
 
 ### Core Modules
 - **analysis/**: Advanced analysis modules including heavy load processing and orchestration
+- **agents/**: Agent-based systems (volume, multi-timeframe analysis, risk analysis, sector)
 - **api/**: FastAPI endpoints and responses
 - **backtesting/**: Backtesting functionality for trading strategies
 - **cache/**: Cached data storage (30 CSV files)
@@ -402,7 +427,7 @@ The backend directory contains a comprehensive stock analysis and trading system
 - **gemini/**: AI/ML integration with Google Gemini
 - **ml/**: Machine learning models, analysis, and quantitative trading system
 - **patterns/**: Pattern recognition and confirmation modules
-- **risk/**: Risk management and scoring systems
+- **risk/**: Risk management and scoring systems (legacy helpers; primary risk analysis now under agents/risk_analysis)
 - **services/**: Various backend services for data processing and analysis
 - **zerodha/**: Zerodha trading platform integration
 
@@ -424,8 +449,9 @@ The backend directory contains a comprehensive stock analysis and trading system
 - **Prompt files**: 15 text files for AI prompts
 
 ### Recent Changes
+- **Agent-Based Architecture**: Introduced `agents/` with volume, risk_analysis, mtf_analysis, and sector components
 - **ML Structure Reorganization**: The `ml/quant_system/` directory has been reorganized with better separation of concerns
 - **New Analysis Module**: Added dedicated `analysis/` directory for advanced analysis functionality
 - **Pattern Recognition**: Moved pattern-related modules to dedicated `patterns/` directory
-- **Risk Management**: Separated risk management into dedicated `risk/` directory
+- **Risk Management**: Separated risk helpers under `risk/`; primary risk analysis now under `agents/risk_analysis`
 - **Enhanced Data Structure**: Improved organization of data files and caching system

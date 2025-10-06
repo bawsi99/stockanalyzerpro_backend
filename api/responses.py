@@ -260,14 +260,14 @@ class FrontendResponseBuilder:
                     "charts": {}, # Empty charts - frontend uses dedicated /charts endpoint
                     # Unified ML predictions surfaced for frontend (if available)
                     "ml_predictions": ml_predictions or {},
-                    "overlays": FrontendResponseBuilder._build_overlays(
-                        data,
-                        advanced_analysis.get("advanced_patterns", {}),
-                        symbol=symbol,
-                        exchange=exchange,
-                        interval=interval,
-                        latest_price=latest_price,
-                    ),
+        "overlays": FrontendResponseBuilder._build_overlays(
+            data,
+            {},  # Remove advanced_analysis patterns - use only orchestrator patterns
+            symbol=symbol,
+            exchange=exchange,
+            interval=interval,
+            latest_price=latest_price,
+        ),
                     # Derive risk level and recommendation from AI analysis using helper functions
                     "risk_level": _calculate_risk_level(ai_analysis.get('confidence_pct', 0)),
                     "recommendation": _calculate_recommendation(ai_analysis.get('confidence_pct', 0), ai_analysis.get('trend', 'Unknown')),
@@ -1173,7 +1173,17 @@ class FrontendResponseBuilder:
                 }
             else:
                 if orchestrator is not None:
+                    print(f"🔍 DEBUG: Calling orchestrator._create_overlays with data length: {len(data)}")
                     overlays = orchestrator._create_overlays(data, {})
+                    print(f"🔍 DEBUG: Orchestrator returned overlays keys: {list(overlays.keys()) if overlays else 'None'}")
+                    if overlays and 'advanced_patterns' in overlays:
+                        adv_patterns = overlays['advanced_patterns']
+                        print(f"🔍 DEBUG: Advanced patterns keys: {list(adv_patterns.keys()) if adv_patterns else 'None'}")
+                        total_patterns = sum(len(patterns) for patterns in adv_patterns.values()) if adv_patterns else 0
+                        print(f"🔍 DEBUG: Total advanced patterns from orchestrator: {total_patterns}")
+                        for pattern_type, patterns in (adv_patterns.items() if adv_patterns else []):
+                            if patterns:
+                                print(f"🔍 DEBUG: {pattern_type}: {len(patterns)} patterns")
                 else:
                     # Fallback when orchestrator is not available
                     overlays = {
@@ -1189,6 +1199,7 @@ class FrontendResponseBuilder:
 
             # Prefer orchestrator-detected advanced patterns; merge in any external ones (from advanced_analysis)
             backend_adv = overlays.get("advanced_patterns", {}) or {}
+            
 
             def _ensure_adv_shape(obj: dict | None) -> dict:
                 base = obj or {}
@@ -1219,16 +1230,23 @@ class FrontendResponseBuilder:
                     merged[key] = list(backend_norm.get(key, [])) + list(external_norm.get(key, []))
                 return merged
 
-            merged_advanced = _merge_advanced(backend_adv, advanced_patterns) if _has_any_patterns(advanced_patterns) else _ensure_adv_shape(backend_adv)
+            # Since we're only using orchestrator patterns now, no need to merge
+            merged_advanced = _ensure_adv_shape(backend_adv)
 
             # Filter out zero-quality patterns at the final assembly layer
             def _filter_zero_quality(obj: dict) -> dict:
                 def _q(p: dict) -> float:
-                    return float(p.get('quality_score') or p.get('confidence') or p.get('completion') or 0)
+                    return float(p.get('quality_score') or p.get('quality') or p.get('confidence') or p.get('completion') or 0)
                 out = {}
                 for k, arr in obj.items():
                     if isinstance(arr, list):
-                        out[k] = [p for p in arr if _q(p) > 0]
+                        # Filter out patterns with quality < 70
+                        original_count = len(arr)
+                        filtered_patterns = [p for p in arr if _q(p) >= 70.0]
+                        filtered_count = len(filtered_patterns)
+                        if original_count > filtered_count:
+                            print(f"🔍 DEBUG: Quality filter {k}: {original_count} -> {filtered_count} patterns (removed {original_count - filtered_count} patterns with quality < 70)")
+                        out[k] = filtered_patterns
                     else:
                         out[k] = arr
                 return out
@@ -1267,7 +1285,7 @@ class FrontendResponseBuilder:
                         'duration': float(p.get('duration') or p.get('length') or 0.0),
                         'volume_ratio': float(p.get('volume_ratio') or 1.0),
                         'trend_alignment': float(p.get('trend_alignment') or 0.0),
-                        'completion': float(p.get('completion') or p.get('quality_score') or p.get('confidence') or 0.0),
+                        'completion': float(p.get('completion') or p.get('quality_score') or p.get('quality') or p.get('confidence') or 0.0),
                     }
                     
                     # Get ML-powered prediction
@@ -1308,6 +1326,17 @@ class FrontendResponseBuilder:
                 # Keep probability (0-100) for frontend; store also as 0-1
                 out['probability'] = float(score)
                 out['probability_fraction'] = float(score) / 100.0
+                
+                # Ensure start_date and end_date are preserved if they exist
+                if 'start_date' in p:
+                    out['start_date'] = p['start_date']
+                if 'end_date' in p:
+                    out['end_date'] = p['end_date']
+                if 'start_price' in p:
+                    out['start_price'] = p['start_price']
+                if 'end_price' in p:
+                    out['end_price'] = p['end_price']
+                
                 # Map common fields for frontend to avoid empty cards
                 if type_key == 'triple_tops':
                     if out.get('target_level') is None and out.get('target') is not None:
@@ -1395,6 +1424,7 @@ class FrontendResponseBuilder:
                 if not isinstance(arr, list) or not arr:
                     return []
                 normalized = [_normalize_entry(type_key, p) for p in arr if isinstance(p, dict)]
+                
                 seen = set()
                 unique = []
                 for p in normalized:
@@ -1445,6 +1475,16 @@ class FrontendResponseBuilder:
                         support_list = sup
                         resistance_list = res
 
+            # DEBUG: Log final overlays structure
+            final_advanced_total = sum(len(patterns) for patterns in merged_advanced.values()) if merged_advanced else 0
+            print(f"🔍 DEBUG: Final merged_advanced patterns total: {final_advanced_total}")
+            for pattern_type, patterns in (merged_advanced.items() if merged_advanced else []):
+                if patterns:
+                    print(f"🔍 DEBUG: Final {pattern_type}: {len(patterns)} patterns")
+                    for i, pattern in enumerate(patterns):
+                        quality_val = pattern.get('quality_score') or pattern.get('quality') or pattern.get('confidence') or 'N/A'
+                        print(f"  Final Pattern {i+1}: quality={quality_val}, start_date={pattern.get('start_date', 'N/A')}, end_date={pattern.get('end_date', 'N/A')}")
+            
             return {
                 "triangles": overlays.get("triangles", []),
                 "flags": overlays.get("flags", []),
