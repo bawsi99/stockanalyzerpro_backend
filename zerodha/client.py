@@ -16,6 +16,8 @@ import aiohttp
 from concurrent.futures import ThreadPoolExecutor
 import tempfile
 from threading import RLock
+from functools import wraps
+import random
 
 
 # Set up logging
@@ -47,6 +49,53 @@ def get_env_value(key: str, env_path: str = str(ENV_PATH)) -> str:
     if system_value:
         logger.info(f"Using system environment variable for {key}")
     return system_value
+
+
+def retry_api_call(func_to_retry, max_retries=3, base_delay=1.0, backoff_factor=2.0, jitter=True, *args, **kwargs):
+    """Retry a function call on network failures with exponential backoff.
+    
+    Args:
+        func_to_retry: The function to retry
+        max_retries: Maximum number of retry attempts
+        base_delay: Base delay in seconds before first retry
+        backoff_factor: Factor to multiply delay by after each retry
+        jitter: Whether to add random jitter to delay
+        *args, **kwargs: Arguments to pass to the function
+    
+    Returns:
+        The result of the function call or None if all retries failed
+    """
+    last_exception = None
+    
+    for attempt in range(max_retries + 1):  # +1 for initial attempt
+        try:
+            return func_to_retry(*args, **kwargs)
+        except (NetworkException, ConnectionError, TimeoutError) as e:
+            last_exception = e
+            
+            if attempt == max_retries:
+                logger.error(f"Max retries ({max_retries}) exceeded for {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'}: {e}")
+                break
+            
+            # Calculate delay with exponential backoff
+            delay = base_delay * (backoff_factor ** attempt)
+            if jitter:
+                delay = delay * (0.5 + random.random() * 0.5)  # Add 0-50% jitter
+            
+            logger.warning(f"Network error in {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'} (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {delay:.2f} seconds...")
+            time.sleep(delay)
+            
+        except TokenException as e:
+            # Don't retry on token errors, let auto_refresh_token handle it
+            raise e
+        except Exception as e:
+            # Don't retry on other exceptions (like data processing errors)
+            logger.error(f"Non-retryable error in {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'}: {e}")
+            return None
+    
+    # If we get here, all retries failed
+    logger.error(f"All retry attempts failed for {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'}")
+    return None
 
 
 def auto_refresh_token(func):
@@ -385,8 +434,14 @@ class ZerodhaDataClient:
                 logger.warning(f"Failed to load cached instruments CSV: {e}. Falling back to API.")
 
         try:
-            # Fetch from Zerodha API
-            instruments = self.kite.instruments(exchange=exchange)
+            # Fetch from Zerodha API with retry mechanism
+            instruments = retry_api_call(
+                self.kite.instruments,
+                max_retries=3,
+                exchange=exchange
+            )
+            if instruments is None:
+                return None
             df = pd.DataFrame(instruments)
 
             # Save new CSV
@@ -595,14 +650,19 @@ class ZerodhaDataClient:
             # Implement rate limiting
             self._wait_for_rate_limit()
 
-            # Fetch historical data (daily if aggregating)
-            data = self.kite.historical_data(
+            # Fetch historical data with retry mechanism
+            data = retry_api_call(
+                self.kite.historical_data,
+                max_retries=3,
                 instrument_token=instrument_token,
                 from_date=from_date,
                 to_date=to_date,
                 interval=fetch_interval,
                 continuous=False
             )
+            if data is None:
+                logger.error(f"Failed to fetch historical data for {symbol} after retries")
+                return None
 
             df = pd.DataFrame(data)
             if df.empty:
@@ -709,8 +769,18 @@ class ZerodhaDataClient:
             # Format the instrument for Kite
             instrument = f"{exchange}:{symbol}"
             
-            # Get quote
-            quotes = self.kite.quote([instrument])
+            # Get quote with retry mechanism
+            quotes = retry_api_call(
+                self.kite.quote,
+                3,  # max_retries
+                1.0,  # base_delay
+                2.0,  # backoff_factor
+                True,  # jitter
+                [instrument]  # positional argument for kite.quote
+            )
+            if quotes is None:
+                logger.error(f"Failed to fetch quote for {symbol} after retries")
+                return None
             
             if instrument in quotes:
                 return quotes[instrument]
@@ -799,8 +869,15 @@ class ZerodhaDataClient:
             
             # Try to get a quote for NIFTY 50 to verify if market is actually open
             try:
-                nifty_quote = self.kite.quote(["NSE:NIFTY 50"])
-                if "NSE:NIFTY 50" in nifty_quote:
+                nifty_quote = retry_api_call(
+                    self.kite.quote,
+                    2,  # max_retries - Use fewer retries for market status check
+                    1.0,  # base_delay
+                    2.0,  # backoff_factor
+                    True,  # jitter
+                    ["NSE:NIFTY 50"]  # positional argument for kite.quote
+                )
+                if nifty_quote and "NSE:NIFTY 50" in nifty_quote:
                     last_trade_time = nifty_quote["NSE:NIFTY 50"].get("timestamp")
                     if last_trade_time:
                         # Convert to datetime if it's a string
