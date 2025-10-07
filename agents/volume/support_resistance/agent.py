@@ -7,10 +7,14 @@ Agent wrapper that integrates the Support/Resistance Processor with the agent sy
 
 import pandas as pd
 import numpy as np
+import asyncio
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import warnings
+import logging
 warnings.filterwarnings('ignore')
+
+logger = logging.getLogger(__name__)
 
 from .processor import SupportResistanceProcessor
 
@@ -40,6 +44,107 @@ class SupportResistanceAgent:
         # Minimum data requirements
         self.min_data_points = 90  # 90 days minimum for good level validation
         self.preferred_data_points = 180  # 6 months preferred
+    
+    async def analyze_complete(self, 
+                              stock_data: pd.DataFrame, 
+                              symbol: str,
+                              context: str = "") -> Dict[str, Any]:
+        """
+        Complete support/resistance analysis pipeline using distributed architecture.
+        
+        This method orchestrates:
+        1. Technical analysis
+        2. Chart generation  
+        3. LLM analysis
+        
+        Args:
+            stock_data: DataFrame with OHLCV data
+            symbol: Stock symbol
+            context: Additional context for analysis
+            
+        Returns:
+            Complete analysis results with LLM insights
+        """
+        from .llm_agent import SupportResistanceLLMAgent
+        from .charts import SupportResistanceCharts
+        
+        start_time = datetime.now()
+        
+        try:
+            # Initialize components if not already done
+            if not hasattr(self, 'llm_agent'):
+                self.llm_agent = SupportResistanceLLMAgent()
+            if not hasattr(self, 'chart_generator'):
+                self.chart_generator = SupportResistanceCharts()
+            
+            # Step 1: Technical Analysis (use existing analyze method)
+            technical_result = self.analyze(stock_data, symbol, **{})
+            
+            if 'error' in technical_result:
+                return self._format_distributed_error_result(technical_result.get('error', 'Unknown error'), symbol)
+            
+            # Extract technical analysis data
+            technical_analysis = {
+                'validated_levels': technical_result.get('detailed_analysis', {}).get('validated_levels', []),
+                'current_position_analysis': technical_result.get('current_position', {}),
+                'quality_assessment': technical_result.get('quality_assessment', {}),
+                'trading_implications': technical_result.get('trading_implications', {})
+            }
+            
+            # Step 2: Chart Generation
+            chart_image = None
+            try:
+                chart_image = await asyncio.to_thread(
+                    self.chart_generator.create_comprehensive_chart,
+                    stock_data, technical_analysis, symbol
+                )
+                if chart_image:
+                    # Convert matplotlib figure to bytes
+                    import io
+                    buf = io.BytesIO()
+                    chart_image.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+                    buf.seek(0)
+                    chart_image = buf.getvalue()
+                    buf.close()
+            except Exception as chart_error:
+                logger.warning(f"Chart generation failed for {symbol}: {chart_error}")
+            
+            # Step 3: LLM Analysis
+            llm_analysis = None
+            if chart_image:
+                try:
+                    llm_result = await self.llm_agent.analyze_with_llm(
+                        stock_data=stock_data,
+                        symbol=symbol,
+                        chart_image=chart_image,
+                        context=context
+                    )
+                    if llm_result.get('success'):
+                        llm_analysis = llm_result.get('llm_analysis')
+                except Exception as llm_error:
+                    logger.warning(f"LLM analysis failed for {symbol}: {llm_error}")
+            
+            # Step 4: Combine Results
+            processing_time = (datetime.now() - start_time).total_seconds()
+            
+            # Merge with existing results and add distributed components
+            result = technical_result.copy()
+            result.update({
+                'agent_name': 'support_resistance',
+                'processing_time': processing_time,
+                'chart_image': chart_image,
+                'llm_analysis': llm_analysis,
+                'has_llm_analysis': llm_analysis is not None,
+                'migration_status': 'fully_distributed',
+                'agent_version': '2.0.0'
+            })
+            
+            return result
+            
+        except Exception as e:
+            processing_time = (datetime.now() - start_time).total_seconds()
+            logger.error(f"Support/resistance distributed analysis failed for {symbol}: {e}")
+            return self._format_distributed_error_result(str(e), symbol, processing_time)
     
     def analyze(self, data: pd.DataFrame, symbol: str = None, **kwargs) -> Dict[str, Any]:
         """
@@ -267,6 +372,27 @@ class SupportResistanceAgent:
         }
         
         return formatted_results
+    
+    def _format_distributed_error_result(self, 
+                                       error_message: str, 
+                                       symbol: str, 
+                                       processing_time: float = 0.0) -> Dict[str, Any]:
+        """Format error result for distributed architecture."""
+        return {
+            'success': False,
+            'agent_name': 'support_resistance',
+            'symbol': symbol,
+            'timestamp': datetime.now().isoformat(),
+            'processing_time': processing_time,
+            'error': error_message,
+            'technical_analysis': {'error': error_message},
+            'chart_image': None,
+            'llm_analysis': None,
+            'has_llm_analysis': False,
+            'confidence_score': 0,
+            'migration_status': 'fully_distributed',
+            'agent_version': '2.0.0'
+        }
     
     def _create_analysis_summary(self, analysis_results: Dict[str, Any]) -> Dict[str, Any]:
         """Create high-level analysis summary"""

@@ -796,13 +796,19 @@ async def health_check():
         except Exception:
             zerodha_status = "error"
         
-        # Check Gemini API key
-        gemini_status = "unknown"
+        # Check LLM API keys (new backend/llm system)
+        llm_status = "unknown"
         try:
-            gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_GEMINI_API_KEY")
-            gemini_status = "configured" if gemini_api_key else "not_configured"
+            # Check for any configured LLM providers
+            from llm.config.config import LLMConfig
+            llm_config = LLMConfig()
+            available_providers = llm_config.get_available_providers()
+            if available_providers:
+                llm_status = "configured"
+            else:
+                llm_status = "not_configured"
         except Exception:
-            gemini_status = "error"
+            llm_status = "error"
         
         # Check sector classifiers (use existing global instances)
         sector_status = "unknown"
@@ -830,7 +836,7 @@ async def health_check():
             "timestamp": pd.Timestamp.now().isoformat(),
             "components": {
                 "zerodha_data_client": zerodha_status,
-                "gemini_ai": gemini_status,
+                "llm_system": llm_status,
                 "sector_classifiers": sector_status,
                 "database_service": database_service_status,
                 "main_event_loop": "running" if MAIN_EVENT_LOOP and not MAIN_EVENT_LOOP.is_closed() else "not_running"
@@ -1214,51 +1220,43 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
 
         sector_task = asyncio.create_task(_with_logging("sector", _sector(), timeout=220.0))  # Increased from 120s to 220s to be longer than HTTP timeout (200s)
 
-        # Indicator summary LLM (runs in parallel with volume/MTF/sector/advanced)
+        # Indicator summary LLM (runs in parallel with volume/MTF/sector/advanced) - NEW SYSTEM
         async def _indicator_summary():
             try:
-                # Log which API key is being used
-                api_key_hint = orchestrator.gemini_client.core.api_key[-8:] if orchestrator.gemini_client.core.api_key else "unknown"
-                print(f"🔑 [INDICATOR_SUMMARY] Using API key ending in: ...{api_key_hint}")
+                print(f"🚀 [INDICATOR_SUMMARY] Using NEW backend/llm system with indicator-specific logic")
                 
-                # Try curated indicators via agents manager
-                curated = None
-                try:
-                    success, curated = await orchestrator.indicator_agents_manager.get_curated_indicators_analysis(
-                        symbol=request.stock, stock_data=stock_data, indicators=indicators, context=""
-                    )
-                    if not success:
-                        curated = None
-                except Exception:
-                    curated = None
-                if curated is None:
-                    curated = {
-                        "analysis_focus": "technical_indicators_summary",
-                        "key_indicators": {},
-                        "critical_levels": {},
-                        "conflict_analysis_needed": False,
-                        "detected_conflicts": {"has_conflicts": False, "conflict_count": 0, "conflict_list": []},
-                        "fallback_used": True,
-                        "source": "enhanced_analyze_fallback"
-                    }
-                md, ind_json, dbg = await orchestrator.gemini_client.build_indicators_summary(
+                # Use the new enhanced indicators summary with LLM integration
+                success, md, ind_json, dbg = await orchestrator.indicator_agents_manager.get_enhanced_indicators_summary(
                     symbol=request.stock,
+                    stock_data=stock_data,
                     indicators=indicators,
                     period=request.period,
                     interval=request.interval,
-                    knowledge_context="",
-                    token_tracker=None,
-                    mtf_context=None,
-                    curated_indicators=curated,
+                    context="",
                     return_debug=True
                 )
-                print(f"✅ [INDICATOR_SUMMARY] Completed with API key ...{api_key_hint}")
-                # Return the markdown, parsed dict, and the extracted json blob for final decision prompt
-                return md, ind_json, dbg.get('json_blob', '')
+                
+                if success:
+                    print(f"✅ [INDICATOR_SUMMARY] Completed with NEW system - enhanced conflict detection")
+                    # Extract json_blob from debug info for backward compatibility
+                    json_blob = dbg.get('json_blob', '') if dbg else ''
+                    return md, ind_json, json_blob
+                else:
+                    print(f"⚠️ [INDICATOR_SUMMARY] NEW system failed, using fallback: {md}")
+                    # Fallback response
+                    return "Analysis completed with fallback data", {
+                        "trend_analysis": {"direction": "neutral", "strength": "weak", "confidence": 50},
+                        "momentum": {"rsi_signal": "neutral", "macd_signal": "neutral"},
+                        "confidence_score": 50,
+                        "fallback_used": True
+                    }, ''
+                    
             except Exception as e:
-                print(f"[INDICATOR_SUMMARY] Error: {e}")
+                print(f"[INDICATOR_SUMMARY] NEW system error: {e}")
+                import traceback
+                traceback.print_exc()
                 # Fallback empty
-                return "", {}
+                return "Analysis failed", {"fallback_used": True, "error": str(e)}, ''
 
         indicator_task = asyncio.create_task(_with_logging("indicator_summary", _indicator_summary(), timeout=120.0))
 
@@ -1403,13 +1401,14 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         fd_t0 = time.monotonic()
         print(f"[TASK-START] final_decision t={fd_t0 - start_base:+.3f}s")
 
-        # Use the same API key that orchestrator was using (for continuity and rate limits)
+        # Use the new LLM system (no direct API key access needed)
         try:
-            fd_api_key = orchestrator.gemini_client.core.api_key if getattr(orchestrator, 'gemini_client', None) and getattr(orchestrator.gemini_client, 'core', None) else None
+            # The new system handles API key management internally
+            fd_api_key = None  # Let FinalDecisionProcessor use its own LLM client
         except Exception:
             fd_api_key = None
-        api_key_hint = (fd_api_key[-8:] if isinstance(fd_api_key, str) and len(fd_api_key) >= 8 else "unknown")
-        print(f"🔑 [FINAL_DECISION] Using API key ending in: ...{api_key_hint}")
+        api_key_hint = "backend/llm_system"
+        print(f"🔑 [FINAL_DECISION] Using new backend/llm system for processing")
 
         from agents.final_decision.processor import FinalDecisionProcessor
         fd_processor = FinalDecisionProcessor(api_key=fd_api_key)
@@ -3029,15 +3028,20 @@ async def agents_volume_anomaly(req: VolumeAgentRequest):
         except Exception:
             indicators = {}
 
-        # Run single agent
-        vao = VolumeAgentsOrchestrator(orchestrator.gemini_client)
-        result = await vao._execute_agent(
-            "volume_anomaly",
-            vao.agent_config["volume_anomaly"],
-            stock_data,
-            req.symbol,
-            indicators
-        )
+        # Run single agent using new distributed architecture
+        from agents.volume.volume_anomaly.agent import VolumeAnomalyAgent
+        agent = VolumeAnomalyAgent()
+        result_data = await agent.analyze_complete(stock_data, req.symbol)
+        
+        # Convert to compatible format
+        result = type('Result', (), {
+            'success': result_data.get('success', False),
+            'processing_time': result_data.get('processing_time', 0.0),
+            'confidence_score': result_data.get('confidence_score', 0),
+            'analysis_data': result_data.get('technical_analysis', {}),
+            'error_message': result_data.get('error'),
+            'prompt_text': None  # Not exposed in new architecture
+        })()
         response = {
             "success": result.success,
             "processing_time": result.processing_time,
@@ -3092,15 +3096,20 @@ async def agents_volume_institutional(req: VolumeAgentRequest):
         except Exception:
             indicators = {}
 
-        # Run single agent
-        vao = VolumeAgentsOrchestrator(orchestrator.gemini_client)
-        result = await vao._execute_agent(
-            "institutional_activity",
-            vao.agent_config["institutional_activity"],
-            stock_data,
-            req.symbol,
-            indicators
-        )
+        # Run single agent using new distributed architecture
+        from agents.volume.institutional_activity.agent import InstitutionalActivityAgent
+        agent = InstitutionalActivityAgent()
+        result_data = await agent.analyze_complete(stock_data, req.symbol)
+        
+        # Convert to compatible format
+        result = type('Result', (), {
+            'success': result_data.get('success', False),
+            'processing_time': result_data.get('processing_time', 0.0),
+            'confidence_score': result_data.get('confidence_score', 0),
+            'analysis_data': result_data.get('technical_analysis', {}),
+            'error_message': result_data.get('error'),
+            'prompt_text': None  # Not exposed in new architecture
+        })()
         response = {
             "success": result.success,
             "processing_time": result.processing_time,
@@ -3155,15 +3164,20 @@ async def agents_volume_confirmation(req: VolumeAgentRequest):
         except Exception:
             indicators = {}
 
-        # Run single agent
-        vao = VolumeAgentsOrchestrator(orchestrator.gemini_client)
-        result = await vao._execute_agent(
-            "volume_confirmation",
-            vao.agent_config["volume_confirmation"],
-            stock_data,
-            req.symbol,
-            indicators
-        )
+        # Run single agent using new distributed architecture
+        from agents.volume.volume_confirmation.llm_agent import create_volume_confirmation_llm_agent
+        agent = create_volume_confirmation_llm_agent()
+        result_data = await agent.analyze_complete(stock_data, req.symbol)
+        
+        # Convert to compatible format
+        result = type('Result', (), {
+            'success': result_data.get('success', False),
+            'processing_time': result_data.get('processing_time', 0.0),
+            'confidence_score': result_data.get('confidence_score', 0),
+            'analysis_data': result_data.get('technical_analysis', {}),
+            'error_message': result_data.get('error'),
+            'prompt_text': None  # Not exposed in new architecture
+        })()
         response = {
             "success": result.success,
             "processing_time": result.processing_time,
@@ -3218,15 +3232,20 @@ async def agents_volume_support_resistance(req: VolumeAgentRequest):
         except Exception:
             indicators = {}
 
-        # Run single agent
-        vao = VolumeAgentsOrchestrator(orchestrator.gemini_client)
-        result = await vao._execute_agent(
-            "support_resistance",
-            vao.agent_config["support_resistance"],
-            stock_data,
-            req.symbol,
-            indicators
-        )
+        # Run single agent using new distributed architecture
+        from agents.volume.support_resistance.llm_agent import SupportResistanceLLMAgent
+        agent = SupportResistanceLLMAgent()
+        result_data = await agent.analyze_complete(stock_data, req.symbol)
+        
+        # Convert to compatible format
+        result = type('Result', (), {
+            'success': result_data.get('success', False),
+            'processing_time': result_data.get('processing_time', 0.0),
+            'confidence_score': result_data.get('confidence_score', 0),
+            'analysis_data': result_data.get('technical_analysis', {}),
+            'error_message': result_data.get('error'),
+            'prompt_text': None  # Not exposed in new architecture
+        })()
         response = {
             "success": result.success,
             "processing_time": result.processing_time,
@@ -3281,15 +3300,20 @@ async def agents_volume_momentum(req: VolumeAgentRequest):
         except Exception:
             indicators = {}
 
-        # Run single agent
-        vao = VolumeAgentsOrchestrator(orchestrator.gemini_client)
-        result = await vao._execute_agent(
-            "volume_momentum",
-            vao.agent_config["volume_momentum"],
-            stock_data,
-            req.symbol,
-            indicators
-        )
+        # Run single agent using new distributed architecture
+        from agents.volume.volume_momentum.agent import VolumeMomentumAgent
+        agent = VolumeMomentumAgent()
+        result_data = await agent.analyze_complete(stock_data, req.symbol)
+        
+        # Convert to compatible format
+        result = type('Result', (), {
+            'success': result_data.get('success', False),
+            'processing_time': result_data.get('processing_time', 0.0),
+            'confidence_score': result_data.get('confidence_score', 0),
+            'analysis_data': result_data.get('technical_analysis', {}),
+            'error_message': result_data.get('error'),
+            'prompt_text': None  # Not exposed in new architecture
+        })()
         response = {
             "success": result.success,
             "processing_time": result.processing_time,
@@ -3410,7 +3434,7 @@ async def agents_risk_analyze_all(req: RiskAnalysisRequest):
     try:
         # Import risk analysis components
         from agents.risk_analysis.quantitative_risk.processor import QuantitativeRiskProcessor
-        from agents.risk_analysis.risk_llm_agent import risk_llm_agent
+        from agents.risk_analysis.risk_llm_agent import get_risk_llm_agent
         
         # Attempt to reuse prefetched data if provided via correlation_id
         stock_data = None
@@ -3471,7 +3495,8 @@ async def agents_risk_analyze_all(req: RiskAnalysisRequest):
         
         # Step 2: Run Risk LLM Agent for enhanced analysis
         llm_start = time.monotonic()
-        llm_success, risk_llm_analysis = await risk_llm_agent.analyze_risk_with_llm(
+        risk_agent = get_risk_llm_agent()  # Get the migrated risk agent instance
+        llm_success, risk_llm_analysis = await risk_agent.analyze_risk_with_llm(
             symbol=req.symbol,
             risk_analysis_result=risk_analysis_result,
             context=context

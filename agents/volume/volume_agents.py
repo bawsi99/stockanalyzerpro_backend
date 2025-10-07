@@ -178,81 +178,61 @@ class VolumeAgentsOrchestrator:
         self.gemini_client = gemini_client
         self.use_distributed_keys = (gemini_client is None)
         
-        # If using distributed keys, create separate gemini clients for each agent
-        if self.use_distributed_keys:
-            from gemini.api_key_manager import get_api_key_manager
-            from gemini.gemini_client import GeminiClient
+        # Initialize distributed agents - all agents now fully distributed
+        try:
+            from agents.volume.volume_confirmation.llm_agent import create_volume_confirmation_llm_agent
+            from agents.volume.support_resistance.llm_agent import SupportResistanceLLMAgent
+            from agents.volume.institutional_activity.agent import InstitutionalActivityAgent
+            from agents.volume.volume_momentum.agent import VolumeMomentumAgent
+            from agents.volume.volume_anomaly.agent import VolumeAnomalyAgent
             
-            self.key_manager = get_api_key_manager()
-            
-            # Create separate GeminiClient instances for each agent with unique API keys
-            self.agent_clients = {
-                'volume_anomaly': GeminiClient(api_key=self.key_manager.get_key_for_agent(0), agent_name='volume_anomaly'),
-                'institutional_activity': GeminiClient(api_key=self.key_manager.get_key_for_agent(1), agent_name='institutional_activity'),
-                'volume_confirmation': GeminiClient(api_key=self.key_manager.get_key_for_agent(2), agent_name='volume_confirmation'),
-                'support_resistance': GeminiClient(api_key=self.key_manager.get_key_for_agent(3), agent_name='support_resistance'),
-                'volume_momentum': GeminiClient(api_key=self.key_manager.get_key_for_agent(4), agent_name='volume_momentum')
+            # Initialize all distributed agents
+            self.llm_agents = {
+                'volume_confirmation': create_volume_confirmation_llm_agent(),
+                'support_resistance': SupportResistanceLLMAgent(),
+                'institutional_activity': InstitutionalActivityAgent(),
+                'volume_momentum': VolumeMomentumAgent(), 
+                'volume_anomaly': VolumeAnomalyAgent()
             }
-            print("🔑 Volume agents using distributed API keys (5 separate clients)")
-        else:
-            self.agent_clients = None
-            print("🔑 Volume agents using shared Gemini client")
+            
+            print("✅ All volume agents initialized with distributed architecture")
+            print(f"   - volume_confirmation: fully distributed agent")
+            print(f"   - support_resistance: fully distributed agent")
+            print(f"   - institutional_activity: fully distributed agent")
+            print(f"   - volume_momentum: fully distributed agent")
+            print(f"   - volume_anomaly: fully distributed agent")
+            
+        except Exception as e:
+            print(f"⚠️ Failed to initialize distributed agents: {e}")
+            self.llm_agents = {}
+            raise RuntimeError(f"Volume agents initialization failed: {e}")
         
-        # Initialize all agent processors
-        self.volume_anomaly = VolumeAnomalyProcessor()
-        self.institutional_activity = InstitutionalActivityProcessor()
-        self.volume_confirmation = VolumeConfirmationProcessor()
-        self.support_resistance = SupportResistanceProcessor()
-        self.volume_momentum = VolumeTrendMomentumProcessor()
-        
-        # Initialize all chart generators
-        self.anomaly_charts = VolumeAnomalyCharts()
-        self.institutional_charts = InstitutionalActivityCharts()
-        self.confirmation_charts = VolumeConfirmationCharts()
-        self.sr_charts = SupportResistanceCharts()
-        self.momentum_charts = VolumeTrendMomentumCharts()
-        
-        # Agent configuration
+        # Agent configuration - distributed agents handle everything internally
         self.agent_config = {
             'volume_anomaly': {
                 'enabled': True,
                 'weight': 0.20,
-                'timeout': None,
-                'processor': self.volume_anomaly,
-                'charts': self.anomaly_charts,
-                'prompt_template': 'volume_anomaly_analysis'
+                'timeout': None
             },
             'institutional_activity': {
                 'enabled': True,
                 'weight': 0.25,
-                'timeout': None,
-                'processor': self.institutional_activity,
-                'charts': self.institutional_charts,
-                'prompt_template': 'institutional_activity_analysis'
+                'timeout': None
             },
             'volume_confirmation': {
                 'enabled': True,
                 'weight': 0.20,
-                'timeout': None,
-                'processor': self.volume_confirmation,
-                'charts': self.confirmation_charts,
-                'prompt_template': 'volume_confirmation_analysis'
+                'timeout': None
             },
             'support_resistance': {
                 'enabled': True,
                 'weight': 0.20,
-                'timeout': None,
-                'processor': self.support_resistance,
-                'charts': self.sr_charts,
-                'prompt_template': 'volume_support_resistance'
+                'timeout': None
             },
             'volume_momentum': {
                 'enabled': True,
                 'weight': 0.15,
-                'timeout': None,
-                'processor': self.volume_momentum,
-                'charts': self.momentum_charts,
-                'prompt_template': 'volume_trend_momentum'
+                'timeout': None
             }
         }
         
@@ -503,100 +483,89 @@ class VolumeAgentsOrchestrator:
         """
         # Local import to avoid global dependency and allow patching without top-level edits
         import asyncio
-        processor = config['processor']
-        charts = config['charts']
+        
+        # Initialize start_time for timing calculations
+        start_time = time.time()
         
         try:
-            # Process data with the specific agent (offload CPU-bound processing to a thread)
-            if agent_name == 'volume_anomaly':
-                analysis_data = await asyncio.to_thread(processor.process_volume_anomaly_data, stock_data)
-            elif agent_name == 'institutional_activity':
-                analysis_data = await asyncio.to_thread(processor.process_institutional_activity_data, stock_data)
-            elif agent_name == 'volume_confirmation':
-                analysis_data = await asyncio.to_thread(processor.process_volume_confirmation_data, stock_data)
-            elif agent_name == 'support_resistance':
-                analysis_data = await asyncio.to_thread(processor.process_support_resistance_data, stock_data)
-            elif agent_name == 'volume_momentum':
-                analysis_data = await asyncio.to_thread(processor.process_volume_trend_momentum_data, stock_data)
-            else:
-                raise ValueError(f"Unknown agent: {agent_name}")
+            # All agents are now fully migrated to distributed architecture
+            if agent_name not in self.llm_agents:
+                raise ValueError(f"Agent {agent_name} not found in distributed agents")
+                
+            # Use fully distributed agent that handles everything internally
+            print(f"[DISTRIBUTED_AGENT] {agent_name} comprehensive analysis starting for {symbol}")
             
-            # Generate chart (also offload to a thread; LLM remains async)
-            chart_image = None
-            try:
-                print(f"[VOLUME_AGENT_DEBUG] {agent_name} chart generation starting for {symbol}")
-                if agent_name == 'volume_anomaly':
-                    chart_image = await asyncio.to_thread(charts.generate_volume_anomaly_chart, stock_data, analysis_data, symbol)
-                elif agent_name == 'institutional_activity':
-                    chart_image = await asyncio.to_thread(charts.generate_institutional_activity_chart, stock_data, analysis_data, symbol)
-                elif agent_name == 'volume_confirmation':
-                    chart_image = await asyncio.to_thread(charts.generate_volume_confirmation_chart, stock_data, analysis_data, symbol)
-                elif agent_name == 'support_resistance':
-                    # Support resistance uses create_comprehensive_chart method
-                    def _sr_chart_to_png():
-                        import io
-                        fig = charts.create_comprehensive_chart(stock_data, analysis_data, symbol)
-                        if not fig:
-                            return None
-                        buf = io.BytesIO()
-                        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-                        buf.seek(0)
-                        data = buf.getvalue()
-                        buf.close()
-                        try:
-                            plt.close(fig)
-                        except Exception:
-                            pass
-                        return data
-                    chart_image = await asyncio.to_thread(_sr_chart_to_png)
-                elif agent_name == 'volume_momentum':
-                    chart_image = await asyncio.to_thread(charts.generate_volume_momentum_chart, stock_data, analysis_data, symbol)
-                print(f"[VOLUME_AGENT_DEBUG] {agent_name} chart generation completed for {symbol} - has_image={chart_image is not None} size={(len(chart_image) if chart_image else 0)} bytes")
-            except Exception as chart_error:
-                logger.warning(f"Chart generation failed for {agent_name}: {chart_error}")
-                print(f"[VOLUME_AGENT_DEBUG] {agent_name} chart generation failed for {symbol}: {chart_error}")
-            
-            # Generate AI analysis if Gemini client is available
-            llm_response = None
-            prompt_text = None
-            
-            # Get the appropriate Gemini client (agent-specific or shared)
-            agent_client = None
-            if self.use_distributed_keys and self.agent_clients:
-                agent_client = self.agent_clients.get(agent_name)
-            elif self.gemini_client:
-                agent_client = self.gemini_client
-            
-            if agent_client and chart_image:
+            # Call the comprehensive analysis method (method name varies by agent)
+            if hasattr(self.llm_agents[agent_name], 'analyze_complete'):
+                # Use analyze_complete for agents that have it
+                llm_agent_result = await self.llm_agents[agent_name].analyze_complete(
+                    stock_data=stock_data,
+                    symbol=symbol,
+                    context=""
+                )
+            elif hasattr(self.llm_agents[agent_name], 'analyze_with_llm'):
+                # Fallback to analyze_with_llm for agents using that method
+                # Generate chart image first for multi-modal analysis
+                chart_image = None
                 try:
-                    prompt_text = self._build_agent_prompt(agent_name, analysis_data, symbol)
-                    # Debug: log when a volume agent LLM request is sent
-                    print(f"{agent_name.replace('_', ' ')} agent request sent")
-                    llm_response = await agent_client.analyze_volume_agent_specific(
-                        chart_image, prompt_text, agent_name
-                    )
-                except Exception as llm_error:
-                    logger.warning(f"LLM analysis failed for {agent_name}: {llm_error}")
-                    print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM call failed for {symbol}: {llm_error}")
+                    if agent_name == 'support_resistance':
+                        # Support resistance chart generation is handled internally by the agent
+                        # This is just a placeholder - the agent handles its own chart generation
+                        chart_image = None
+                    elif agent_name == 'volume_confirmation':
+                        # Placeholder for volume_confirmation chart generation if needed
+                        pass
+                    
+                    print(f"[DISTRIBUTED_AGENT] {agent_name} chart generation completed for {symbol} - has_image={chart_image is not None}")
+                except Exception as chart_error:
+                    logger.warning(f"Chart generation failed for distributed agent {agent_name}: {chart_error}")
+                    print(f"[DISTRIBUTED_AGENT] {agent_name} chart generation failed for {symbol}: {chart_error}")
+                
+                llm_agent_result = await self.llm_agents[agent_name].analyze_with_llm(
+                    stock_data=stock_data, 
+                    symbol=symbol, 
+                    chart_image=chart_image,
+                    context=""
+                )
             else:
-                if not agent_client:
-                    print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM skipped for {symbol}: gemini_client unavailable")
-                elif not chart_image:
-                    print(f"[VOLUME_AGENT_DEBUG] {agent_name} LLM skipped for {symbol}: no chart image")
+                raise ValueError(f"Agent {agent_name} does not have required analysis method")
             
-            # Extract confidence score
-            confidence_score = self._extract_confidence_score(analysis_data, llm_response)
-            
-            return VolumeAgentResult(
-                agent_name=agent_name,
-                success=True,
-                processing_time=0.0,  # Will be set by caller
-                chart_image=chart_image,
-                analysis_data=analysis_data,
-                prompt_text=prompt_text,
-                llm_response=llm_response,
-                confidence_score=confidence_score
-            )
+            if llm_agent_result.get('success', False):
+                print(f"[DISTRIBUTED_AGENT] {agent_name} comprehensive analysis completed for {symbol}")
+                
+                # Extract components for compatibility with orchestrator interface
+                technical_analysis = llm_agent_result.get('technical_analysis', {})
+                llm_analysis = llm_agent_result.get('llm_analysis')
+                
+                # Build a simple prompt summary for logging
+                prompt_text = f"Comprehensive {agent_name} analysis for {symbol} with integrated LLM processing"
+                
+                # Extract confidence score from technical analysis or use default
+                confidence_score = self._extract_confidence_score(technical_analysis, llm_analysis)
+                
+                # Extract chart image from result if available
+                chart_image = llm_agent_result.get('chart_image')
+                
+                return VolumeAgentResult(
+                    agent_name=agent_name,
+                    success=True,
+                    processing_time=0.0,  # Will be set by caller
+                    chart_image=chart_image,
+                    analysis_data=technical_analysis,
+                    prompt_text=prompt_text,
+                    llm_response=llm_analysis,
+                    confidence_score=confidence_score
+                )
+            else:
+                # Distributed agent failed
+                error_msg = llm_agent_result.get('error', 'Unknown distributed agent error')
+                print(f"[DISTRIBUTED_AGENT] {agent_name} analysis failed for {symbol}: {error_msg}")
+                return VolumeAgentResult(
+                    agent_name=agent_name,
+                    success=False,
+                    processing_time=0.0,  # Will be set by caller
+                    error_message=error_msg
+                )
             
         except Exception as e:
             processing_time = time.time() - start_time
@@ -649,17 +618,7 @@ Please analyze this volume confirmation data and provide insights on:
 4. Signal reliability and false positive risks
 """
         
-        elif agent_name == 'support_resistance':
-            return base_context + f"""
-Volume-Based Support/Resistance Analysis Data:
-{json.dumps(analysis_data, indent=2, default=str)}
-
-Please analyze this support/resistance data and provide insights on:
-1. Volume-confirmed level strength
-2. Breakout/breakdown probabilities
-3. Level reliability and historical testing
-4. Trading range identification
-"""
+        # Note: support_resistance is now handled by dedicated LLM agent
         
         elif agent_name == 'volume_momentum':
             return base_context + f"""
@@ -674,6 +633,72 @@ Please analyze this volume momentum data and provide insights on:
 """
         
         return base_context + f"Analysis Data: {json.dumps(analysis_data, indent=2, default=str)}"
+    
+    def _build_agent_prompt_with_template(self, agent_name: str, analysis_data: Dict[str, Any], symbol: str) -> str:
+        """
+        Build agent-specific prompt using template system for backend/llm agents
+        """
+        # Build context for the template
+        context = self._build_agent_context(agent_name, analysis_data, symbol)
+        
+        # Load and format template
+        template_content = self._load_agent_template(agent_name)
+        
+        # Replace context placeholder
+        final_prompt = template_content.replace('{context}', context)
+        
+        return final_prompt
+    
+    def _build_agent_context(self, agent_name: str, analysis_data: Dict[str, Any], symbol: str) -> str:
+        """
+        Build context string for agent template
+        """
+        if agent_name == 'institutional_activity':
+            return f"""Stock: {symbol}
+Analysis Timestamp: {datetime.now().isoformat()}
+
+INSTITUTIONAL ACTIVITY ANALYSIS DATA:
+{json.dumps(analysis_data, indent=2, default=str)}
+
+Key Metrics Summary:
+- Volume Profile Analysis: {len(analysis_data.get('volume_profile', {}).get('volume_at_price', []))} price levels analyzed
+- Large Block Transactions: {analysis_data.get('large_block_analysis', {}).get('total_large_blocks', 0)} detected
+- Institutional Blocks: {analysis_data.get('large_block_analysis', {}).get('institutional_block_count', 0)} detected
+- Activity Level: {analysis_data.get('institutional_activity_level', 'unknown')}
+- Primary Activity: {analysis_data.get('primary_activity', 'unknown')}
+
+Please analyze this data to identify institutional trading patterns and smart money flow."""
+        
+        # Note: support_resistance is now handled by dedicated LLM agent
+        
+        # Default context for other agents
+        return f"Stock: {symbol}\nAnalysis Data:\n{json.dumps(analysis_data, indent=2, default=str)}"
+    
+    def _load_agent_template(self, agent_name: str) -> str:
+        """
+        Load prompt template for agent
+        """
+        template_map = {
+            'institutional_activity': 'institutional_activity_analysis.txt'
+            # Note: support_resistance is now handled by dedicated LLM agent
+        }
+        
+        template_file = template_map.get(agent_name)
+        if not template_file:
+            # Fallback template
+            return "You are a {agent_name} specialist. Analyze the following data:\n\n{context}\n\nProvide detailed analysis."
+        
+        # Load template from prompts directory
+        import os
+        template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'prompts', template_file)
+        
+        try:
+            with open(template_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            logger.warning(f"Failed to load template {template_file}: {e}")
+            # Fallback template
+            return f"You are a {agent_name.replace('_', ' ')} specialist. Analyze the following data:\n\n{{context}}\n\nProvide detailed analysis."
 
     async def _aggregate_agent_results(self, 
                                      individual_results: Dict[str, VolumeAgentResult],
@@ -2972,17 +2997,24 @@ class VolumeAgentIntegrationManager:
         Check if the volume agents system is healthy and ready to use
         """
         try:
-            # Check if all required components are available
-            required_components = [
-                self.orchestrator.volume_anomaly,
-                self.orchestrator.institutional_activity,
-                self.orchestrator.volume_confirmation,
-                self.orchestrator.support_resistance,
-                self.orchestrator.volume_momentum
+            # Check if all required components are available in the distributed architecture
+            required_agent_names = [
+                'volume_anomaly',
+                'institutional_activity', 
+                'volume_confirmation',
+                'support_resistance',
+                'volume_momentum'
             ]
             
-            return all(comp is not None for comp in required_components)
-        except:
+            # Check if agents exist and are functional
+            for agent_name in required_agent_names:
+                agent = self.orchestrator.llm_agents.get(agent_name)
+                if agent is None:
+                    return False
+                    
+            return True
+        except Exception as e:
+            logger.error(f"Health check failed: {e}")
             return False
     
     def _create_degraded_analysis_result(self, symbol: str, error_message: str, processing_time: float, 
@@ -3076,42 +3108,41 @@ class VolumeAgentIntegrationManager:
         health_status = {}
         
         try:
-            # Check each agent individually
+            # Check each agent individually - use the correct orchestrator structure
             agents = {
-                'volume_anomaly': self.orchestrator.volume_anomaly,
-                'institutional_activity': self.orchestrator.institutional_activity,
-                'volume_confirmation': self.orchestrator.volume_confirmation,
-                'support_resistance': self.orchestrator.support_resistance,
-                'volume_momentum': self.orchestrator.volume_momentum
+                'volume_anomaly': self.orchestrator.llm_agents.get('volume_anomaly'),
+                'institutional_activity': self.orchestrator.llm_agents.get('institutional_activity'),
+                'volume_confirmation': self.orchestrator.llm_agents.get('volume_confirmation'),
+                'support_resistance': self.orchestrator.llm_agents.get('support_resistance'),
+                'volume_momentum': self.orchestrator.llm_agents.get('volume_momentum')
             }
             
             for agent_name, agent in agents.items():
                 try:
                     is_healthy = agent is not None
                     
-                    # Additional health checks if agent exists
-                    # Check for either shared client or distributed clients
-                    has_gemini_client = False
+                    # For distributed agents architecture, check if agent has required methods
+                    has_llm_capability = False
                     if is_healthy:
-                        if self.orchestrator.use_distributed_keys:
-                            # Using distributed keys - check agent_clients
-                            has_gemini_client = (self.orchestrator.agent_clients is not None and 
-                                               agent_name in self.orchestrator.agent_clients)
-                        else:
-                            # Using shared client
-                            has_gemini_client = (self.orchestrator.gemini_client is not None)
+                        try:
+                            # Check if agent has the expected interface
+                            if hasattr(agent, 'analyze_complete') or hasattr(agent, 'analyze') or hasattr(agent, '__call__'):
+                                has_llm_capability = True
+                        except Exception:
+                            has_llm_capability = False
                     
                     diagnostics = {
                         'initialized': is_healthy,
-                        'gemini_client_available': has_gemini_client,
-                        'using_distributed_keys': self.orchestrator.use_distributed_keys,
+                        'llm_capability': has_llm_capability,
+                        'agent_type': type(agent).__name__ if agent else 'None',
+                        'using_distributed_architecture': True,
                         'last_check': datetime.now().isoformat()
                     }
                     
                     health_status[agent_name] = {
-                        'healthy': is_healthy and diagnostics['gemini_client_available'],
+                        'healthy': is_healthy and has_llm_capability,
                         'diagnostics': diagnostics,
-                        'status': 'operational' if is_healthy and diagnostics['gemini_client_available'] else 'degraded'
+                        'status': 'operational' if is_healthy and has_llm_capability else 'degraded'
                     }
                     
                 except Exception as agent_check_error:

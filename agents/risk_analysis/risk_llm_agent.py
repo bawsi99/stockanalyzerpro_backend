@@ -34,24 +34,28 @@ class RiskLLMAgent:
     
     def __init__(self):
         self.agent_name = "risk_llm_agent"
-        # Import here to avoid circular dependencies
-        from gemini.gemini_client import GeminiClient
+        # Import backend/llm client with proper path handling
+        import sys
+        import os
+        # Add parent directory containing backend to path if not already there
+        # Current file: backend/agents/risk_analysis/risk_llm_agent.py
+        # Need to go up 4 levels to get to the directory containing backend/
+        parent_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        if parent_path not in sys.path:
+            sys.path.insert(0, parent_path)
+        from llm import get_llm_client
         
         # Load the prompt template from file
         self.prompt_template = self._load_prompt_template()
         
-        # Use rotating API key with fallback
+        # Use the new LLM client with agent-specific configuration
         try:
-            from gemini.api_key_manager import get_api_key_manager
-            key_manager = get_api_key_manager()
-            api_key = key_manager.get_key("risk_llm")
-            self.gemini_client = GeminiClient(api_key=api_key, agent_name="risk_llm")
-            logger.info(f"[{self.agent_name.upper()}] Initialized with key rotation")
+            self.llm_client = get_llm_client("risk_agent")
+            logger.info(f"[{self.agent_name.upper()}] Initialized with backend/llm client")
+            logger.info(f"[{self.agent_name.upper()}] Provider: {self.llm_client.get_provider_info()}")
         except Exception as e:
-            # Fallback to default initialization
-            logger.warning(f"[{self.agent_name.upper()}] Key manager unavailable, using default: {e}")
-            self.gemini_client = GeminiClient()
-            logger.info(f"[{self.agent_name.upper()}] Initialized with default key")
+            logger.error(f"[{self.agent_name.upper()}] Failed to initialize LLM client: {e}")
+            raise
     
     async def analyze_risk_with_llm(
         self, 
@@ -89,14 +93,19 @@ class RiskLLMAgent:
             llm_start = time.time()
             
             try:
-                # Use the core LLM call with code execution capability
-                text_response, code_results, exec_results = await self.gemini_client.core.call_llm_with_code_execution(
-                    prompt=prompt
+                # Use the new backend/llm client with code execution capability
+                text_response = await self.llm_client.generate(
+                    prompt=prompt,
+                    enable_code_execution=True
                 )
                 
                 llm_time = time.time() - llm_start
-                print(f"[RISK_LLM_AGENT_DEBUG] Received response from Gemini API for {symbol} in {llm_time:.2f}s")
+                print(f"[RISK_LLM_AGENT_DEBUG] Received response from LLM for {symbol} in {llm_time:.2f}s")
                 logger.info(f"[{self.agent_name.upper()}] LLM response received in {llm_time:.2f}s for {symbol}")
+                
+                # For compatibility with existing code, set empty code results
+                code_results = []
+                exec_results = []
                 
             except Exception as llm_error:
                 logger.error(f"[{self.agent_name.upper()}] LLM call failed for {symbol}: {llm_error}")
@@ -171,10 +180,9 @@ class RiskLLMAgent:
             str: The prompt template content, or empty string if loading fails
         """
         try:
-            # Get the path to the prompts directory
+            # Get the path to the prompt file in the same directory as this agent
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            backend_dir = os.path.dirname(os.path.dirname(current_dir))
-            prompt_file_path = os.path.join(backend_dir, 'prompts', 'risk_analysis_prompt.txt')
+            prompt_file_path = os.path.join(current_dir, 'risk_analysis_prompt.txt')
             
             # Load the template from file
             with open(prompt_file_path, 'r', encoding='utf-8') as f:
@@ -395,4 +403,14 @@ Provide comprehensive risk analysis considering all quantitative metrics."""
 
 
 # Global instance for use by the analysis service
-risk_llm_agent = RiskLLMAgent()
+_risk_llm_agent_instance = None
+
+def get_risk_llm_agent():
+    """Get or create the global risk LLM agent instance."""
+    global _risk_llm_agent_instance
+    if _risk_llm_agent_instance is None:
+        _risk_llm_agent_instance = RiskLLMAgent()
+    return _risk_llm_agent_instance
+
+# For backwards compatibility
+risk_llm_agent = None  # Will be set on first access

@@ -24,7 +24,8 @@ from dataclasses import dataclass
 import pandas as pd
 
 from .indicators_agents import indicators_orchestrator, AggregatedIndicatorAnalysis
-from ml.indicators.technical_indicators import TechnicalIndicators
+# from ml.indicators.technical_indicators import TechnicalIndicators  # Removed - causes import issues
+from .llm_integration import get_indicator_llm_integration
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,76 @@ class IndicatorAgentIntegrationManager:
             'last_success_time': self.health_metrics.last_success_time
         }
     
+    async def get_enhanced_indicators_summary(
+        self,
+        symbol: str,
+        stock_data: pd.DataFrame,
+        indicators: Dict[str, Any],
+        period: int,
+        interval: str,
+        context: str = "",
+        return_debug: bool = False
+    ) -> Tuple[bool, str, Dict[str, Any], Optional[Dict[str, Any]]]:
+        """
+        Get enhanced indicators summary using the new LLM integration system.
+        
+        This method uses the new backend/llm system with indicator-specific
+        context engineering and prompt management.
+        
+        Returns:
+            Tuple[bool, str, Dict[str, Any], Optional[Dict[str, Any]]]: 
+            (success, markdown_summary, parsed_json, debug_info)
+        """
+        logger.info(f"[INDICATOR_AGENTS] Starting enhanced LLM summary for {symbol}")
+        start_time = time.time()
+        
+        try:
+            # Check if system is healthy enough to attempt analysis
+            if not self.is_indicator_agents_healthy():
+                logger.warning(f"[INDICATOR_AGENTS] System unhealthy: {self.get_health_reason()}")
+                return False, "System unhealthy", {}, None
+            
+            # Get curated indicators from agents (existing flow)
+            success, curated_indicators = await self.get_curated_indicators_analysis(
+                symbol=symbol,
+                stock_data=stock_data,
+                indicators=indicators,
+                context=context
+            )
+            
+            if not success:
+                logger.warning(f"[INDICATOR_AGENTS] Agent analysis failed for {symbol}")
+                return False, "Agent analysis failed", {}, None
+            
+            # Use the new LLM integration system
+            llm_integration = get_indicator_llm_integration()
+            markdown_summary, parsed_json, debug_info = await llm_integration.generate_indicator_summary(
+                curated_data=curated_indicators,
+                symbol=symbol,
+                period=period,
+                interval=interval,
+                knowledge_context=context,
+                return_debug=return_debug
+            )
+            
+            processing_time = time.time() - start_time
+            
+            # Record success
+            self._record_success(processing_time)
+            
+            logger.info(f"[INDICATOR_AGENTS] Enhanced LLM summary completed for {symbol} in {processing_time:.2f}s")
+            
+            return True, markdown_summary, parsed_json, debug_info
+            
+        except Exception as e:
+            processing_time = time.time() - start_time
+            error_message = str(e)
+            logger.error(f"[INDICATOR_AGENTS] Enhanced LLM summary failed for {symbol}: {error_message}")
+            
+            self._record_failure(error_message, processing_time)
+            
+            return False, f"LLM summary failed: {error_message}", {}, None
+    
     async def get_curated_indicators_analysis(
         self, 
         symbol: str, 
@@ -179,7 +250,7 @@ class IndicatorAgentIntegrationManager:
     ) -> Dict[str, Any]:
         """
         Convert IndicatorAgentsOrchestrator unified_analysis into the curated structure
-        expected by the GeminiClient indicator summary template.
+        expected by the new backend/llm indicator LLM integration system.
         """
         try:
             indicator_summary = (unified or {}).get('indicator_summary', {})
@@ -292,21 +363,25 @@ class IndicatorAgentIntegrationManager:
             except Exception:
                 pass
 
-            # Conflicts: prefer ContextEngineer detailed analysis based on numeric indicators
+            # Conflicts: use NEW indicator-specific context engineer for detailed analysis
             detected_conflicts = {
                 "has_conflicts": False,
                 "conflict_count": 0,
                 "conflict_list": []
             }
             try:
-                from gemini.context_engineer import ContextEngineer
-                ce = ContextEngineer()
-                ce_conf = ce._comprehensive_conflict_analysis(key_indicators)
-                if isinstance(ce_conf, dict):
-                    detected_conflicts = ce_conf
+                # Use the new indicator-specific context engineer
+                from .context_engineer import indicator_context_engineer
+                enhanced_conflicts = indicator_context_engineer.detect_indicator_conflicts(key_indicators)
+                if isinstance(enhanced_conflicts, dict):
+                    detected_conflicts = enhanced_conflicts
                 else:
                     raise ValueError("Invalid conflict data")
-            except Exception:
+                    
+                logger.debug(f"[INDICATOR_AGENTS] Enhanced conflict detection: {enhanced_conflicts.get('conflict_count', 0)} conflicts, severity: {enhanced_conflicts.get('conflict_severity', 'none')}")
+                    
+            except Exception as e:
+                logger.warning(f"[INDICATOR_AGENTS] Enhanced conflict detection failed: {e}")
                 # Fallback: use agent consensus if mixed
                 if isinstance(signal_consensus, dict) and signal_consensus.get('consensus') == 'mixed':
                     detected_conflicts.update({

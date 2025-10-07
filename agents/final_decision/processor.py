@@ -4,6 +4,11 @@ Final Decision Agent
 
 Synthesizes all upstream analyses (indicators, charts, MTF, sector, risk, ML)
 into a single final JSON via optimized_final_decision prompt.
+
+MIGRATED TO USE backend/llm SYSTEM:
+- Moved all prompt processing logic to prompt_processor.py
+- Uses new LLM backend for clean API calls only
+- No dependencies on Gemini backend for prompt management
 """
 
 import json
@@ -13,7 +18,16 @@ from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from gemini.gemini_client import GeminiClient
+# New LLM backend import
+try:
+    from llm import get_llm_client
+except ImportError:
+    # Fallback for development/testing
+    def get_llm_client(*args, **kwargs):
+        raise ImportError("backend.llm not available. Please ensure it's properly installed.")
+
+# Internal prompt processor
+from .prompt_processor import FinalDecisionPromptProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +37,28 @@ class FinalDecisionProcessor:
 
     def __init__(self, api_key: Optional[str] = None) -> None:
         self.agent_name = "final_decision"
-        self.client = GeminiClient(api_key=api_key)
+        
+        # Initialize new LLM client
+        try:
+            self.llm_client = get_llm_client(
+                agent_name="final_decision_agent",
+                # Pass API key if provided for compatibility
+                **(dict(api_key=api_key) if api_key else {})
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize LLM client, falling back to direct client: {e}")
+            # Direct fallback configuration
+            self.llm_client = get_llm_client(
+                provider="gemini",
+                model="gemini-2.5-pro",
+                timeout=90,
+                max_retries=3,
+                enable_code_execution=True,
+                **(dict(api_key=api_key) if api_key else {})
+            )
+        
+        # Initialize prompt processor
+        self.prompt_processor = FinalDecisionPromptProcessor()
 
     def _inject_context_blocks(
         self,
@@ -35,46 +70,17 @@ class FinalDecisionProcessor:
         volume_analysis: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
-        Inject labeled JSON blocks and synthesis sections into knowledge_context so the
-        final decision template and Gemini helpers can leverage them.
+        Inject labeled JSON blocks and synthesis sections into knowledge_context.
+        Now delegated to the prompt processor.
         """
-        parts = [knowledge_context or ""]
-
-        # Add MTF context as labeled JSON block for downstream extraction
-        if mtf_context and isinstance(mtf_context, dict):
-            try:
-                parts.append("MultiTimeframeContext:\n" + json.dumps(mtf_context))
-            except Exception:
-                pass
-
-        # Add Advanced analysis digest as a labeled JSON block
-        if advanced_digest and isinstance(advanced_digest, dict) and len(advanced_digest) > 0:
-            try:
-                parts.append("AdvancedAnalysisDigest:\n" + json.dumps(advanced_digest))
-            except Exception:
-                pass
-
-        # Add Volume analysis - prefer combined LLM analysis text over raw JSON structure
-        if volume_analysis and isinstance(volume_analysis, dict):
-            try:
-                # Check if we have combined LLM analysis (preferred)
-                combined_llm_analysis = volume_analysis.get('combined_llm_analysis', '')
-                if combined_llm_analysis and isinstance(combined_llm_analysis, str) and len(combined_llm_analysis.strip()) > 0:
-                    # Use the human-readable LLM analysis summary
-                    parts.append("VOLUME ANALYSIS CONTEXT\n" + combined_llm_analysis.strip())
-                else:
-                    # Fallback to structured JSON if no LLM analysis available
-                    parts.append("VolumeAnalysisContext:\n" + json.dumps(volume_analysis))
-            except Exception:
-                pass
-
-        # Add Sector and Risk synthesis sections for human-readable context
-        if sector_bullets and sector_bullets.strip():
-            parts.append("SECTOR CONTEXT\n" + sector_bullets.strip())
-        if risk_bullets and risk_bullets.strip():
-            parts.append("RISK CONTEXT\n" + risk_bullets.strip())
-
-        return "\n\n".join([p for p in parts if p])
+        return self.prompt_processor.inject_context_blocks(
+            knowledge_context=knowledge_context,
+            mtf_context=mtf_context,
+            sector_bullets=sector_bullets,
+            risk_bullets=risk_bullets,
+            advanced_digest=advanced_digest,
+            volume_analysis=volume_analysis
+        )
 
     async def analyze_async(
         self,
@@ -96,7 +102,7 @@ class FinalDecisionProcessor:
             if isinstance(ind_json, dict):
                 enhanced_ind_json = deepcopy(ind_json)
                 try:
-                    existing_strategy = self.client._extract_existing_trading_strategy(enhanced_ind_json)
+                    existing_strategy = self.prompt_processor.extract_existing_trading_strategy(enhanced_ind_json)
                     if existing_strategy:
                         enhanced_ind_json["existing_trading_strategy"] = existing_strategy
                 except Exception:
@@ -105,26 +111,37 @@ class FinalDecisionProcessor:
                 enhanced_ind_json = ind_json  # pass through raw JSON blob string
 
             # Build comprehensive context for final decision
-            context = self.client._build_comprehensive_context(enhanced_ind_json, chart_insights or "", kc)
+            context = self.prompt_processor.build_comprehensive_context(enhanced_ind_json, chart_insights or "", kc)
 
             # Build the final decision prompt
-            prompt = self.client.prompt_manager.format_prompt("optimized_final_decision", context=context)
+            prompt = self.prompt_processor.format_prompt("optimized_final_decision", context=context)
 
             # Append ML guidance if present in knowledge context
             try:
-                ml_block = self.client._extract_labeled_json_block(kc or "", label="MLSystemValidation:")
-                ml_guidance_text = self.client._build_ml_guidance_text(ml_block) if ml_block else ""
+                ml_block = self.prompt_processor.extract_labeled_json_block(kc or "", label="MLSystemValidation:")
+                ml_guidance_text = self.prompt_processor.build_ml_guidance_text(ml_block) if ml_block else ""
                 if ml_guidance_text:
                     prompt += "\n\n" + ml_guidance_text
             except Exception:
                 pass
 
-            # Call LLM with code execution and parse JSON strictly
-            text_response, code_results, execution_results = await self.client.core.call_llm_with_code_execution(prompt)
+            # Add solving line to the prompt
+            prompt += self.prompt_processor.solving_line
+
+            # Call LLM using new backend
+            text_response = await self.llm_client.generate(
+                prompt=prompt,
+                enable_code_execution=True
+            )
+            
+            # For compatibility, we'll simulate the old response format
+            # The new LLM backend doesn't separate code results, so we set them as empty
+            code_results = []
+            execution_results = []
 
             if not text_response or not str(text_response).strip():
                 logger.warning("[FINAL_DECISION] Empty response; using fallback JSON")
-                result = json.loads(self.client._create_fallback_json())
+                result = json.loads(self.prompt_processor._create_fallback_json())
                 result.setdefault('analysis_metadata', {})
                 result['analysis_metadata']['fallback_reason'] = 'empty_final_decision_response'
             else:
@@ -132,17 +149,17 @@ class FinalDecisionProcessor:
                     result = json.loads(text_response.strip())
                 except json.JSONDecodeError:
                     try:
-                        _, json_blob = self.client.extract_markdown_and_json(text_response)
+                        _, json_blob = self.prompt_processor.extract_markdown_and_json(text_response)
                         result = json.loads(json_blob)
                     except Exception:
                         logger.warning("[FINAL_DECISION] Unparsable response; using fallback JSON")
-                        result = json.loads(self.client._create_fallback_json())
+                        result = json.loads(self.prompt_processor._create_fallback_json())
                         result.setdefault('analysis_metadata', {})
                         result['analysis_metadata']['fallback_reason'] = 'unparsable_final_decision_response'
 
             # Enhance with calculation metadata if available
             if code_results or execution_results:
-                result = self.client._enhance_final_decision_with_calculations(result, code_results, execution_results)
+                result = self.prompt_processor.enhance_final_decision_with_calculations(result, code_results, execution_results)
 
             # Ensure timestamp exists
             result.setdefault("timestamp", datetime.now().isoformat())
@@ -157,7 +174,7 @@ class FinalDecisionProcessor:
             logger.error(f"[FINAL_DECISION] Failed: {e}")
             # Return minimal fallback wrapper
             try:
-                fallback = json.loads(self.client._create_fallback_json())
+                fallback = json.loads(self.prompt_processor._create_fallback_json())
             except Exception:
                 fallback = {
                     "trend": "neutral",

@@ -11,11 +11,25 @@ Integrated with the analysis service for comprehensive risk assessment.
 
 # Import core risk analysis components
 from .quantitative_risk.processor import QuantitativeRiskProcessor
-from .risk_llm_agent import RiskLLMAgent, risk_llm_agent
+from .risk_llm_agent import RiskLLMAgent, get_risk_llm_agent
+
+# Lazy initialization for backwards compatibility
+def _get_risk_llm_agent():
+    return get_risk_llm_agent()
+
+# Create a property that returns the agent when accessed
+class _RiskAgentProperty:
+    def __getattr__(self, name):
+        if name == 'risk_llm_agent':
+            return get_risk_llm_agent()
+        raise AttributeError(f"module has no attribute '{name}'")
+
+risk_llm_agent = _get_risk_llm_agent  # Function to get agent
 
 __all__ = [
     # Core Risk Analysis Components
     'QuantitativeRiskProcessor',
     'RiskLLMAgent',
+    'get_risk_llm_agent',
     'risk_llm_agent'
 ]

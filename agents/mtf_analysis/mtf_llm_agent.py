@@ -5,11 +5,12 @@ MTF LLM Agent
 This agent takes MTF analysis results and sends them to the LLM for interpretation.
 It provides natural language analysis of multi-timeframe patterns, conflicts, and trading opportunities.
 
-Similar to indicator agents, this agent:
-- Receives MTF technical analysis data
-- Formats it for LLM consumption
-- Calls Gemini to generate insights
-- Returns structured analysis for the final decision LLM
+Migrated to use the new backend/llm system instead of backend/gemini.
+This provides:
+- Clean, provider-agnostic LLM interface
+- Automatic model selection based on agent configuration
+- Improved error handling and retry logic
+- Consistent async API patterns
 """
 
 import logging
@@ -24,28 +25,23 @@ logger = logging.getLogger(__name__)
 
 class MTFLLMAgent:
     """
-    MTF LLM Agent that analyzes multi-timeframe data using Gemini.
+    MTF LLM Agent that analyzes multi-timeframe data using the new backend/llm system.
     
     This agent bridges the gap between technical MTF analysis and natural language insights.
+    Migrated from legacy backend/gemini to the new provider-agnostic system.
     """
     
     def __init__(self):
         self.agent_name = "mtf_llm_agent"
-        # Import here to avoid circular dependencies
-        from gemini.gemini_client import GeminiClient
         
-        # Use rotating API key with fallback
-        try:
-            from gemini.api_key_manager import get_api_key_manager
-            key_manager = get_api_key_manager()
-            api_key = key_manager.get_key("mtf_llm")
-            self.gemini_client = GeminiClient(api_key=api_key, agent_name="mtf_llm")
-            logger.info(f"[{self.agent_name.upper()}] Initialized with key rotation")
-        except Exception as e:
-            # Fallback to default initialization
-            logger.warning(f"[{self.agent_name.upper()}] Key manager unavailable, using default: {e}")
-            self.gemini_client = GeminiClient()
-            logger.info(f"[{self.agent_name.upper()}] Initialized with default key")
+        # Use the new backend/llm system exclusively
+        from llm import get_llm_client
+        
+        # The client will automatically use the configuration for "mtf_agent" from llm_assignments.yaml
+        self.llm_client = get_llm_client(agent_name="mtf_agent")
+        
+        logger.info(f"[{self.agent_name.upper()}] Initialized with backend/llm system")
+        logger.info(f"[{self.agent_name.upper()}] Using provider: {self.llm_client.get_provider_info()}")
     
     async def analyze_mtf_with_llm(
         self, 
@@ -80,18 +76,24 @@ class MTFLLMAgent:
             
             logger.info(f"[{self.agent_name.upper()}] Built prompt ({len(prompt)} chars) for {symbol}")
             
-            # Step 2: Call LLM with the prompt
-            print(f"[MTF_LLM_AGENT_DEBUG] Sending request to Gemini API for {symbol}...")
+            # Step 2: Call LLM with the prompt using new backend/llm system
+            print(f"[MTF_LLM_AGENT_DEBUG] Sending request to LLM API for {symbol}...")
             llm_start = time.time()
             
             try:
-                # Use the core LLM call with code execution capability
-                text_response, code_results, exec_results = await self.gemini_client.core.call_llm_with_code_execution(
-                    prompt=prompt
+                # Use new backend/llm system
+                text_response = await self.llm_client.generate(
+                    prompt=prompt,
+                    enable_code_execution=True  # MTF analysis may need calculations
                 )
                 
+                # New system handles code execution internally, so these are not returned separately
+                code_results = []
+                exec_results = []
+                
                 llm_time = time.time() - llm_start
-                print(f"[MTF_LLM_AGENT_DEBUG] Received response from Gemini API for {symbol} in {llm_time:.2f}s")
+                provider_info = self.llm_client.get_provider_info()
+                print(f"[MTF_LLM_AGENT_DEBUG] Received response from {provider_info} for {symbol} in {llm_time:.2f}s")
                 logger.info(f"[{self.agent_name.upper()}] LLM response received in {llm_time:.2f}s for {symbol}")
                 
             except Exception as llm_error:
