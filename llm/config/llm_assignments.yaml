@@ -20,7 +20,7 @@ agents:
     model: "gemini-2.5-flash"  # Fast for frequent indicator analysis
     enable_code_execution: true  # Needs code execution for calculations
     max_retries: 3
-    timeout: 90
+    timeout: 100
     
   # Sector Analysis Agent
   sector_agent:
@@ -28,7 +28,7 @@ agents:
     model: "gemini-2.5-flash"  # Good balance for sector synthesis
     enable_code_execution: false  # Mostly text synthesis
     max_retries: 3
-    timeout: 60
+    timeout: 100
     
   # Risk Analysis Agent
   risk_agent:
@@ -52,7 +52,7 @@ agents:
     model: "gemini-2.5-flash"  # Fast for multi-timeframe analysis
     enable_code_execution: true  # May need calculations for cross-timeframe validation
     max_retries: 3
-    timeout: 75  # MTF analysis can be comprehensive
+    timeout: 100  # MTF analysis can be comprehensive
     
   # Institutional Activity Agent (Volume)
   institutional_activity_agent:
