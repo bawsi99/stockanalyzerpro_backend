@@ -27,7 +27,7 @@ agents:
     model: "gemini-2.5-pro"  # Fast for frequent indicator analysis
     enable_code_execution: true  # Needs code execution for calculations
     max_retries: 3
-    timeout: 150
+    timeout: 90
     
   # Sector Analysis Agent
   sector_agent:
@@ -35,7 +35,7 @@ agents:
     model: "gemini-2.5-flash"  # Good balance for sector synthesis
     enable_code_execution: false  # Mostly text synthesis
     max_retries: 3
-    timeout: 150
+    timeout: 90
     
   # Risk Analysis Agent
   risk_agent:
@@ -43,7 +43,7 @@ agents:
     model: "gemini-2.5-flash"  # Fast for risk calculations
     enable_code_execution: true  # Needs calculations
     max_retries: 3
-    timeout: 150
+    timeout: 90
     
   # Final Decision Agent
   final_decision_agent:
@@ -68,7 +68,7 @@ agents:
     model: "gemini-2.5-flash"  # Fast for institutional volume analysis
     enable_code_execution: true  # Needs code execution for volume calculations
     max_retries: 3
-    timeout: 150  # Institutional analysis standardized to 90s
+    timeout: 90  # Institutional analysis standardized to 90s
     api_key_strategy: "agent_specific"  # Dedicated key for consistent tracking
     api_key_index: 0  # Always use GEMINI_API_KEY1
     
@@ -78,7 +78,7 @@ agents:
     model: "gemini-2.5-flash"  # Fast for price-volume confirmation analysis
     enable_code_execution: true  # Needs code execution for volume calculations
     max_retries: 3
-    timeout: 150  # Volume confirmation analysis
+    timeout: 90  # Volume confirmation analysis
     api_key_strategy: "agent_specific"  # Dedicated key for consistent tracking
     api_key_index: 1  # Always use GEMINI_API_KEY2
     
@@ -98,7 +98,7 @@ agents:
     model: "gemini-2.5-flash"  # Fast for volume anomaly detection
     enable_code_execution: true  # Needs code execution for anomaly calculations
     max_retries: 3
-    timeout: 150  # Volume anomaly analysis
+    timeout: 90  # Volume anomaly analysis
     
   # Support Resistance Agent (Volume)
   support_resistance_agent:
@@ -106,7 +106,7 @@ agents:
     model: "gemini-2.5-flash"  # Fast for volume-based support/resistance analysis
     enable_code_execution: true  # Needs code execution for level calculations
     max_retries: 3
-    timeout: 150 # Support/resistance analysis
+    timeout: 90 # Support/resistance analysis
 
 # Future provider configurations (will be activated in Phase 7)
 future_configs:
