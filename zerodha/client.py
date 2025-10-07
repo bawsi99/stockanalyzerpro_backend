@@ -18,6 +18,7 @@ import tempfile
 from threading import RLock
 from functools import wraps
 import random
+from core.path_utils import get_config_path, get_zerodha_instruments_csv_path, get_safe_write_path
 
 
 # Set up logging
@@ -25,14 +26,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('ZerodhaClient')
 
 
-# Resolve .env path relative to this file (backend/config/.env)
-ENV_PATH = Path(__file__).resolve().parent.parent / "config" / ".env"
-
-# Load environment variables from .env file (for initial load)
-dotenv.load_dotenv(dotenv_path=str(ENV_PATH))
+# Load environment variables from .env file using centralized path utility
+ENV_PATH = get_config_path()
+dotenv.load_dotenv(dotenv_path=ENV_PATH)
 
 # Utility function to always read the latest value from .env
-def get_env_value(key: str, env_path: str = str(ENV_PATH)) -> str:
+def get_env_value(key: str, env_path: str = ENV_PATH) -> str:
     """Read a value from the .env file directly, with fallback to system environment."""
     # First try to read from .env file if it exists
     if os.path.exists(env_path):
@@ -207,7 +206,7 @@ class ZerodhaDataClient:
         
     def _save_access_token(self, access_token: str):
         """Save the access token to the .env file, replacing the old value if present."""
-        env_path = str(ENV_PATH)
+        env_path = ENV_PATH
         lines = []
         found = False
         if os.path.exists(env_path):
@@ -231,7 +230,7 @@ class ZerodhaDataClient:
         Args:
             request_token: The request token obtained from the user
         """
-        env_path = str(ENV_PATH)
+        env_path = ENV_PATH
         try:
             # Create .env file if it doesn't exist
             if not os.path.exists(env_path):
@@ -390,6 +389,7 @@ class ZerodhaDataClient:
             print(f"Error during authentication: {str(e)}")
             return False
 
+
     def _load_all_instruments(self, exchange: str = None, force_refresh: bool = False) -> Optional[pd.DataFrame]:
         """
         Load all instruments into memory, using CSV cache if valid. 
@@ -400,11 +400,17 @@ class ZerodhaDataClient:
         import os
         from dotenv import load_dotenv
 
-        load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'config', '.env'))
+        env_path = get_config_path()
+        csv_path = get_zerodha_instruments_csv_path()
+        
+        # Load environment variables
+        if os.path.exists(env_path):
+            load_dotenv(dotenv_path=env_path)
+        else:
+            logger.warning(f"Environment file not found at {env_path}, using system environment variables")
+        
         now = datetime.now()
         today_830am = datetime.combine(now.date(), dt_time(8, 30))
-        env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'config', '.env')
-        csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'zerodha_instruments.csv')
 
         # Read last fetch timestamp from .env
         last_fetch_str = os.getenv("TIME_LAST_FETCH_INSTRUMENT")
@@ -426,10 +432,14 @@ class ZerodhaDataClient:
 
         if use_cache:
             try:
-                df = pd.read_csv(csv_path)
-                if exchange:
-                    return df[df['exchange'] == exchange]
-                return df
+                if os.path.exists(csv_path):
+                    df = pd.read_csv(csv_path)
+                    logger.info(f"Loaded cached instruments from {csv_path}")
+                    if exchange:
+                        return df[df['exchange'] == exchange]
+                    return df
+                else:
+                    logger.info(f"CSV cache file does not exist at {csv_path}, fetching from API")
             except Exception as e:
                 logger.warning(f"Failed to load cached instruments CSV: {e}. Falling back to API.")
 
@@ -444,28 +454,50 @@ class ZerodhaDataClient:
                 return None
             df = pd.DataFrame(instruments)
 
-            # Save new CSV
-            os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-            if os.path.exists(csv_path):
-                os.remove(csv_path)
-            df.to_csv(csv_path, index=False)
+            # Save new CSV with proper error handling
+            try:
+                safe_csv_path = get_safe_write_path(csv_path)
+                os.makedirs(os.path.dirname(safe_csv_path), exist_ok=True)
+                if os.path.exists(safe_csv_path):
+                    os.remove(safe_csv_path)
+                df.to_csv(safe_csv_path, index=False)
+                logger.info(f"Successfully saved instruments CSV to {safe_csv_path}")
+            except (OSError, PermissionError) as e:
+                logger.warning(f"Could not save CSV to {csv_path}: {e}. Continuing without cache.")
+                # Don't fail the entire operation if we can't save CSV
+            except Exception as e:
+                logger.warning(f"Unexpected error saving CSV: {e}. Continuing without cache.")
 
-            # Update .env with new fetch time
-            new_env_lines = []
-            found = False
-            if os.path.exists(env_path):
-                with open(env_path, "r") as f:
-                    for line in f:
-                        if line.startswith("TIME_LAST_FETCH_INSTRUMENT="):
-                            new_env_lines.append(f"TIME_LAST_FETCH_INSTRUMENT={now.isoformat()}\n")
-                            found = True
-                        else:
-                            new_env_lines.append(line)
-            if not found:
-                new_env_lines.append(f"\nTIME_LAST_FETCH_INSTRUMENT={now.isoformat()}\n")
+            # Update .env with new fetch time (with error handling)
+            try:
+                safe_env_path = get_safe_write_path(env_path)
+                new_env_lines = []
+                found = False
+                if os.path.exists(safe_env_path):
+                    with open(safe_env_path, "r") as f:
+                        for line in f:
+                            if line.startswith("TIME_LAST_FETCH_INSTRUMENT="):
+                                new_env_lines.append(f"TIME_LAST_FETCH_INSTRUMENT={now.isoformat()}\n")
+                                found = True
+                            else:
+                                new_env_lines.append(line)
+                else:
+                    # Create config directory if it doesn't exist
+                    os.makedirs(os.path.dirname(safe_env_path), exist_ok=True)
+                    
+                if not found:
+                    new_env_lines.append(f"\nTIME_LAST_FETCH_INSTRUMENT={now.isoformat()}\n")
 
-            with open(env_path, "w") as f:
-                f.writelines(new_env_lines)
+                with open(safe_env_path, "w") as f:
+                    f.writelines(new_env_lines)
+                logger.info(f"Updated fetch timestamp in {safe_env_path}")
+            except (OSError, PermissionError) as e:
+                logger.warning(f"Could not update .env file at {env_path}: {e}. Using in-memory cache only.")
+                # Set environment variable in current process for this session
+                os.environ["TIME_LAST_FETCH_INSTRUMENT"] = now.isoformat()
+            except Exception as e:
+                logger.warning(f"Unexpected error updating .env: {e}. Using in-memory cache only.")
+                os.environ["TIME_LAST_FETCH_INSTRUMENT"] = now.isoformat()
 
             return df[df['exchange'] == exchange] if exchange else df
 
