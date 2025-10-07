@@ -10,10 +10,18 @@ This is the main client that agents will use. It handles:
 
 import asyncio
 from typing import Optional, List, Any, Dict
-from .providers.base import BaseLLMProvider
-from .providers.gemini import GeminiProvider
-from .config.config import LLMConfig, get_llm_config
-from .utils import SimpleTimer, truncate_for_logging, debug_print
+try:
+    # Try relative imports first (when used as package)
+    from .providers.base import BaseLLMProvider
+    from .providers.gemini import GeminiProvider
+    from .config.config import LLMConfig, get_llm_config
+    from .utils import SimpleTimer, truncate_for_logging, debug_print
+except ImportError:
+    # Fall back to absolute imports (when run directly)
+    from providers.base import BaseLLMProvider
+    from providers.gemini import GeminiProvider
+    from config.config import LLMConfig, get_llm_config
+    from utils import SimpleTimer, truncate_for_logging, debug_print
 
 
 class LLMClient:
@@ -69,6 +77,8 @@ class LLMClient:
             return GeminiProvider(
                 model=model,
                 agent_name=self.agent_name,
+                api_key_strategy=self.agent_config.get('api_key_strategy', 'round_robin'),
+                api_key_index=self.agent_config.get('api_key_index', None),
                 **self.custom_kwargs
             )
         elif provider_name == 'openai':

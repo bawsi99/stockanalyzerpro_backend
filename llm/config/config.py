@@ -100,6 +100,12 @@ class LLMConfig:
         # Override with environment variables
         self._apply_env_overrides(agent_config, agent_name)
         
+        # Ensure API key strategy defaults are set
+        if 'api_key_strategy' not in agent_config:
+            agent_config['api_key_strategy'] = 'round_robin'
+        if 'api_key_index' not in agent_config:
+            agent_config['api_key_index'] = None
+        
         return agent_config
     
     def _apply_env_overrides(self, config: Dict[str, Any], agent_name: str) -> None:

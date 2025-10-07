@@ -9,6 +9,13 @@ default:
   enable_code_execution: true
   max_retries: 3
   timeout: 60
+  # API Key Management Configuration
+  # Options:
+  #   - "round_robin": Rotate through all available keys globally (good for load distribution)
+  #   - "agent_specific": Each agent gets a specific key index (good for tracking)
+  #   - "single": Use one key for all requests (fallback mode)
+  api_key_strategy: "round_robin"
+  api_key_index: null  # null for round_robin/single, specific index (0-4) for agent_specific
 
 # Agent-specific overrides
 # Agents can use different providers/models based on their specific needs
@@ -45,6 +52,7 @@ agents:
     enable_code_execution: true  # Needs synthesis calculations
     max_retries: 3
     timeout: 90
+    api_key_strategy: "round_robin"  # Use rotating keys for critical agent
     
   # Multi-Timeframe Analysis Agent
   mtf_agent:
@@ -61,6 +69,8 @@ agents:
     enable_code_execution: true  # Needs code execution for volume calculations
     max_retries: 3
     timeout: 90  # Institutional analysis standardized to 90s
+    api_key_strategy: "agent_specific"  # Dedicated key for consistent tracking
+    api_key_index: 0  # Always use GEMINI_API_KEY1
     
   # Volume Confirmation Agent
   volume_confirmation_agent:
@@ -69,6 +79,8 @@ agents:
     enable_code_execution: true  # Needs code execution for volume calculations
     max_retries: 3
     timeout: 90  # Volume confirmation analysis
+    api_key_strategy: "agent_specific"  # Dedicated key for consistent tracking
+    api_key_index: 1  # Always use GEMINI_API_KEY2
     
   # Volume Momentum Agent
   volume_momentum_agent:
@@ -77,6 +89,8 @@ agents:
     enable_code_execution: true  # Needs code execution for momentum calculations
     max_retries: 3
     timeout: 90  # Volume momentum analysis
+    api_key_strategy: "agent_specific"  # Dedicated key for consistent tracking
+    api_key_index: 2  # Always use GEMINI_API_KEY3
     
   # Volume Anomaly Agent
   volume_anomaly_agent:

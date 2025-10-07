@@ -13,7 +13,21 @@ from typing import List, Any, Optional
 from google import genai
 from google.genai import types
 
-from .base import BaseLLMProvider
+try:
+    # Try relative imports first (when used as package)
+    from .base import BaseLLMProvider
+    from ..key_manager import get_key_for_agent, KeyStrategy
+except ImportError:
+    # Fall back to absolute imports (when run directly)
+    import sys
+    import os
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
+    sys.path.insert(0, parent_dir)
+    sys.path.insert(0, current_dir)
+    
+    from base import BaseLLMProvider
+    from key_manager import get_key_for_agent, KeyStrategy
 
 
 class GeminiProvider(BaseLLMProvider):
@@ -32,6 +46,8 @@ class GeminiProvider(BaseLLMProvider):
                  model: str = "gemini-2.5-flash", 
                  api_key: str = None, 
                  agent_name: str = None,
+                 api_key_strategy: str = "round_robin",
+                 api_key_index: Optional[int] = None,
                  **kwargs):
         """
         Initialize Gemini provider.
@@ -40,16 +56,26 @@ class GeminiProvider(BaseLLMProvider):
             model: Gemini model name ("gemini-2.5-flash", "gemini-2.5-pro", etc.)
             api_key: Explicit API key (if None, will use key manager)
             agent_name: Agent name for key rotation tracking
+            api_key_strategy: Strategy for key selection ("round_robin", "agent_specific", "single")
+            api_key_index: Specific key index for agent_specific strategy
             **kwargs: Additional configuration
         """
         super().__init__(model, api_key, **kwargs)
-        self.agent_name = agent_name
+        self.agent_name = agent_name or "unknown_agent"
         
-        # Get API key (simplified from original key manager logic)
+        # Get API key using the new key manager
         if api_key:
             self.api_key = api_key
+            self.debug_info = f"[{self.agent_name}] Using EXPLICIT key for gemini: ...{api_key[-8:]}"
         else:
-            self.api_key = self._get_api_key_from_env()
+            # Use key manager with strategy
+            strategy = KeyStrategy(api_key_strategy)
+            self.api_key, self.debug_info = get_key_for_agent(
+                provider="gemini",
+                agent_name=self.agent_name,
+                strategy=strategy,
+                key_index=api_key_index
+            )
         
         if not self.api_key:
             raise ValueError(
@@ -60,21 +86,9 @@ class GeminiProvider(BaseLLMProvider):
         # Initialize Gemini client
         self.client = genai.Client(api_key=self.api_key)
         
-        print(f"🔑 Gemini provider initialized - Model: {self.model}, Key: ...{self.api_key[-8:]}")
+        print(f"🔑 Gemini provider initialized - Model: {self.model}")
+        print(f"🔑 {self.debug_info}")
     
-    def _get_api_key_from_env(self) -> Optional[str]:
-        """
-        Get API key from environment variables.
-        Tries numbered keys first (GEMINI_API_KEY1-5), then fallback.
-        """
-        # Try numbered keys first (for rotation)
-        for i in range(1, 6):
-            key = os.environ.get(f"GEMINI_API_KEY{i}")
-            if key:
-                return key
-        
-        # Fallback to single key
-        return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_GEMINI_API_KEY")
     
     async def generate_text(self, 
                            prompt: str, 
