@@ -3258,18 +3258,59 @@ class SectorBenchmarkingProvider:
             logging.info(f"DEBUG: Calculating stock returns...")
             stock_returns = stock_data['close'].pct_change().dropna()
             logging.info(f"DEBUG: Stock returns length: {len(stock_returns)} (from {len(stock_data)} original data points)")
+            
+            # CRITICAL FIX: Check for insufficient data before proceeding
+            if len(stock_returns) == 0:
+                logging.error(f"ERROR: No valid stock returns after pct_change().dropna() for {symbol}")
+                logging.error(f"Stock data info: shape={stock_data.shape}, close_values={stock_data['close'].head(10).tolist() if not stock_data.empty else 'empty'}")
+                return {
+                    'error': 'Insufficient stock data for analysis',
+                    'sector': sector,
+                    'stock_symbol': symbol,
+                    'data_points': 0,
+                    'error_type': 'no_valid_returns'
+                }
+            
+            # Check for minimum data requirement
+            if len(stock_returns) < 2:
+                logging.warning(f"WARNING: Very few stock returns ({len(stock_returns)}) for {symbol}, analysis may be unreliable")
+            
             logging.info(f"DEBUG: Stock returns stats - mean: {stock_returns.mean():.6f}, std: {stock_returns.std():.6f}")
             
             # Calculate sector returns
             logging.info(f"DEBUG: Calculating sector returns...")
             sector_returns = sector_data['close'].pct_change().dropna()
             logging.info(f"DEBUG: Sector returns length: {len(sector_returns)} (from {len(sector_data)} original data points)")
+            
+            # CRITICAL FIX: Check for insufficient sector data
+            if len(sector_returns) == 0:
+                logging.error(f"ERROR: No valid sector returns for {sector}")
+                return {
+                    'error': 'Insufficient sector data for analysis',
+                    'sector': sector,
+                    'stock_symbol': symbol,
+                    'data_points': len(stock_returns),
+                    'error_type': 'no_valid_sector_returns'
+                }
+            
             logging.info(f"DEBUG: Sector returns stats - mean: {sector_returns.mean():.6f}, std: {sector_returns.std():.6f}")
             
             # Calculate NIFTY returns
             logging.info(f"DEBUG: Calculating NIFTY returns...")
             nifty_returns = nifty_data['close'].pct_change().dropna()
             logging.info(f"DEBUG: NIFTY returns length: {len(nifty_returns)} (from {len(nifty_data)} original data points)")
+            
+            # CRITICAL FIX: Check for insufficient NIFTY data
+            if len(nifty_returns) == 0:
+                logging.error(f"ERROR: No valid NIFTY returns")
+                return {
+                    'error': 'Insufficient NIFTY data for analysis',
+                    'sector': sector,
+                    'stock_symbol': symbol,
+                    'data_points': len(stock_returns),
+                    'error_type': 'no_valid_nifty_returns'
+                }
+            
             logging.info(f"DEBUG: NIFTY returns stats - mean: {nifty_returns.mean():.6f}, std: {nifty_returns.std():.6f}")
             
             # Calculate metrics
@@ -3291,16 +3332,77 @@ class SectorBenchmarkingProvider:
             sector_cumulative_return = (1 + sector_returns).prod() - 1
             nifty_cumulative_return = (1 + nifty_returns).prod() - 1
             
-            # Calculate volatility (annualized)
-            stock_volatility = stock_returns.std() * np.sqrt(252)  # 252 trading days per year
-            sector_volatility = sector_returns.std() * np.sqrt(252)
-            nifty_volatility = nifty_returns.std() * np.sqrt(252)
+            # Calculate volatility (annualized) with protection against invalid values
+            import numpy as np
             
-            # Calculate annualized returns
+            try:
+                stock_std = stock_returns.std()
+                stock_volatility = stock_std * np.sqrt(252) if not pd.isna(stock_std) and stock_std > 0 else 0.0
+            except Exception as e:
+                logging.warning(f"WARNING: Error calculating stock volatility for {symbol}: {e}")
+                stock_volatility = 0.0
+            
+            try:
+                sector_std = sector_returns.std()
+                sector_volatility = sector_std * np.sqrt(252) if not pd.isna(sector_std) and sector_std > 0 else 0.0
+            except Exception as e:
+                logging.warning(f"WARNING: Error calculating sector volatility for {sector}: {e}")
+                sector_volatility = 0.0
+            
+            try:
+                nifty_std = nifty_returns.std()
+                nifty_volatility = nifty_std * np.sqrt(252) if not pd.isna(nifty_std) and nifty_std > 0 else 0.0
+            except Exception as e:
+                logging.warning(f"WARNING: Error calculating NIFTY volatility: {e}")
+                nifty_volatility = 0.0
+            
+            # Calculate annualized returns with protection against division by zero
             days_in_data = len(stock_returns)
-            stock_annualized_return = ((1 + stock_cumulative_return) ** (252 / days_in_data)) - 1
-            sector_annualized_return = ((1 + sector_cumulative_return) ** (252 / days_in_data)) - 1
-            nifty_annualized_return = ((1 + nifty_cumulative_return) ** (252 / days_in_data)) - 1
+            
+            # CRITICAL FIX: Ensure days_in_data is not zero and handle edge cases
+            if days_in_data == 0:
+                logging.error(f"ERROR: Zero days in stock returns data for {symbol}")
+                # Return zero annualized returns as fallback
+                stock_annualized_return = 0.0
+                sector_annualized_return = 0.0
+                nifty_annualized_return = 0.0
+            elif days_in_data < 2:
+                # For very few data points, use simple return without annualization
+                logging.warning(f"WARNING: Only {days_in_data} data points for {symbol}, using simple returns")
+                stock_annualized_return = stock_cumulative_return
+                sector_annualized_return = sector_cumulative_return
+                nifty_annualized_return = nifty_cumulative_return
+            else:
+                # Normal annualization calculation with additional safety checks
+                try:
+                    # Check for problematic cumulative returns that would cause math errors
+                    if (1 + stock_cumulative_return) <= 0:
+                        logging.warning(f"WARNING: Invalid stock cumulative return {stock_cumulative_return} for {symbol}, using fallback")
+                        stock_annualized_return = stock_cumulative_return
+                    else:
+                        stock_annualized_return = ((1 + stock_cumulative_return) ** (252 / days_in_data)) - 1
+                    
+                    if (1 + sector_cumulative_return) <= 0:
+                        logging.warning(f"WARNING: Invalid sector cumulative return {sector_cumulative_return} for {sector}")
+                        sector_annualized_return = sector_cumulative_return
+                    else:
+                        sector_annualized_return = ((1 + sector_cumulative_return) ** (252 / days_in_data)) - 1
+                    
+                    if (1 + nifty_cumulative_return) <= 0:
+                        logging.warning(f"WARNING: Invalid NIFTY cumulative return {nifty_cumulative_return}")
+                        nifty_annualized_return = nifty_cumulative_return
+                    else:
+                        nifty_annualized_return = ((1 + nifty_cumulative_return) ** (252 / days_in_data)) - 1
+                        
+                except (ZeroDivisionError, OverflowError, ValueError) as e:
+                    logging.error(f"ERROR: Failed to calculate annualized returns for {symbol}: {e}")
+                    logging.error(f"DEBUG: days_in_data={days_in_data}, stock_cumulative_return={stock_cumulative_return}")
+                    # Fallback to cumulative returns
+                    stock_annualized_return = stock_cumulative_return
+                    sector_annualized_return = sector_cumulative_return
+                    nifty_annualized_return = nifty_cumulative_return
+            
+            logging.info(f"DEBUG: Annualized returns calculation - days_in_data: {days_in_data}")
             
             # Calculate Sharpe ratios (risk-adjusted returns)
             risk_free_rate = 0.07  # 7% annual risk-free rate (Indian government bonds)
