@@ -108,6 +108,13 @@ from core.chart_manager import get_chart_manager, initialize_chart_manager
 from config.deployment_config import DeploymentConfig
 from config.storage_config import StorageConfig
 
+# Import token counter for LLM usage tracking
+from llm.token_counter import (
+    get_token_counter, reset_token_counter, print_token_usage_summary, 
+    get_token_usage_summary, get_model_usage_summary, get_agent_model_combinations,
+    get_agent_timing_breakdown
+)
+
 # Volume agents integration (we'll expose service endpoints that use the existing orchestrator-based implementation)
 from agents.volume import VolumeAgentIntegrationManager
 from agents.volume import VolumeAgentsOrchestrator
@@ -281,6 +288,83 @@ async def ml_predict(req: MLPredictRequest):
         return {"probability": p, "model_version": get_model_version()}
     except Exception as e:
         logger.error(f"/ml/predict failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Token Analytics Endpoints ---
+@app.get("/analytics/tokens")
+async def get_token_analytics():
+    """Get comprehensive token usage analytics."""
+    try:
+        token_summary = get_token_usage_summary()
+        model_usage = get_model_usage_summary() 
+        agent_model_combos = get_agent_model_combinations()
+        
+        return {
+            "success": True,
+            "analytics": {
+                "summary": token_summary,
+                "model_breakdown": model_usage,
+                "agent_model_combinations": agent_model_combos
+            },
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error(f"/analytics/tokens failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analytics/tokens/models")
+async def get_model_analytics():
+    """Get model-specific token usage analytics."""
+    try:
+        model_usage = get_model_usage_summary()
+        return {
+            "success": True,
+            "model_usage": model_usage,
+            "models_count": len(model_usage),
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error(f"/analytics/tokens/models failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analytics/tokens/compare")
+async def compare_models(models: Dict[str, List[str]]):
+    """Compare efficiency between two models."""
+    try:
+        model_list = models.get('models', [])
+        if len(model_list) != 2:
+            raise HTTPException(status_code=400, detail="Exactly 2 models required for comparison")
+            
+        from llm.token_counter import compare_model_efficiency
+        comparison = compare_model_efficiency(model_list[0], model_list[1])
+        
+        return {
+            "success": True,
+            "comparison": comparison,
+            "timestamp": time.time()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"/analytics/tokens/compare failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analytics/tokens/reset")
+async def reset_token_analytics():
+    """Reset token usage analytics."""
+    try:
+        reset_token_counter()
+        return {
+            "success": True,
+            "message": "Token usage analytics reset",
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error(f"/analytics/tokens/reset failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Add CORS middleware
@@ -883,6 +967,11 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
     start_ts = time.monotonic()
     try:
         print(f"[ENHANCED ANALYSIS] Starting enhanced analysis for {request.stock}")
+        
+        # Reset token counter for this analysis to get clean metrics
+        reset_token_counter()
+        print(f"🔄 Token counter reset for analysis of {request.stock}")
+        
         serialized_frontend_response = None
 
         # Resolve user ID
@@ -1641,9 +1730,128 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         # Extended to 350 seconds to allow for 300s cache usage + buffer
         asyncio.create_task(delayed_cache_cleanup(correlation_id, delay=350.0))
         
-        # 9) Return
+        # 9) Token usage summary and analysis completion
         elapsed = time.monotonic() - start_ts
+        
+        # Get token usage summary for this analysis
+        token_summary = get_token_usage_summary()
+        model_usage = get_model_usage_summary()
+        agent_model_combos = get_agent_model_combinations()
+        
+        print(f"\n{'='*100}")
+        print(f"📊 TOKEN USAGE SUMMARY for {request.stock}")
+        print(f"{'='*100}")
+        print(f"Total Analysis Time: {elapsed:.2f}s")
+        print(f"Total LLM Calls: {token_summary['total_usage']['total_calls']}")
+        print(f"Total Input Tokens: {token_summary['total_usage']['total_input_tokens']:,}")
+        print(f"Total Output Tokens: {token_summary['total_usage']['total_output_tokens']:,}")
+        print(f"Total Tokens: {token_summary['total_usage']['total_tokens']:,}")
+        
+        # Show per-agent breakdown in proper table format
+        if agent_model_combos:
+            print(f"\n🤖 AGENT DETAILS:")
+            print(f"{'='*100}")
+            
+            # Table header
+            print(f"{'Agent':25} | {'Model':17} | {'Input':>8} | {'Output':>8} | {'Total':>8} | {'Time':>8}")
+            print(f"{'-'*25} | {'-'*17} | {'-'*8} | {'-'*8} | {'-'*8} | {'-'*8}")
+            
+            # Get timing information for each agent
+            agent_timings = get_agent_timing_breakdown()
+            
+            # Sort by model (flash first, then pro) for cleaner display
+            all_entries = []
+            for agent, models in agent_model_combos.items():
+                for model, usage in models.items():
+                    total_time_s = agent_timings.get(agent, 0.0)
+                    all_entries.append((agent, model, usage, total_time_s))
+            
+            # Sort: flash models first, then pro models, then by agent name
+            all_entries.sort(key=lambda x: ("pro" in x[1], x[0]))
+            
+            # Table rows
+            total_input = 0
+            total_output = 0
+            total_tokens_sum = 0
+            total_time_sum = 0.0
+            
+            for agent, model, usage, total_time_s in all_entries:
+                total_input += usage['input_tokens']
+                total_output += usage['output_tokens']
+                total_tokens_sum += usage['total_tokens']
+                total_time_sum += total_time_s
+                
+                # Truncate long agent names
+                agent_display = agent[:24] if len(agent) > 24 else agent
+                model_display = model.replace('gemini-2.5-', '').upper()  # Show FLASH/PRO for brevity
+                
+                print(f"{agent_display:25} | {model_display:17} | {usage['input_tokens']:>8,} | {usage['output_tokens']:>8,} | {usage['total_tokens']:>8,} | {total_time_s:>7.2f}s")
+            
+            # Table footer with totals
+            print(f"{'-'*25} | {'-'*17} | {'-'*8} | {'-'*8} | {'-'*8} | {'-'*8}")
+            print(f"{'TOTAL':25} | {'':17} | {total_input:>8,} | {total_output:>8,} | {total_tokens_sum:>8,} | {total_time_sum:>7.2f}s")
+            
+            # Add per-model breakdown
+            print(f"\n📱 MODEL BREAKDOWN:")
+            print(f"{'='*70}")
+            print(f"{'Model':20} | {'Input':>12} | {'Output':>12} | {'Total':>12} | {'Calls':>6}")
+            print(f"{'-'*20} | {'-'*12} | {'-'*12} | {'-'*12} | {'-'*6}")
+            
+            # Calculate per-model totals
+            model_stats = {}
+            for agent, model, usage, total_time_s in all_entries:
+                if model not in model_stats:
+                    model_stats[model] = {
+                        'input_tokens': 0,
+                        'output_tokens': 0, 
+                        'total_tokens': 0,
+                        'calls': 0
+                    }
+                model_stats[model]['input_tokens'] += usage['input_tokens']
+                model_stats[model]['output_tokens'] += usage['output_tokens']
+                model_stats[model]['total_tokens'] += usage['total_tokens']
+                model_stats[model]['calls'] += usage['calls']
+            
+            # Sort models (flash first, then pro)
+            sorted_models = sorted(model_stats.items(), key=lambda x: "pro" in x[0])
+            
+            model_total_input = 0
+            model_total_output = 0
+            model_total_tokens = 0
+            model_total_calls = 0
+            
+            for model, stats in sorted_models:
+                model_display = model.replace('gemini-2.5-', '').upper()
+                model_total_input += stats['input_tokens']
+                model_total_output += stats['output_tokens']
+                model_total_tokens += stats['total_tokens']
+                model_total_calls += stats['calls']
+                
+                print(f"{model_display:20} | {stats['input_tokens']:>12,} | {stats['output_tokens']:>12,} | {stats['total_tokens']:>12,} | {stats['calls']:>6}")
+            
+            # Model breakdown footer
+            print(f"{'-'*20} | {'-'*12} | {'-'*12} | {'-'*12} | {'-'*6}")
+            print(f"{'TOTAL':20} | {model_total_input:>12,} | {model_total_output:>12,} | {model_total_tokens:>12,} | {model_total_calls:>6}")
+        
+        print(f"{'='*100}")
         print(f"[ANALYSIS-TIMER] {request.stock} completed in {elapsed:.2f}s")
+        
+        # Add token usage to response metadata
+        if isinstance(serialized_frontend_response or frontend_response, dict):
+            response_data = serialized_frontend_response or frontend_response
+            if 'metadata' not in response_data:
+                response_data['metadata'] = {}
+            
+            response_data['metadata']['token_usage'] = {
+                'total_tokens': token_summary['total_usage']['total_tokens'],
+                'total_input_tokens': token_summary['total_usage']['total_input_tokens'], 
+                'total_output_tokens': token_summary['total_usage']['total_output_tokens'],
+                'total_calls': token_summary['total_usage']['total_calls'],
+                'analysis_duration_seconds': elapsed,
+                'usage_by_model': model_usage,
+                'usage_by_agent': token_summary['usage_by_agent']
+            }
+            
         return JSONResponse(content=serialized_frontend_response or frontend_response, status_code=200)
 
     except Exception as e:

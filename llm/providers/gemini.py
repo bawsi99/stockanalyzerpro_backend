@@ -9,7 +9,7 @@ import os
 import time
 import asyncio
 import io
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Tuple, Dict
 from google import genai
 from google.genai import types
 
@@ -17,6 +17,7 @@ try:
     # Try relative imports first (when used as package)
     from .base import BaseLLMProvider
     from ..key_manager import get_key_for_agent, KeyStrategy
+    from ..token_counter import track_llm_usage, TokenUsageData
 except ImportError:
     # Fall back to absolute imports (when run directly)
     import sys
@@ -28,6 +29,7 @@ except ImportError:
     
     from base import BaseLLMProvider
     from key_manager import get_key_for_agent, KeyStrategy
+    from token_counter import track_llm_usage, TokenUsageData
 
 
 class GeminiProvider(BaseLLMProvider):
@@ -94,12 +96,25 @@ class GeminiProvider(BaseLLMProvider):
                            prompt: str, 
                            enable_code_execution: bool = True,
                            max_retries: int = 3,
-                           **kwargs) -> str:
+                           track_tokens: bool = True,
+                           **kwargs) -> Tuple[str, Optional[TokenUsageData]]:
         """
         Generate text response from prompt only.
         
         This is the clean version of the original call_llm method.
+        
+        Args:
+            prompt: Input text prompt
+            enable_code_execution: Whether to enable code execution tools
+            max_retries: Maximum number of retry attempts  
+            track_tokens: Whether to track token usage
+            **kwargs: Additional parameters
+            
+        Returns:
+            Tuple of (generated_text, token_usage_data)
         """
+        start_time = time.time()
+        
         async def _make_request():
             """Inner function to make the actual API request."""
             # Build the request configuration
@@ -125,20 +140,49 @@ class GeminiProvider(BaseLLMProvider):
         # Execute with retry logic
         response = await self._retry_with_backoff(_make_request, max_retries)
         
+        # Track token usage if enabled
+        token_usage = None
+        if track_tokens:
+            duration_ms = (time.time() - start_time) * 1000
+            token_usage = track_llm_usage(
+                response=response,
+                agent_name=self.agent_name,
+                provider="gemini",
+                model=self.model,
+                duration_ms=duration_ms,
+                success=True
+            )
+        
         # Extract text from response
-        return self.extract_text(response)
+        text_response = self.extract_text(response)
+        
+        return text_response, token_usage
     
     async def generate_with_images(self,
                                   prompt: str,
                                   images: List[Any],
                                   enable_code_execution: bool = True,
                                   max_retries: int = 3,
-                                  **kwargs) -> str:
+                                  track_tokens: bool = True,
+                                  **kwargs) -> Tuple[str, Optional[TokenUsageData]]:
         """
         Generate text response from prompt and images.
         
         This is the clean version of the original call_llm_with_image(s) methods.
+        
+        Args:
+            prompt: Input text prompt
+            images: List of images (PIL Images, bytes, etc.)
+            enable_code_execution: Whether to enable code execution tools
+            max_retries: Maximum number of retry attempts
+            track_tokens: Whether to track token usage
+            **kwargs: Additional parameters
+            
+        Returns:
+            Tuple of (generated_text, token_usage_data)
         """
+        start_time = time.time()
+        
         async def _make_request():
             """Inner function to make the actual API request."""
             # Build contents with prompt and images
@@ -170,8 +214,24 @@ class GeminiProvider(BaseLLMProvider):
         # Execute with retry logic
         response = await self._retry_with_backoff(_make_request, max_retries)
         
+        # Track token usage if enabled
+        token_usage = None
+        if track_tokens:
+            duration_ms = (time.time() - start_time) * 1000
+            token_usage = track_llm_usage(
+                response=response,
+                agent_name=self.agent_name,
+                provider="gemini",
+                model=self.model,
+                duration_ms=duration_ms,
+                success=True,
+                call_metadata={'with_images': True, 'image_count': len(images)}
+            )
+        
         # Extract text from response
-        return self.extract_text(response)
+        text_response = self.extract_text(response)
+        
+        return text_response, token_usage
     
     async def _process_image(self, image: Any) -> types.Part:
         """

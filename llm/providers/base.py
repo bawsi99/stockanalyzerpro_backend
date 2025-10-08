@@ -6,7 +6,7 @@ Currently focused on Gemini, but designed to be extensible for future providers.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Any, Union
+from typing import List, Optional, Any, Union, Tuple
 import asyncio
 
 
@@ -36,7 +36,8 @@ class BaseLLMProvider(ABC):
                            prompt: str, 
                            enable_code_execution: bool = True,
                            max_retries: int = 3,
-                           **kwargs) -> str:
+                           track_tokens: bool = True,
+                           **kwargs) -> Tuple[str, Optional[Any]]:
         """
         Generate text response from prompt only.
         
@@ -44,10 +45,11 @@ class BaseLLMProvider(ABC):
             prompt: Input text prompt
             enable_code_execution: Whether to enable code execution tools
             max_retries: Maximum number of retry attempts
+            track_tokens: Whether to track token usage
             **kwargs: Additional provider-specific parameters
             
         Returns:
-            Generated text response
+            Tuple of (generated_text, token_usage_data)
             
         Raises:
             Exception: If generation fails after all retries
@@ -60,7 +62,8 @@ class BaseLLMProvider(ABC):
                                   images: List[Any],
                                   enable_code_execution: bool = True,
                                   max_retries: int = 3,
-                                  **kwargs) -> str:
+                                  track_tokens: bool = True,
+                                  **kwargs) -> Tuple[str, Optional[Any]]:
         """
         Generate text response from prompt and images.
         
@@ -69,10 +72,11 @@ class BaseLLMProvider(ABC):
             images: List of images (PIL Images, bytes, or paths)
             enable_code_execution: Whether to enable code execution tools
             max_retries: Maximum number of retry attempts
+            track_tokens: Whether to track token usage
             **kwargs: Additional provider-specific parameters
             
         Returns:
-            Generated text response
+            Tuple of (generated_text, token_usage_data)
             
         Raises:
             Exception: If generation fails after all retries

@@ -9,7 +9,7 @@ This is the main client that agents will use. It handles:
 """
 
 import asyncio
-from typing import Optional, List, Any, Dict
+from typing import Optional, List, Any, Dict, Tuple
 try:
     # Try relative imports first (when used as package)
     from .providers.base import BaseLLMProvider
@@ -93,7 +93,8 @@ class LLMClient:
     async def generate(self, 
                       prompt: str, 
                       images: Optional[List[Any]] = None,
-                      **kwargs) -> str:
+                      return_token_usage: bool = False,
+                      **kwargs) -> Any:
         """
         Generate response from prompt (and optionally images).
         
@@ -102,10 +103,11 @@ class LLMClient:
         Args:
             prompt: Text prompt
             images: Optional list of images (PIL, bytes, etc.)
+            return_token_usage: If True, return (text, token_usage), else just text
             **kwargs: Additional parameters (timeout, retries, etc.)
             
         Returns:
-            Generated text response
+            Generated text response, or (text, token_usage) if return_token_usage=True
         """
         # Merge config with kwargs
         call_config = self.agent_config.copy()
@@ -115,6 +117,7 @@ class LLMClient:
         enable_code_execution = call_config.get('enable_code_execution', True)
         max_retries = call_config.get('max_retries', 3)
         timeout = call_config.get('timeout', 60)
+        track_tokens = call_config.get('track_tokens', True)
         
         debug_print(f"Generating for {self.agent_name}: "
                    f"prompt={truncate_for_logging(prompt, 50)}, "
@@ -126,30 +129,36 @@ class LLMClient:
             try:
                 # Choose appropriate generation method
                 if images:
-                    response = await asyncio.wait_for(
+                    text_response, token_usage = await asyncio.wait_for(
                         self.provider.generate_with_images(
                             prompt=prompt,
                             images=images,
                             enable_code_execution=enable_code_execution,
-                            max_retries=max_retries
+                            max_retries=max_retries,
+                            track_tokens=track_tokens
                         ),
                         timeout=timeout
                     )
                 else:
-                    response = await asyncio.wait_for(
+                    text_response, token_usage = await asyncio.wait_for(
                         self.provider.generate_text(
                             prompt=prompt,
                             enable_code_execution=enable_code_execution,
-                            max_retries=max_retries
+                            max_retries=max_retries,
+                            track_tokens=track_tokens
                         ),
                         timeout=timeout
                     )
                 
                 debug_print(f"Generation completed for {self.agent_name}: "
                            f"time={timer.elapsed()}s, "
-                           f"response={truncate_for_logging(response, 100)}")
+                           f"response={truncate_for_logging(text_response, 100)}")
                 
-                return response
+                # Return based on what the caller wants
+                if return_token_usage:
+                    return text_response, token_usage
+                else:
+                    return text_response
                 
             except asyncio.TimeoutError:
                 error_msg = f"LLM request timed out after {timeout}s for {self.agent_name}"
@@ -161,32 +170,34 @@ class LLMClient:
                 debug_print(error_msg)
                 raise
     
-    async def generate_text(self, prompt: str, **kwargs) -> str:
+    async def generate_text(self, prompt: str, return_token_usage: bool = False, **kwargs) -> Any:
         """
         Generate text-only response (convenience method).
         
         Args:
             prompt: Text prompt
+            return_token_usage: If True, return (text, token_usage), else just text
             **kwargs: Additional parameters
             
         Returns:
-            Generated text response
+            Generated text response, or (text, token_usage) if return_token_usage=True
         """
-        return await self.generate(prompt=prompt, images=None, **kwargs)
+        return await self.generate(prompt=prompt, images=None, return_token_usage=return_token_usage, **kwargs)
     
-    async def generate_with_images(self, prompt: str, images: List[Any], **kwargs) -> str:
+    async def generate_with_images(self, prompt: str, images: List[Any], return_token_usage: bool = False, **kwargs) -> Any:
         """
         Generate response with images (convenience method).
         
         Args:
             prompt: Text prompt
             images: List of images
+            return_token_usage: If True, return (text, token_usage), else just text
             **kwargs: Additional parameters
             
         Returns:
-            Generated text response
+            Generated text response, or (text, token_usage) if return_token_usage=True
         """
-        return await self.generate(prompt=prompt, images=images, **kwargs)
+        return await self.generate(prompt=prompt, images=images, return_token_usage=return_token_usage, **kwargs)
     
     def get_config(self) -> Dict[str, Any]:
         """Get current configuration for this client."""
