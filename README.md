@@ -11,6 +11,9 @@ A state-of-the-art, AI-powered stock analysis backend providing technical analys
 - **Real-Time Data**: Live market data and streaming via Zerodha API and WebSocket with multi-service architecture.
 - **Advanced ML System**: Reorganized quantitative trading system with pattern ML, raw data ML, and hybrid approaches.
 - **Agent-Based Analysis**: Modular Volume Agents, Risk Analysis Agent, and Multi-Timeframe (MTF) Agents running in parallel.
+- **Universal LLM System**: Unified LLM client supporting Gemini (with multi-model support), OpenAI, Claude, and extensible for new providers.
+- **Smart Token Tracking**: Model-based token usage tracking with cost analysis and performance monitoring across different models.
+- **Advanced API Key Management**: Multi-key rotation system with round-robin, agent-specific, and single-key strategies.
 - **Microservices Architecture**: Scalable service-oriented architecture with consolidated and individual service deployment options.
 - **Enhanced Visualization**: Chart generation with pattern overlays, multi-pane charts, and real-time updates.
 - **Comprehensive Backtesting**: Advanced backtesting framework with realistic constraints and performance analysis.
@@ -40,13 +43,16 @@ The system is built as a collection of microservices that can be deployed indepe
 - **TechnicalIndicators** (`ml/indicators/technical_indicators.py`): Calculates 25+ technical indicators and market metrics.
 - **PatternRecognition** (`patterns/recognition.py`): Detects advanced chart patterns and anomalies.
 - **PatternVisualizer/ChartVisualizer** (`patterns/visualization.py`): Generates pattern and comparison charts.
-- **GeminiClient** (`gemini/gemini_client.py`): Interfaces with Gemini LLM for AI-powered analysis and summary generation.
+- **Universal LLM Client** (`llm/client.py`): Unified LLM interface supporting multiple providers (Gemini, OpenAI, Claude) with intelligent model selection.
+- **Token Counter System** (`llm/token_counter.py`): Model-based token tracking with cost analysis and performance monitoring.
+- **API Key Manager** (`llm/key_manager.py`): Multi-key rotation system with thread-safe key management and flexible assignment strategies.
 - **SectorBenchmarkingProvider** (`agents/sector/benchmarking.py`): Provides sector benchmarking, rotation, and correlation analysis.
 - **SectorCacheManager** (`agents/sector/cache_manager.py`): File-based cache for sector-agnostic context (rotation/correlation).
-- **ZerodhaDataClient** (`zerodha/client.py`): Handles all data retrieval from Zerodha APIs.
+- **ZerodhaDataClient** (`zerodha/client.py`): Handles all data retrieval from Zerodha APIs with enhanced error handling and path resolution.
 - **SectorClassifier/EnhancedSectorClassifier** (`agents/sector/`): Classifies stocks into sectors using JSON-driven mappings and advanced filtering.
 - **VolumeAgentIntegrationManager** (`agents/volume/__init__.py`): Runs 5 volume agents concurrently and aggregates results.
-- **MTFAgentsOrchestrator/CoreMTFProcessor** (`agents/mtf_analysis/`): New agent-based multi-timeframe analysis engine.
+- **MTFAgentsOrchestrator/CoreMTFProcessor** (`agents/mtf_analysis/`): New agent-based multi-timeframe analysis engine with LLM integration.
+- **Risk Analysis Agent** (`agents/risk_analysis/risk_llm_agent.py`): LLM-powered risk analysis with quantitative metrics and scenario analysis.
 - **FinalDecisionProcessor** (`agents/final_decision/processor.py`): Centralized final decision agent combining deterministic and LLM contexts.
 
 #### Module Placement Note: `advanced_analysis.py`
@@ -169,6 +175,13 @@ Risk Agent
 - `GET /sectors/rotation` — Get sector rotation data
 - `GET /sectors/correlation` — Get sector correlation analysis
 - `GET /sectors/performance` — Get sector performance metrics
+
+### Analytics Endpoints
+
+- `GET /analytics/tokens` — Get comprehensive token usage analytics
+- `GET /analytics/tokens/models` — Get model-specific usage breakdown  
+- `POST /analytics/tokens/compare` — Compare efficiency between two models
+- `POST /analytics/tokens/reset` — Reset token usage analytics
 
 ### System Endpoints
 
@@ -309,6 +322,69 @@ Risk Agent
 
 ---
 
+## 🤖 Universal LLM System
+
+### Multi-Provider Support
+
+- **Provider Agnostic**: Unified interface for Gemini, OpenAI, Claude, and future providers
+- **Intelligent Model Selection**: YAML-based configuration for optimal model assignment per agent
+- **Multi-Model Gemini Support**: Supports `gemini-2.5-flash`, `gemini-2.5-pro`, and future models
+- **Extensible Architecture**: Easy integration of new LLM providers and models
+
+### Smart Token Tracking
+
+- **Model-Based Tracking**: Separate tracking for different models (flash vs pro)
+- **Agent-Specific Analytics**: Monitor token usage per agent with detailed breakdowns
+- **Real-Time Cost Analysis**: Built-in cost estimation and efficiency comparisons
+- **Performance Monitoring**: Track request durations, success rates, and optimization opportunities
+
+### Advanced API Key Management
+
+- **Multi-Key Rotation**: Support for multiple API keys with intelligent rotation
+- **Assignment Strategies**: Round-robin, agent-specific, or single-key assignment modes
+- **Thread-Safe Operations**: Concurrent request handling with proper key management
+- **Security Features**: Key masking in logs and secure environment variable loading
+
+### LLM Configuration (`llm/config/llm_assignments.yaml`)
+
+```yaml
+default:
+  provider: "gemini"
+  model: "gemini-2.5-flash"
+  api_key_strategy: "round_robin"
+  
+agents:
+  final_decision_agent:
+    model: "gemini-2.5-pro"  # Use Pro for critical decisions
+  indicator_agent:
+    model: "gemini-2.5-pro"  # Use Pro for complex indicator analysis
+  volume_confirmation_agent:
+    api_key_strategy: "agent_specific"  # Dedicated key tracking
+```
+
+### Token Usage Analytics
+
+Every analysis provides detailed token usage breakdown:
+
+```
+================================================================================
+📊 TOKEN USAGE SUMMARY for AAPL
+================================================================================
+Total Analysis Time: 45.23s
+Total LLM Calls: 8
+Total Input Tokens: 2,650
+Total Output Tokens: 1,325
+Total Tokens: 3,975
+
+🤖 AGENT DETAILS:
+  indicator_agent      : gemini-2.5-flash  :  180 input :   90 output :   1.20s
+  final_decision_agent : gemini-2.5-pro    :  500 input :  250 output :   3.20s
+  risk_agent           : gemini-2.5-pro    :  300 input :  150 output :   2.80s
+================================================================================
+```
+
+---
+
 ## 🧠 AI-Only System: No Consensus, No Conflicts
 
 - **Single Source of Truth**: All recommendations and signals are generated by Gemini LLM.
@@ -417,9 +493,10 @@ The system now features a completely reorganized quantitative trading system (`m
 ### Prerequisites
 - Python 3.8+
 - Zerodha API credentials
-- Google Gemini API key
+- Gemini API key(s) - supports multiple keys for rotation
 - Redis (for caching and real-time features)
 - Supabase account (for authentication and data persistence)
+- Optional: OpenAI/Claude API keys (for future multi-provider support)
 
 ### Installation
 
@@ -455,10 +532,12 @@ python services/consolidated_service.py --dev
 
 ### Configuration
 1. Set up Zerodha API credentials in environment variables
-2. Configure Google Gemini API key
+2. Configure Gemini API key(s) - use numbered keys (GEMINI_API_KEY1, GEMINI_API_KEY2) for rotation
 3. Set up Redis connection
 4. Configure Supabase credentials
 5. Set up sector classification data in `agents/sector/`
+6. Configure LLM assignments in `llm/config/llm_assignments.yaml`
+7. Optional: Set up additional LLM provider keys for future use
 
 ### Environment Variables
 
@@ -469,8 +548,18 @@ Create a `.env` file in the backend directory:
 ZERODHA_API_KEY=your_api_key
 ZERODHA_ACCESS_TOKEN=your_access_token
 
-# Google Gemini API
+# LLM API Configuration (Universal System)
+# Gemini API Keys (supports multiple keys for rotation)
+GEMINI_API_KEY1=your_primary_gemini_key
+GEMINI_API_KEY2=your_secondary_gemini_key  # Optional for rotation
+GEMINI_API_KEY3=your_tertiary_gemini_key   # Optional for rotation
+
+# Legacy Gemini key (fallback)
 GOOGLE_GEMINI_API_KEY=your_gemini_api_key
+
+# Future LLM Providers (Phase 7)
+# OPENAI_API_KEY1=your_openai_key
+# CLAUDE_API_KEY1=your_claude_key
 
 # Database Configuration
 SUPABASE_URL=your_supabase_url
@@ -571,8 +660,20 @@ When test mode is enabled, you'll see:
 ## 📝 Documentation & Contribution
 
 - **API Documentation**: See this README and code comments for endpoint details.
+- **LLM System Guide**: See `TOKEN_TRACKING_GUIDE.md` for comprehensive token tracking and LLM management documentation.
+- **Log Format Guide**: See `LOG_FORMAT_SUMMARY.md` for detailed token usage logging format.
 - **Analysis Guides**: See `AI_ONLY_ANALYSIS_GUIDE.md` and `HYBRID_SECTOR_ANALYSIS_APPROACH.md` for advanced usage.
+- **Agent Migration Guides**: Individual agent migration documentation in respective agent folders.
 - **Contributing**: Fork, branch, make changes, add tests, and submit a pull request.
 - **License**: MIT License (see LICENSE file).
+
+### Recent Major Updates
+
+- **Universal LLM System**: Complete migration from Gemini-only to universal LLM system supporting multiple providers
+- **Token Tracking**: Comprehensive model-based token usage tracking with cost analysis
+- **API Key Rotation**: Advanced multi-key management system with flexible assignment strategies
+- **Agent Migrations**: All major agents (Risk, MTF, Volume, Sector, Final Decision) migrated to new LLM system
+- **Enhanced Error Handling**: Improved path resolution and error recovery across all services
+- **Performance Optimizations**: Optimized LLM response extraction and agent processing times
 
 

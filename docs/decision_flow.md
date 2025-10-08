@@ -43,20 +43,38 @@
 ### Environment variables
 - `DATABASE_SERVICE_URL` (default: `http://localhost:8003`)
 - `ANALYSIS_SERVICE_URL` (loopback, default: `http://localhost:8002`)
-- `CORS_ORIGINS` (comma-separated list)
-- Zerodha: `ZERODHA_API_KEY`, `ZERODHA_ACCESS_TOKEN`
-- Scheduler: `ENABLE_SCHEDULED_CALIBRATION`, `CALIB_SYMBOLS`, `CALIB_FIXTURES_DIR`
+- `CORS_ORIGINS` (comma-separated list of allowed origins)
+- **Zerodha Configuration**:
+  - `ZERODHA_API_KEY`, `ZERODHA_ACCESS_TOKEN` (for historical data)
+  - Multiple API keys supported for distributed volume agents (KEY1-5)
+- **Scheduler Configuration**:
+  - `ENABLE_SCHEDULED_CALIBRATION` (enables weekly calibration)
+  - `CALIB_SYMBOLS` (symbols for calibration)
+  - `CALIB_FIXTURES_DIR` (fixture output directory)
+- **LLM Configuration**: Managed by new backend/LLM system with provider abstraction
 
 ### External services and components
-- Zerodha clients:
-  - `ZerodhaDataClient` (historical and tokens)
+- **Zerodha clients**:
+  - `ZerodhaDataClient` (historical data and token management)
   - Optional WebSocket rolling window snapshot for intraday data
-- `services.enhanced_data_service` for optimal/cached data
-- `GeminiClient` for LLM (indicator summary, enhanced chart analysis, final decision)
-- Database Service (HTTP) for persisting results and resolving users
-- Redis cache manager (data caching; images not stored in Redis)
-- Chart manager (chart storage paths; actual generation is in-memory now)
-- Sector classification and benchmarking providers
+  - Distributed API key support for parallel agent execution
+- **Data services**:
+  - `services.enhanced_data_service` for optimal/cached data retrieval
+  - Enhanced data service with market status and freshness attributes
+- **LLM System**: **New backend/LLM architecture**
+  - Provider abstraction layer with automatic API key management
+  - Comprehensive token usage tracking and analytics
+  - Model-specific optimization (Flash vs Pro models)
+  - Agent-specific LLM client configuration
+- **Database Service** (HTTP): Persistent storage with retry logic
+  - User ID resolution (`/users/resolve-id`)
+  - Analysis storage (`/analyses/store`) with comprehensive metadata
+- **Caching Infrastructure**:
+  - Redis cache manager (data caching only; images not stored)
+  - `VOLUME_PREFETCH_CACHE` for inter-agent data reuse
+  - Sector cache manager for file-based sector data caching
+- **Chart Management**: In-memory generation with file-based storage
+- **Sector Infrastructure**: Classification and benchmarking with caching
 
 ### In-process cache
 - `VOLUME_PREFETCH_CACHE` keyed by `correlation_id`, to reuse prefetched `stock_data` and `indicators` for volume agents and risk analysis (sector agent may also reuse `stock_data`).
@@ -117,91 +135,122 @@
 Enhanced decision-making path. Runs deterministic computations and parallel analyses and then performs a final LLM decision.
 
 Step-by-step:
-1) Resolve User ID
-- If `user_id` provided → use it.
-- Else if `email` provided → POST `{email}` to `{DATABASE_SERVICE_URL}/users/resolve-id` with retry/backoff.
-- Else generate a new UUID.
+1) **Token Counter Reset**
+- Reset token counter for clean metrics tracking per analysis
+- Initialize tracking for comprehensive LLM usage analytics
 
-2) Initialize orchestrator
+2) **Resolve User ID**
+- If `user_id` provided → use it directly
+- Else if `email` provided → POST `{email}` to `{DATABASE_SERVICE_URL}/users/resolve-id` with retry/backoff
+- Else generate a new UUID and log warning
+
+3) **Initialize orchestrator**
 - `orchestrator = StockAnalysisOrchestrator()`
 
-3) Retrieve stock data
+4) **Retrieve stock data**
 - `orchestrator.retrieve_stock_data(symbol, exchange, interval, period)`:
   - Tries EnhancedDataService first (maps internal intervals to EDS granularity, and adds attrs like `data_freshness`, `market_status`)
   - Optionally uses WebSocket rolling window snapshot if market open
   - Falls back to Zerodha historical API
 - Errors:
-  - `ValueError` → 400
-  - Other exceptions → 500
+  - `ValueError` → 400 (data retrieval failed)
+  - Other exceptions → 500 (unexpected error)
 
-4) Calculate indicators
+5) **Calculate indicators**
 - `TechnicalIndicators.calculate_all_indicators_optimized(df, symbol)`:
   - If < 20 bars → minimal indicators fallback with data quality flags and default signals
   - Else optimized full analysis (current values only; ratios; crosses; MACD/RSI/Bollinger; volume metrics)
+- Errors → 500 (indicator calculation failed)
 
-5) Launch independent tasks in parallel
-- Volume agents (loopback REST): POST `/agents/volume/analyze-all`
-  - Reuses `stock_data`/`indicators` via `VOLUME_PREFETCH_CACHE` (using `correlation_id`)
-- Risk analysis (loopback REST): POST `/agents/risk/analyze-all`
-  - Reuses `stock_data`/`indicators` via `VOLUME_PREFETCH_CACHE` (using `correlation_id`)
-  - Computes quantitative metrics (VaR/ES/Sharpe), stress tests (historical/Monte Carlo/sector/market), scenarios, and LLM risk bullets for short/medium/long horizons
-- Multi-timeframe analysis (MTF) - **New Agent-Based Architecture**:
-  - `mtf_agent_integration_manager.get_comprehensive_mtf_analysis(symbol, exchange)`
-  - Uses `MTFAgentsOrchestrator` which coordinates:
-    - **Core MTF Processor**: `CoreMTFProcessor.analyze_comprehensive_mtf()` - fundamental MTF analysis across all timeframes
-    - **Specialized MTF Agents** (run in parallel with timeouts):
-      - `IntradayMTFProcessor` (weight: 0.25, timeout: 120s) - scalping and short-term trading
-      - `SwingMTFProcessor` (weight: 0.35, timeout: 150s) - medium-term swing trading
-      - `PositionMTFProcessor` (weight: 0.40, timeout: 180s) - long-term position trading
-  - Computes per-timeframe signals (6 timeframes: 1min, 5min, 15min, 30min, 1hour, 1day)
-  - Performs cross-timeframe consensus validation with dynamic signal quality weighting
-  - Detects conflicts, divergences (bullish/bearish), severity scoring
-  - Aggregates results into `AggregatedMTFAnalysis` with:
-    - Core analysis, individual agent results, unified analysis
-    - Consensus signals, trading recommendations, overall confidence
-    - Agent success/failure tracking, processing times
-  - **Optimized timeframe periods** (reduced for better signal-to-noise):
-    - 1min: 1 day, 5min: 3 days, 15min: 7 days, 30min: 120 days, 1hour: 180 days, 1day: 365 days
-- Advanced analysis:
+6) **Setup prefetch cache and correlation ID**
+- Generate unique `correlation_id` for this analysis session
+- Store `stock_data` and `indicators` in `VOLUME_PREFETCH_CACHE` for reuse by parallel agents
+- Cache expires after 350 seconds with automatic cleanup
+
+7) **Launch independent tasks in parallel with comprehensive logging**
+- **Volume agents** (timeout: 180s): POST `/agents/volume/analyze-all`
+  - Uses 5 distributed API keys (KEY1-5 for agents 0-4)
+  - Reuses `stock_data`/`indicators` via `VOLUME_PREFETCH_CACHE`
+  - Returns aggregated analysis from all volume agents
+  
+- **Risk analysis** (timeout: 200s): POST `/agents/risk/analyze-all`
+  - Reuses `stock_data`/`indicators` via `VOLUME_PREFETCH_CACHE`
+  - Computes quantitative metrics (VaR/ES/Sharpe), stress tests, scenarios
+  - Generates LLM risk bullets for short/medium/long horizons
+  - Returns `risk_bullets_for_decision` for final decision agent
+  
+- **Multi-timeframe analysis (MTF)** (timeout: 120s) - **Enhanced with LLM Integration**:
+  - Step 1: Technical MTF analysis via `mtf_agent_integration_manager.get_comprehensive_mtf_analysis(symbol, exchange)`
+  - Step 2: LLM analysis via `mtf_llm_agent.analyze_mtf_with_llm()` for natural language insights
+  - Step 3: Combine technical and LLM analysis into unified MTF context
+  - Uses `MTFAgentsOrchestrator` with specialized agents and cross-timeframe validation
+  
+- **Advanced analysis** (timeout: 90s):
   - `advanced_analysis_provider.generate_advanced_analysis(stock_data, symbol, indicators)`
   - Produces scenario probabilities, risk/stress summaries, compact digest
-- Sector context (optional, if `request.sector`):
-  - `SectorBenchmarkingProvider.get_optimized_comprehensive_sector_analysis`
-  - Returns benchmarking, rotation, correlation, optimization metrics
-- Indicator summary LLM:
-  - Curated indicators via agents manager (best effort)
-  - `orchestrator.gemini_client.build_indicators_summary(...)` for markdown + structured JSON
+  
+- **Sector analysis** (timeout: 220s): POST `/agents/sector/analyze-all`
+  - Uses longer timeout due to comprehensive sector processing
+  - Reuses `stock_data` via `VOLUME_PREFETCH_CACHE` for efficiency
+  - Returns sector benchmarking, rotation, correlation, synthesis bullets
+  - Auto-detects sector if not provided in request
+  
+- **Indicator summary** (timeout: 120s) - **New Backend/LLM System**:
+  - Uses enhanced indicators summary with conflict detection
+  - `orchestrator.indicator_agents_manager.get_enhanced_indicators_summary()`
+  - Returns markdown summary, structured JSON, and debug info
 
-6) Join results and normalize
-- Any task failure → normalized to empty context; analysis continues.
+8) **Parallel task coordination and error handling**
+- Uses `asyncio.gather()` with `return_exceptions=True` to prevent cancellation
+- Comprehensive logging with task start/end timestamps and duration tracking
+- Failed tasks normalized to empty contexts; analysis continues robustly
+- Detailed debugging output for each parallel task result
 
-7) Prepare final decision inputs
-- Collect the context components: sector_bullets (from sector synthesis), an MTF subset (LLM insights or summary), risk bullets (if available), and the advanced analysis digest.
-- The centralized FinalDecisionProcessor assembles the labeled knowledge context internally.
+9) **Context normalization and preparation**
+- Extract and validate results from all parallel tasks
+- Normalize exceptions to empty fallbacks with detailed error logging
+- Prepare specialized payloads for final decision agent:
+  - `sector_bullets`: Synthesis bullets from sector analysis
+  - `risk_bullets`: Decision-ready risk bullets from risk analysis
+  - `mtf_payload`: Combined technical + LLM insights from MTF analysis
+  - `volume_analysis`: Aggregated volume agent results
+  - `advanced_digest`: Scenario analysis and risk summaries
+  - `indicator_json`: Enhanced indicator analysis with conflict detection
 
-8) Final decision agent (centralized)
-- `agents.final_decision.processor.FinalDecisionProcessor.analyze_async(symbol, ind_json, mtf_context_subset, sector_bullets, advanced_digest, risk_bullets=None, chart_insights="", base_knowledge_context="")`
-- Internally builds labeled context (MultiTimeframeContext, AdvancedAnalysisDigest, SECTOR CONTEXT) and invokes Gemini via GeminiClient code-exec path
-- Returns `ai_analysis` via `fd_result['result']` (trend, confidence_pct, guidance, etc.)
+10) **Final decision agent (centralized) with comprehensive input debugging**
+- Detailed debug logging of all input contexts for transparency
+- `FinalDecisionProcessor.analyze_async()` with enhanced input validation:
+  - `symbol`, `ind_json`, `mtf_context`, `sector_bullets`, `advanced_digest`
+  - `risk_bullets` (NEW), `chart_insights`, `knowledge_context`, `volume_analysis`
+- Uses new backend/LLM system for API key management
+- Returns `ai_analysis` with trend, confidence, guidance, etc.
 
-9) Optional ML predictions
-- `UnifiedMLManager` best-effort train/get prediction, then clear caches.
+11) **Optional ML predictions**
+- `UnifiedMLManager` best-effort train/get prediction with cache management
+- Automatic cache cleanup after prediction to prevent memory leaks
 
-10) Build frontend response
-- `FrontendResponseBuilder.build_frontend_response(...)`
-  - Normalizes OHLCV
-  - Computes price delta/%, pivots inferred from interval anchor (D/W/M/Q)
-  - Adds volume bands where available
-- Integrates ai_analysis, indicator_summary, chart_insights, indicators, sector_context, mtf_context, risk_context, advanced_analysis, ml_predictions
+12) **Build frontend response**
+- `FrontendResponseBuilder.build_frontend_response()` with all contexts:
+  - Normalizes OHLCV data and computes price deltas/pivots
+  - Integrates ai_analysis, indicator_summary, sector_context, mtf_context
+  - Includes risk_context, advanced_analysis, ml_predictions
+  - No charts generated in enhanced path (chart_paths = {})
 
-11) Persist to Database Service
-- `make_json_serializable(frontend_response)`
-- POST `{DATABASE_SERVICE_URL}/analyses/store` with `analysis`, `user_id`, `symbol`, `exchange`, `period`, `interval`
-- Logs `analysis_id` on success (non-fatal on failure)
+13) **Persist to Database Service**
+- `make_json_serializable(frontend_response)` to handle NaN values
+- POST to `{DATABASE_SERVICE_URL}/analyses/store` with comprehensive retry logic
+- Logs `analysis_id` on success; non-fatal on failure
 
-12) Return
-- `200 OK` with serialized response
-- On exceptions: traces + structured 400/500 responses
+14) **Cleanup and analytics**
+- Schedule delayed prefetch cache cleanup (350s) as background task
+- Comprehensive token usage analytics with per-agent and per-model breakdown
+- Detailed timing analysis for performance monitoring
+- Add token usage metadata to response
+
+15) **Return response**
+- `200 OK` with serialized response including token usage metadata
+- Comprehensive error handling with structured 400/500 responses
+- Full analysis timing and performance metrics logging
 
 Inputs/Outputs:
 - Input: EnhancedAnalysisRequest
@@ -291,23 +340,36 @@ Inputs/Outputs:
 
 ### Volume agents
 - POST `/agents/volume/analyze-all`
-  - Reuses prefetched data via `VOLUME_PREFETCH_CACHE` using `correlation_id`.
-  - `VolumeAgentIntegrationManager.get_comprehensive_volume_analysis` aggregates multi-agent outputs.
-  - Returns structured aggregated analysis.
+  - **Distributed API Key Architecture**: Uses 5 dedicated API keys (KEY1-5) for agents 0-4
+  - Reuses prefetched data via `VOLUME_PREFETCH_CACHE` using `correlation_id`
+  - `VolumeAgentIntegrationManager.get_comprehensive_volume_analysis` aggregates multi-agent outputs
+  - Returns comprehensive aggregated analysis with:
+    - Individual agent results with success/failure tracking
+    - Consensus analysis with confidence scoring
+    - Combined LLM analysis from successful agents
+    - Agent execution timing and performance metrics
 
 - Single-agent endpoints:
   - `/agents/volume/anomaly`
-  - `/agents/volume/institutional`
+  - `/agents/volume/institutional` 
   - `/agents/volume/confirmation`
   - `/agents/volume/support-resistance`
   - `/agents/volume/momentum`
-  - Each retrieves df, computes indicators, runs a single agent via `VolumeAgentsOrchestrator._execute_agent`, returns structured result; can include prompt when `return_prompt=True`.
+  - Each retrieves df, computes indicators, runs a single agent via `VolumeAgentsOrchestrator._execute_agent`
+  - Returns structured result; can include prompt when `return_prompt=True`
 
 ### Risk analysis
 - POST `/agents/risk/analyze-all`
-  - Reuses prefetched data via `VOLUME_PREFETCH_CACHE` using `correlation_id`.
-  - Performs quantitative metrics (VaR, Expected Shortfall, Sharpe), multi-scenario stress tests, and produces LLM-synthesized risk bullets across timeframes.
-  - Returns a structured risk summary with scores and decision-ready bullets; integrated into the final decision agent via `risk_bullets`.
+  - Reuses prefetched data via `VOLUME_PREFETCH_CACHE` using `correlation_id`
+  - **Enhanced Multi-Timeframe Risk Analysis**:
+    - Quantitative metrics: VaR, Expected Shortfall, Sharpe ratio
+    - Multi-scenario stress tests: historical, Monte Carlo, sector, market scenarios
+    - LLM-synthesized risk bullets across short/medium/long timeframes
+  - Returns structured risk summary with:
+    - `risk_bullets_for_decision`: Decision-ready bullets for final decision agent
+    - Overall risk level and score
+    - Comprehensive risk breakdown by timeframe
+    - Success/failure tracking with detailed error handling
 
 ### Storage and cache
 - Charts storage:
@@ -470,24 +532,25 @@ The MTF system now follows an agent-based orchestration pattern similar to volum
 ---
 
 ## Call Graph Summary (from `/analyze/enhanced`)
-- Request → Resolve user → Orchestrator
-- Retrieve data → Compute indicators
-- Parallel (with logging + timeouts):
-  - Volume agents (loopback REST, reuse prefetched data, timeout: 200s)
-  - Risk analysis (timeout: 200s)
-  - **MTF analysis** (timeout: 120s):
-    - `mtf_agent_integration_manager.get_comprehensive_mtf_analysis()`
-    - → `MTFAgentsOrchestrator.analyze_comprehensive_mtf()`
-    - → Executes `CoreMTFProcessor` (essential, must succeed)
-    - → Executes specialized agents in parallel (intraday, swing, position)
-    - → Aggregates results with consensus building
-    - → Returns `AggregatedMTFAnalysis`
-  - Advanced analysis digest (timeout: 90s)
-  - Sector context (if requested, timeout: 120s)
-  - Indicator summary LLM (timeout: 120s)
-- Join → Prepare final-decision inputs → FinalDecisionProcessor.analyze_async (centralized)
-- Optional ML predictions
-- Build frontend response → Persist to Database Service → Return JSON
+- **Request Processing**: Resolve user ID → Initialize orchestrator → Reset token counter
+- **Data Pipeline**: Retrieve stock data → Compute indicators → Setup prefetch cache
+- **Parallel Agent Execution** (with comprehensive logging + timeouts):
+  - **Volume agents** (timeout: 180s): 5 distributed agents via loopback REST
+  - **Risk analysis** (timeout: 200s): Quantitative + LLM synthesis via loopback REST
+  - **MTF analysis** (timeout: 120s): **Enhanced 2-step process**:
+    - Step 1: Technical MTF via `mtf_agent_integration_manager.get_comprehensive_mtf_analysis()`
+    - Step 2: LLM insights via `mtf_llm_agent.analyze_mtf_with_llm()`
+    - Step 3: Combine technical + LLM analysis for unified context
+  - **Advanced analysis** (timeout: 90s): Scenario analysis and risk digest
+  - **Sector analysis** (timeout: 220s): Comprehensive sector context via loopback REST
+  - **Indicator summary** (timeout: 120s): Enhanced conflict detection via new backend/LLM system
+- **Context Preparation**: Normalize results → Extract specialized payloads → Debug logging
+- **Final Decision**: `FinalDecisionProcessor.analyze_async()` with enhanced multi-context input
+- **ML Predictions**: Optional `UnifiedMLManager` with automatic cache cleanup
+- **Response Building**: `FrontendResponseBuilder` → Add token usage metadata
+- **Persistence**: Store in Database Service with retry logic
+- **Cleanup & Analytics**: Background cache cleanup → Comprehensive token/timing analytics
+- **Response**: Return JSON with performance metrics and token usage data
 
 ---
 
