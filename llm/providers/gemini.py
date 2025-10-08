@@ -259,27 +259,81 @@ class GeminiProvider(BaseLLMProvider):
     
     def extract_text(self, response: Any) -> str:
         """
-        Extract text from Gemini response.
+        Extract text from Gemini response, handling all possible response formats.
         
-        THIS IS THE EXISTING COMPLEX LOGIC - WE'LL SIMPLIFY THIS NEXT
-        Based on the current logic from gemini_core.py lines 92-105, 247-260, 319-333
+        The response can have text in multiple places:
+        1. response.text - convenience property that concatenates all text parts
+        2. response.candidates[0].content.parts[].text - individual text parts
+        3. When code execution is enabled, parts may include executable_code and code_execution_result
+        
+        Args:
+            response: Gemini API response object
+            
+        Returns:
+            Extracted text content
         """
         text_response = ""
         
-        # 1. Try response.text convenience field first
-        if hasattr(response, 'text') and response.text:
-            text_response = response.text
+        # Method 1: Try the convenience .text property first
+        # This property automatically concatenates all text parts
+        try:
+            if hasattr(response, 'text') and response.text:
+                # The .text property might return None if there are non-text parts
+                # So we check if it's actually populated
+                text_response = response.text
+                if text_response:
+                    return text_response
+        except Exception as e:
+            # The .text property might throw if there are mixed content types
+            print(f"⚠️ response.text accessor failed: {e}")
         
-        # 2. If empty, iterate candidates and concatenate all parts[].text
-        if not text_response and hasattr(response, 'candidates') and response.candidates:
-            candidate = response.candidates[0]
-            if hasattr(candidate, 'content') and candidate.content:
-                if hasattr(candidate.content, 'parts') and candidate.content.parts:
-                    for part in candidate.content.parts:
-                        if hasattr(part, 'text') and part.text:
-                            text_response += part.text
-                # 3. Fallback to direct content.text if parts missing or empty
-                if not text_response and hasattr(candidate.content, 'text'):
-                    text_response = candidate.content.text or ""
+        # Method 2: Manually extract from candidates[].content.parts[]
+        # This is more reliable when there are mixed content types
+        if hasattr(response, 'candidates') and response.candidates:
+            for candidate in response.candidates:
+                if hasattr(candidate, 'content') and candidate.content:
+                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                        # Iterate through all parts and extract text
+                        for part in candidate.content.parts:
+                            # Each part can be of different types:
+                            # - text: regular text content
+                            # - executable_code: code to be executed
+                            # - code_execution_result: result of code execution
+                            
+                            if hasattr(part, 'text') and part.text:
+                                text_response += part.text
+                            
+                            # Log other part types for debugging
+                            if hasattr(part, 'executable_code') and part.executable_code:
+                                print(f"🔧 Skipping executable_code part")
+                            
+                            if hasattr(part, 'code_execution_result') and part.code_execution_result:
+                                print(f"📊 Skipping code_execution_result part")
+                    
+                    # Method 3: Try direct content.text as fallback
+                    if not text_response and hasattr(candidate.content, 'text'):
+                        content_text = candidate.content.text
+                        if content_text:
+                            text_response = content_text
+        
+        # If we still don't have text, try to extract from dict representation
+        if not text_response and isinstance(response, dict):
+            # Handle dictionary response format
+            candidates = response.get('candidates', [])
+            if candidates:
+                candidate = candidates[0]
+                content = candidate.get('content', {})
+                parts = content.get('parts', [])
+                for part in parts:
+                    if isinstance(part, dict) and 'text' in part:
+                        text_response += part.get('text', '')
+        
+        # Post-process: Remove markdown code blocks if present
+        if text_response:
+            # Remove ```json or ```JSON blocks
+            import re
+            cleaned = re.sub(r'^```(?:json|JSON)?\s*\n', '', text_response)
+            cleaned = re.sub(r'\n```\s*$', '', cleaned)
+            return cleaned.strip()
         
         return text_response

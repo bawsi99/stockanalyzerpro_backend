@@ -65,7 +65,7 @@ agents:
   # Institutional Activity Agent (Volume)
   institutional_activity_agent:
     provider: "gemini"
-    model: "gemini-2.5-flash"  # Fast for institutional volume analysis
+    model: "gemini-2.5-pro"  # Fast for institutional volume analysis
     enable_code_execution: true  # Needs code execution for volume calculations
     max_retries: 3
     timeout: 90  # Institutional analysis standardized to 90s
