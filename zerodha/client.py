@@ -18,7 +18,15 @@ import tempfile
 from threading import RLock
 from functools import wraps
 import random
-from core.path_utils import get_config_path, get_zerodha_instruments_csv_path, get_safe_write_path
+# Handle both direct execution and module import
+try:
+    from core.path_utils import get_config_path, get_zerodha_instruments_csv_path, get_safe_write_path
+except ImportError:
+    # If running directly, add parent directory to path
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from core.path_utils import get_config_path, get_zerodha_instruments_csv_path, get_safe_write_path
 
 
 # Set up logging
