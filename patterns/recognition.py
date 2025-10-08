@@ -1239,7 +1239,13 @@ class PatternRecognition:
                     slope_diff = abs(slope_highs - slope_lows)
                     avg_slope = (slope_highs + slope_lows) / 2
                     
-                    # Channel quality assessment
+                    # Channel quality assessment (max 100 points total)
+                    # - Parallel lines: 40 points (similar slopes)
+                    # - Channel type identification: 20 points
+                    # - Width consistency: up to 40 points (based on coefficient of variation)
+                    # - Touch points: 20 points (4+ swing highs/lows)
+                    # - Pattern completion: 20 points (breakout occurred)
+                    # Total possible: 140 points, but capped at 100 for consistency
                     quality_score = 0
                     channel_type = None
                     
@@ -1292,6 +1298,9 @@ class PatternRecognition:
                                 quality_score += 20
                             else:
                                 completion_status = "forming"
+                            
+                            # Normalize quality score to maximum of 100 (consistent with other patterns)
+                            quality_score = min(100, quality_score)
                             
                             # Calculate target based on channel height
                             if current_price > upper_line_current:
