@@ -1,5 +1,8 @@
 # Stock Analysis Service — Decision-Making Flow Documentation
 
+## Overview
+This document provides a comprehensive technical overview of the Stock Analysis Service's decision-making flow, focusing on the enhanced analysis pipeline that orchestrates multiple AI agents, performs parallel processing, and provides detailed analytics.
+
 ## Scope
 - Starting point: `backend/services/analysis_service.py`
 - Traced modules:
@@ -77,7 +80,13 @@
 - **Sector Infrastructure**: Classification and benchmarking with caching
 
 ### In-process cache
-- `VOLUME_PREFETCH_CACHE` keyed by `correlation_id`, to reuse prefetched `stock_data` and `indicators` for volume agents and risk analysis (sector agent may also reuse `stock_data`).
+- **`VOLUME_PREFETCH_CACHE`**: Optimized inter-agent data reuse
+  - Keyed by `correlation_id` for traceability
+  - Stores `stock_data`, `indicators`, and creation timestamp
+  - Reused by volume agents, risk analysis, and sector analysis
+  - **Automatic cleanup**: 350-second expiry with background task cleanup
+  - **Memory optimization**: Prevents redundant data fetching across parallel agents
+  - **Performance impact**: Saves 200-500ms per agent by avoiding duplicate API calls
 
 ### File-based sector cache (agents/sector/cache_manager.py)
 - Managed by `SectorCacheManager` with manifest and `cache_config.json`
@@ -94,14 +103,26 @@
 ## Service Lifecycle
 
 ### Startup
-- Validate/log Zerodha credential presence
-- Initialize chart manager, Redis cache manager, storage directories
-- Initialize sector classifiers
-- Log signals weighting profiles
-- Optionally start a weekly calibration scheduler when `ENABLE_SCHEDULED_CALIBRATION=1`
+- **Credential Validation**: Test Zerodha API credentials and log status
+- **Component Initialization**:
+  - Chart manager with deployment-specific configuration
+  - Redis cache manager for data caching (not image storage)
+  - Storage directories and configuration
+  - Sector classifiers with lazy loading (saves 2-3s startup time)
+  - Global sector benchmarking provider for persistent caching
+- **Signals Configuration**: Log active timeframe weighting profiles (default, trending, ranging)
+- **Background Services**: 
+  - Optional weekly calibration scheduler (if `ENABLE_SCHEDULED_CALIBRATION=1`)
+  - Automated calibration with fixture generation and weight backup
+  - Subprocess-based calibration with timeouts and resource management
 
 ### Shutdown
-- Cancels background tasks and performs best-effort cleanup
+- **Background Task Cleanup**: Cancel all running asyncio tasks
+- **Resource Cleanup**: 
+  - Data client cleanup
+  - Background task cancellation with timeout
+  - Best-effort resource deallocation
+- **Graceful Shutdown**: Wait for tasks to complete before final shutdown
 
 ---
 
@@ -554,12 +575,88 @@ The MTF system now follows an agent-based orchestration pattern similar to volum
 
 ---
 
+## Token Usage Analytics and Performance Monitoring
+
+### Token Analytics Endpoints
+- **GET `/analytics/tokens`**: Comprehensive token usage analytics
+  - Total usage summary (calls, input/output tokens)
+  - Per-model breakdown (Flash vs Pro models)
+  - Per-agent usage statistics
+  - Agent-model combination analysis
+
+- **GET `/analytics/tokens/models`**: Model-specific analytics
+  - Usage breakdown by model type
+  - Efficiency comparisons between models
+  - Performance metrics per model
+
+- **POST `/analytics/tokens/compare`**: Model efficiency comparison
+  - Side-by-side comparison of two models
+  - Cost-effectiveness analysis
+  - Performance benchmarking
+
+- **POST `/analytics/tokens/reset`**: Reset analytics data
+  - Clear all token usage counters
+  - Reset performance metrics
+
+### Performance Analytics Features
+- **Real-time Token Tracking**: Comprehensive LLM usage monitoring per analysis
+- **Agent Performance Metrics**: Individual agent execution times and success rates
+- **Model Usage Optimization**: Flash vs Pro model selection based on task complexity
+- **Cost Analysis**: Token usage cost tracking and optimization recommendations
+- **Agent-Model Combinations**: Detailed breakdown of which agents use which models
+- **Timing Breakdown**: Per-agent execution timing for performance optimization
+
+### Analytics Display Format
+```
+📊 TOKEN USAGE SUMMARY for SYMBOL
+=======================================
+Total Analysis Time: 45.23s
+Total LLM Calls: 12
+Total Input Tokens: 25,847
+Total Output Tokens: 8,943
+Total Tokens: 34,790
+
+🤖 AGENT DETAILS:
+=======================================
+Agent                     | Model           | Input    | Output   | Total    | Time
+------------------------- | --------------- | -------- | -------- | -------- | --------
+final_decision           | FLASH           |    8,425 |    2,156 |   10,581 |    12.45s
+volume_institutional     | FLASH           |    4,132 |    1,204 |    5,336 |     3.21s
+mtf_llm_agent           | PRO             |    6,890 |    3,245 |   10,135 |     8.97s
+sector_synthesis        | FLASH           |    3,200 |    1,124 |    4,324 |     4.12s
+risk_llm_agent          | FLASH           |    3,200 |    1,214 |    4,414 |     6.78s
+```
+
 ## Notes on Charts
 - Enhanced decision path avoids chart generation (chart_paths = {}).
 - Dedicated `/charts` endpoint generates in-memory PNGs and returns base64 with metadata.
 - Conversion and cleanup functions reduce memory pressure (scoped functions, GC hints).
 
 ---
+
+## Machine Learning Integration
+
+### ML Endpoints
+- **POST `/ml/train`**: Train global CatBoost model
+  - Optional parameters: `days` (training period), `patterns` (specific patterns)
+  - Builds pooled dataset and trains model
+  - Returns model metadata, metrics, and feature schema
+
+- **GET `/ml/model`**: Get current model information
+  - Returns model registry status and metadata
+  - Model version and training statistics
+
+- **POST `/ml/predict`**: Get ML predictions
+  - Input: feature dict and optional pattern type
+  - Returns probability and model version
+  - Integrated into enhanced analysis pipeline
+
+### ML System Integration
+- **UnifiedMLManager**: Manages multiple ML engines
+- **Best-effort training**: Non-blocking ML model updates
+- **Comprehensive predictions**: Multiple model ensemble
+- **Automatic cache management**: Memory optimization after predictions
+- **Pattern-specific models**: Specialized models for different market patterns
 
 ## CORS and OPTIONS
 - CORS origins derived from `CORS_ORIGINS` env variable.

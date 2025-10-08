@@ -9,11 +9,12 @@ backend/
 │   ├── README.md
 │   ├── final_decision/
 │   │   ├── __init__.py
+│   │   ├── cache/ [5 CSV cache files + metadata]
 │   │   ├── MIGRATION_SUMMARY.md
 │   │   ├── optimized_final_decision.txt
 │   │   ├── processor.py
 │   │   ├── prompt_processor.py
-│   │   └── test_migration.py
+│   │   └── verification_results/
 │   ├── indicators/
 │   │   ├── __init__.py
 │   │   ├── context_engineer.py
@@ -22,33 +23,79 @@ backend/
 │   │   ├── integration_manager.py
 │   │   ├── llm_integration.py
 │   │   ├── MIGRATION_COMPLETE.md
+│   │   ├── momentum/
+│   │   │   ├── __init__.py
+│   │   │   └── processor.py
 │   │   ├── prompt_manager.py
-│   │   └── test_new_system.py
+│   │   ├── prompt_testing/
+│   │   │   └── indicator_summary/
+│   │   │       └── cache/
+│   │   ├── test_new_system.py
+│   │   ├── tests/
+│   │   │   └── test_processors_schema.py
+│   │   └── trend/
+│   │       ├── __init__.py
+│   │       └── processor.py
 │   ├── mtf_analysis/
 │   │   ├── __init__.py
+│   │   ├── core/
+│   │   │   ├── __init__.py
+│   │   │   └── processor.py
 │   │   ├── integration_manager.py
+│   │   ├── intraday/
+│   │   │   ├── __init__.py
+│   │   │   └── processor.py
 │   │   ├── MTF_LLM_AGENT_INTEGRATION.md
 │   │   ├── mtf_agents.py
 │   │   ├── mtf_llm_agent.py
 │   │   ├── optimized_mtf_comparison.txt
 │   │   ├── orchestrator.py
-│   │   ├── test_migration.py
+│   │   ├── position/
+│   │   │   ├── __init__.py
+│   │   │   └── processor.py
+│   │   ├── prompt_testing/
+│   │   │   └── mtf_comprehensive/
+│   │   │       └── cache/
+│   │   ├── swing/
+│   │   │   ├── __init__.py
+│   │   │   └── processor.py
 │   │   └── test_mtf_llm_agent_only.py
 │   ├── patterns/
 │   │   ├── __init__.py
+│   │   ├── continuation/
+│   │   │   ├── __init__.py
+│   │   │   ├── charts.py
+│   │   │   └── processor.py
 │   │   ├── optimized_pattern_analysis.txt
 │   │   ├── optimized_reversal_patterns.txt
 │   │   ├── optimized_technical_overview.txt
-│   │   └── patterns_agents.py
+│   │   ├── pattern_recognition/
+│   │   │   ├── __init__.py
+│   │   │   ├── charts.py
+│   │   │   └── processor.py
+│   │   ├── patterns_agents.py
+│   │   ├── reversal/
+│   │   │   ├── __init__.py
+│   │   │   ├── charts.py
+│   │   │   └── processor.py
+│   │   └── technical_overview/
+│   │       ├── __init__.py
+│   │       ├── charts.py
+│   │       └── processor.py
 │   ├── risk_analysis/
 │   │   ├── __init__.py
 │   │   ├── multi_stock_test.py
+│   │   ├── quantitative_risk/
+│   │   │   └── processor.py
 │   │   ├── risk_analysis_prompt.txt
-│   │   ├── risk_llm_agent.py
-│   │   └── test_migration.py
+│   │   └── risk_llm_agent.py
 │   ├── sector/
 │   │   ├── __init__.py
 │   │   ├── benchmarking.py
+│   │   ├── cache/
+│   │   │   ├── [22+ CSV cache files organized by sector]
+│   │   │   ├── cache_metadata.json
+│   │   │   └── sector_cache_manifest.json
 │   │   ├── cache_config.json
 │   │   ├── cache_manager.py
 │   │   ├── classifier.py
@@ -58,14 +105,64 @@ backend/
 │   │   ├── processor.py
 │   │   ├── prompt_response_test.py
 │   │   ├── sector_synthesis_template.txt
+│   │   ├── sector_synthesis_test_results/
+│   │   │   ├── sector_prompt_HDFCBANK_20251002_195551.txt
+│   │   │   └── sector_response_HDFCBANK_20251002_195600.txt
 │   │   ├── simple_test.py
-│   │   ├── structure_test.py
-│   │   └── test_migration.py
+│   │   └── structure_test.py
 │   └── volume/
 │       ├── __init__.py
+│       ├── institutional_activity/
+│       │   ├── __init__.py
+│       │   ├── agent.py
+│       │   ├── cache/
+│       │   ├── charts.py
+│       │   ├── institutional_activity_analysis.txt
+│       │   ├── integration.py
+│       │   ├── llm_agent.py
+│       │   ├── multi_stock_test.py
+│       │   └── processor.py
+│       ├── support_resistance/
+│       │   ├── __init__.py
+│       │   ├── agent.py
+│       │   ├── cache/
+│       │   ├── charts.py
+│       │   ├── integration.py
+│       │   ├── llm_agent.py
+│       │   ├── multi_stock_test.py
+│       │   ├── processor.py
+│       │   └── volume_support_resistance.txt
 │       ├── test_institutional_integration.py
 │       ├── test_support_resistance_migration.py
-│       └── volume_agents.py
+│       ├── volume_agents.py
+│       ├── volume_anomaly/
+│       │   ├── __init__.py
+│       │   ├── agent.py
+│       │   ├── cache/
+│       │   ├── charts.py
+│       │   ├── integration.py
+│       │   ├── llm_agent.py
+│       │   ├── multi_stock_test.py
+│       │   ├── processor.py
+│       │   └── volume_anomaly_detection.txt
+│       ├── volume_confirmation/
+│       │   ├── __init__.py
+│       │   ├── cache/
+│       │   ├── charts.py
+│       │   ├── context.py
+│       │   ├── llm_agent.py
+│       │   ├── multi_stock_test.py
+│       │   ├── processor.py
+│       │   └── volume_confirmation_analysis.txt
+│       └── volume_momentum/
+│           ├── __init__.py
+│           ├── agent.py
+│           ├── cache/
+│           ├── charts.py
+│           ├── llm_agent.py
+│           ├── multi_stock_test.py
+│           ├── processor.py
+│           └── volume_trend_momentum.txt
 ├── analysis/
 │   ├── advanced_analysis.py
 │   ├── datasets.py
@@ -73,7 +170,6 @@ backend/
 │   ├── inference.py
 │   └── risk_scoring.py
 ├── analysis_datasets/ [Directory for analysis-specific datasets]
-├── analysis_service.log [Service log file]
 ├── api/
 │   ├── __init__.py
 │   └── responses.py
@@ -152,25 +248,6 @@ backend/
 │   └── decision_flow.md
 ├── enhanced_sector_data/ [Link/directory for enhanced sector data]
 ├── ENV_CONFIG_GUIDE.md [Environment configuration documentation]
-├── examples/
-│   ├── __init__.py
-│   └── new_mechanism_example.py
-├── GEMINI_OPTIMIZATION_REPORT.md [Gemini optimization documentation]
-├── gemini.archive/ [Archive of old Gemini implementation]
-│   ├── __init__.py
-│   ├── api_key_manager.py
-│   ├── audit_llm_calls.py
-│   ├── context_engineer.py
-│   ├── debug_config.py
-│   ├── debug_logger.py
-│   ├── error_utils.py
-│   ├── gemini_client.py
-│   ├── gemini_core.py
-│   ├── image_utils.py
-│   ├── parallel_pattern_detection.py
-│   ├── prompt_manager.py
-│   ├── schema.py
-│   └── token_tracker.py
 ├── llm/ [New unified LLM system]
 │   ├── __init__.py
 │   ├── client.py
@@ -206,7 +283,45 @@ backend/
 │   ├── inference.py
 │   └── quant_system/
 │       ├── __init__.py
-│       └── REORGANIZATION_SUMMARY.md
+│       ├── advanced/
+│       │   └── __init__.py
+│       ├── core/
+│       │   ├── __init__.py
+│       │   ├── base_models.py
+│       │   ├── config.py
+│       │   ├── registry.py
+│       │   └── utils.py
+│       ├── data/
+│       │   ├── __init__.py
+│       │   ├── dataset_builder.py
+│       │   ├── enhanced_pipeline.py
+│       │   ├── market_data_integration.py
+│       │   └── pipeline.py
+│       ├── engines/
+│       │   ├── __init__.py
+│       │   ├── hybrid_ml.py
+│       │   ├── pattern_ml.py
+│       │   ├── raw_data_ml.py
+│       │   └── unified_manager.py
+│       ├── evaluation/
+│       │   ├── __init__.py
+│       │   ├── model_comparison.py
+│       │   ├── price_analysis.py
+│       │   └── robust_evaluation.py
+│       ├── features/
+│       │   ├── __init__.py
+│       │   ├── enhanced_features.py
+│       │   ├── feature_engineer.py
+│       │   └── technical_indicators.py
+│       ├── REORGANIZATION_SUMMARY.md
+│       ├── scripts/
+│       │   ├── __init__.py
+│       │   ├── run_tests.py
+│       │   └── train_models.py
+│       ├── trading/
+│       │   └── __init__.py
+│       └── utils/
+│           └── __init__.py
 ├── output/
 │   └── charts/ [Generated chart outputs]
 ├── patterns/
@@ -249,15 +364,16 @@ backend/
 The backend directory contains a comprehensive stock analysis and trading system with the following main components:
 
 ### Core Modules
-- **agents/**: Modern agent-based architecture with specialized components:
-  - `final_decision/`: Final trading decision processing
-  - `indicators/`: Technical indicator analysis agents
-  - `mtf_analysis/`: Multi-timeframe analysis agents
-  - `patterns/`: Chart pattern recognition agents
-  - `risk_analysis/`: Risk assessment and scoring agents
-  - `sector/`: Sector analysis and classification agents
-  - `volume/`: Volume analysis agents
-- **analysis/**: Advanced analysis modules including heavy load processing
+- **agents/**: Fully-featured agent-based architecture with specialized processors:
+  - `final_decision/`: Final trading decision processing with dedicated cache
+  - `indicators/`: Technical indicator agents with momentum/trend processors and testing framework
+  - `mtf_analysis/`: Multi-timeframe analysis with core/intraday/position/swing processors
+  - `patterns/`: Chart pattern recognition with continuation/reversal/technical_overview agents
+  - `risk_analysis/`: Risk assessment with quantitative risk processing
+  - `sector/`: Advanced sector analysis with extensive caching and test results
+  - `volume/`: Comprehensive volume analysis with 5 specialized sub-agents:
+    - institutional_activity, support_resistance, volume_anomaly, volume_confirmation, volume_momentum
+- **analysis/**: Advanced analysis modules including heavy load processing and risk scoring
 - **api/**: FastAPI endpoints and responses
 - **cache/**: Cached stock data storage (47+ CSV files)
 - **config/**: Configuration files, requirements, and deployment settings
@@ -265,39 +381,41 @@ The backend directory contains a comprehensive stock analysis and trading system
 - **data/**: Structured data storage including:
   - Analysis datasets (portfolio, sector, trading)
   - Enhanced sector data with performance metrics
-  - 20+ sector category JSON files
+  - 19+ sector category JSON files
   - Signal processing and weights configuration
 - **docs/**: Documentation for agent migration and decision flow
-- **examples/**: Example implementations and usage patterns
-- **gemini.archive/**: Archived old Gemini implementation
-- **llm/**: New unified LLM system with:
+- **llm/**: Production-ready unified LLM system with:
   - Provider-agnostic architecture
   - Key rotation and management
   - Token tracking and usage monitoring
   - Comprehensive test suite
-- **ml/**: Machine learning components including market regime analysis and quantitative systems
+- **ml/**: Enhanced machine learning components with:
+  - Market regime analysis and quantitative systems
+  - Complete quant_system with core/data/engines/evaluation/features modules
 - **patterns/**: Pattern recognition and confirmation modules
 - **services/**: Backend services for data processing and analysis
 - **utils/**: Utility functions and LLM response extraction tools
 - **zerodha/**: Zerodha trading platform integration with WebSocket support
 
 ### Key Features
-- **Agent-Based Architecture**: Modular, specialized agents for different analysis tasks
-- **Unified LLM System**: Provider-agnostic LLM integration with advanced token management
-- **Advanced Data Management**: Comprehensive caching, sector classification, and signal processing
-- **Real-time Integration**: WebSocket support for live data feeds
-- **Pattern Recognition**: Advanced chart pattern detection and confirmation
-- **Risk Management**: Sophisticated risk analysis and scoring systems
-- **Extensible Design**: Well-documented migration paths and modular architecture
+- **Production-Ready Agent Architecture**: Fully-featured agent system with 22+ specialized processors
+- **Comprehensive Volume Analysis**: 5 dedicated volume analysis agents with individual caching systems
+- **Advanced Pattern Recognition**: 4 specialized pattern agents (continuation, reversal, pattern_recognition, technical_overview)
+- **Multi-Timeframe Analysis**: 4 timeframe processors (core, intraday, position, swing)
+- **Intelligent Caching**: Agent-specific caching with 70+ distributed cache files
+- **Unified LLM System**: Production-ready LLM integration with advanced token management
+- **Comprehensive Testing**: Extensive testing framework with prompt testing and verification systems
+- **Clean Architecture**: Removed legacy code and archived unused components
 
 ### File Statistics
-- **Total Python files**: 80+ core Python modules
-- **Configuration files**: 7 configuration and requirements files
-- **Data files**: 47+ CSV cache files, 20+ sector JSON files, multiple datasets
-- **Documentation files**: 10+ markdown documentation files
-- **Test files**: 15+ test and migration files
+- **Total Python files**: 130+ core Python modules (increased from agent expansion)
+- **Configuration files**: 8 configuration and requirements files
+- **Data files**: 70+ CSV cache files (distributed across agents), 19 sector JSON files, multiple datasets
+- **Documentation files**: 8 markdown documentation files (focused on essential docs)
+- **Test files**: 25+ test, migration, and verification files
 - **Virtual Environment**: Complete Python 3.10 environment (.venv/)
-- **Archive files**: 13 archived Gemini implementation files
+- **Cache directories**: 15+ specialized cache directories across agents
+- **Agent processors**: 22+ specialized processing modules
 
 ### Architecture Evolution
 - **Agent Migration**: Successfully migrated from monolithic to agent-based architecture
