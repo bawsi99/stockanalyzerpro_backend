@@ -862,6 +862,16 @@ class RiskAnalysisRequest(BaseModel):
     return_prompt: Optional[bool] = Field(default=False, description="Return enhanced prompt where applicable")
     timeframes: Optional[List[str]] = Field(default=["short", "medium", "long"], description="Risk analysis timeframes")
 
+# --- Pattern Analysis Agent API Models ---
+class PatternAnalysisRequest(BaseModel):
+    symbol: str = Field(..., description="Stock symbol")
+    exchange: str = Field(default="NSE", description="Stock exchange")
+    interval: str = Field(default="day", description="Data interval (internal mapping)")
+    period: int = Field(default=365, description="Analysis period in days")
+    correlation_id: Optional[str] = Field(default=None, description="Optional correlation ID for tracing")
+    return_prompt: Optional[bool] = Field(default=False, description="Return enhanced prompt where applicable")
+    context: Optional[str] = Field(default="", description="Additional context for pattern analysis")
+
 # --- REST API Endpoints ---
 
 @app.get("/health")
@@ -1349,13 +1359,52 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
 
         indicator_task = asyncio.create_task(_with_logging("indicator_summary", _indicator_summary(), timeout=120.0))
 
+        # Pattern analysis agent via service endpoint (loopback)
+        patterns_agents_url = os.getenv("ANALYSIS_SERVICE_URL", "http://localhost:8002") + "/agents/patterns/analyze-all"
+        async def _patterns():
+            try:
+                print(f"[PATTERN_DEBUG] Starting pattern analysis for {request.stock}...")
+                
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    resp = await client.post(
+                        patterns_agents_url,
+                        json={
+                            "symbol": request.stock,
+                            "exchange": request.exchange,
+                            "interval": request.interval,
+                            "period": request.period,
+                            "correlation_id": correlation_id,
+                            "return_prompt": False,  # Don't return prompt in parallel execution
+                            "context": f"Enhanced pattern analysis for {request.stock}"
+                        }
+                    )
+                    resp.raise_for_status()
+                    result = resp.json()
+                    
+                    print(f"[PATTERN_DEBUG] Pattern analysis completed for {request.stock}. Success: {result.get('success')}")
+                    
+                    if result.get('success'):
+                        print(f"✅ [PATTERN_AGENT] Analysis completed for {request.stock}")
+                        print(f"   Confidence: {result.get('pattern_summary', {}).get('overall_confidence', 0):.2%}")
+                        print(f"   Patterns Detected: {result.get('pattern_summary', {}).get('patterns_detected', 0)}")
+                        return result
+                    else:
+                        print(f"⚠️ [PATTERN_AGENT] Analysis failed: {result.get('error', 'Unknown error')}")
+                        return {}
+                        
+            except Exception as e:
+                print(f"[PATTERN] Error calling pattern analysis endpoint: {e}")
+                return {}
+
+        patterns_task = asyncio.create_task(_with_logging("patterns", _patterns(), timeout=200.0))
+
         # Await all independent tasks with return_exceptions=True to avoid cancellation
         parallel_t0 = time.monotonic()
-        results = await asyncio.gather(volume_task, mtf_task, advanced_task, sector_task, indicator_task, risk_task, return_exceptions=True)
+        results = await asyncio.gather(volume_task, mtf_task, advanced_task, sector_task, indicator_task, risk_task, patterns_task, return_exceptions=True)
         parallel_dt = time.monotonic() - parallel_t0
         print(f"[PARALLEL] Independent tasks completed in {parallel_dt:.2f}s")
         # One-line summary for quick glance
-        names = ["volume_agents", "mtf", "advanced", "sector", "indicator_summary", "risk"]
+        names = ["volume_agents", "mtf", "advanced", "sector", "indicator_summary", "risk", "patterns"]
         summary = ", ".join(
             f"{n}={durations.get(n, float('nan')):.2f}s/{'OK' if statuses.get(n) else 'ERR'}" for n in names
         )
@@ -1367,6 +1416,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         sector_context = results[3]
         indicator_summary_result = results[4]
         risk_context = results[5]
+        patterns_context = results[6]
 
         # Normalize exceptions to empty fallbacks
         if isinstance(volume_agents_result, Exception):
@@ -1407,6 +1457,19 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                     print(f"[PARALLEL] risk bullets_for_decision length: {bullets_len}")
             else:
                 print(f"[PARALLEL] risk result is empty or not dict")
+        if isinstance(patterns_context, Exception):
+            print(f"[PARALLEL] patterns failed: {type(patterns_context).__name__}: {patterns_context!r}")
+            patterns_context = {}
+        else:
+            # DEBUG: Log what we actually got from patterns task
+            print(f"[PARALLEL] patterns result type: {type(patterns_context)}, has_data: {bool(patterns_context)}")
+            if isinstance(patterns_context, dict) and patterns_context:
+                print(f"[PARALLEL] patterns result keys: {list(patterns_context.keys())}")
+                if 'pattern_insights_for_decision' in patterns_context:
+                    insights_len = len(patterns_context['pattern_insights_for_decision']) if patterns_context['pattern_insights_for_decision'] else 0
+                    print(f"[PARALLEL] pattern insights_for_decision length: {insights_len}")
+            else:
+                print(f"[PARALLEL] patterns result is empty or not dict")
 
         # Normalize contexts
         if not isinstance(mtf_context, dict):
@@ -1419,6 +1482,8 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             volume_agents_result = {}
         if not isinstance(risk_context, dict):
             risk_context = {}
+        if not isinstance(patterns_context, dict):
+            patterns_context = {}
 
         indicator_summary_md, indicator_json, indicator_json_blob = ("", {}, "")
         if isinstance(indicator_summary_result, tuple):
@@ -1485,6 +1550,15 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         except Exception as e:
             print(f"[MTF_INTEGRATION] Error preparing MTF payload for final decision: {e}")
             mtf_payload = None
+
+        # Extract pattern insights for final decision agent
+        pattern_insights = None
+        try:
+            if patterns_context and isinstance(patterns_context, dict):
+                pattern_insights = patterns_context.get('pattern_insights_for_decision') or None
+        except Exception as e:
+            print(f"[PATTERN_INTEGRATION] Error extracting pattern insights: {e}")
+            pattern_insights = None
 
         # Final decision with START/END logging
         fd_t0 = time.monotonic()
@@ -1622,6 +1696,25 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         else:
             print(f"  (Empty or None)")
         
+        # Debug: Pattern Insights (NEW - PATTERN ANALYSIS LLM AGENT)
+        print(f"\n[FD_INPUT] Pattern Insights (type: {type(pattern_insights)}, has_data: {bool(pattern_insights)}):")
+        if pattern_insights:
+            if isinstance(pattern_insights, str):
+                # Show first few lines of pattern insights
+                lines = pattern_insights.split('\n')[:5]  # First 5 lines
+                print(f"  Content (first 5 lines):")
+                for i, line in enumerate(lines, 1):
+                    print(f"    {i}. {line}")
+                total_lines = len(pattern_insights.split('\n'))
+                if total_lines > 5:
+                    remaining_lines = total_lines - 5
+                    print(f"    ... ({remaining_lines} more lines)")
+                print(f"  Total length: {len(pattern_insights)} characters")
+            else:
+                print(f"  {str(pattern_insights)[:200]}..." if len(str(pattern_insights)) > 200 else f"  {pattern_insights}")
+        else:
+            print(f"  (Empty or None)")
+        
         print(f"\n[FD_INPUT] Knowledge Context: (Empty string)")
         print(f"{'='*80}\n")
 
@@ -1633,6 +1726,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 sector_bullets=sector_bullets,
                 advanced_digest=advanced_analysis or {},
                 risk_bullets=risk_bullets,  # NEW: Pass enhanced multi-timeframe risk bullets
+                pattern_insights=pattern_insights,  # NEW: Pass pattern analysis LLM insights
                 chart_insights=chart_insights_md,
                 knowledge_context="",
                 volume_analysis=volume_agents_result or {}
@@ -3800,6 +3894,186 @@ async def agents_risk_analyze_all(req: RiskAnalysisRequest):
                 "success": False,
                 "error": error_msg,
                 "agent": "risk_analysis",
+                "symbol": req.symbol,
+                "processing_time": total_time,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+# ===== PATTERN ANALYSIS AGENT ENDPOINTS =====
+
+@app.post("/agents/patterns/analyze-all")
+async def agents_patterns_analyze_all(req: PatternAnalysisRequest):
+    """
+    Comprehensive Pattern Analysis Agent endpoint.
+    
+    This endpoint performs comprehensive pattern analysis using:
+    - Technical pattern detection (candlesticks, chart patterns, trend patterns)
+    - Multi-agent pattern recognition with confidence scoring
+    - LLM-powered pattern analysis and synthesis
+    - Trading signal generation with entry/exit levels
+    
+    The analysis provides actionable pattern insights with:
+    - Pattern identification and significance
+    - Trading recommendations with specific levels
+    - Risk assessment and market outlook
+    - Natural language synthesis of technical findings
+    """
+    start_time = time.monotonic()
+    print(f"[PATTERN_AGENT] Starting comprehensive pattern analysis for {req.symbol}")
+    
+    try:
+        # Attempt to reuse prefetched data if provided via correlation_id
+        stock_data = None
+        indicators = None
+        if req.correlation_id:
+            try:
+                cached = VOLUME_PREFETCH_CACHE.get(req.correlation_id, None)
+                if cached and isinstance(cached, dict):
+                    stock_data = cached.get('stock_data')
+                    indicators = cached.get('indicators')
+                    print(f"[PATTERN_AGENT] Using prefetched data for correlation_id={req.correlation_id}")
+            except Exception as cache_e:
+                print(f"[PATTERN_AGENT] Error retrieving prefetched data: {cache_e}")
+        
+        # Retrieve stock data only if not provided
+        if stock_data is None:
+            try:
+                orchestrator = StockAnalysisOrchestrator()
+                stock_data = await orchestrator.retrieve_stock_data(
+                    symbol=req.symbol,
+                    exchange=req.exchange,
+                    interval=req.interval,
+                    period=req.period
+                )
+                print(f"[PATTERN_AGENT] Retrieved {len(stock_data)} days of data for {req.symbol}")
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+        
+        # Calculate indicators only if not provided
+        if indicators is None:
+            try:
+                indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, req.symbol)
+                print(f"[PATTERN_AGENT] Calculated {len(indicators)} indicators for {req.symbol}")
+            except Exception as ind_e:
+                # Non-fatal: proceed with minimal indicators
+                indicators = {}
+                print(f"[PATTERN_AGENT] Warning: indicator calculation failed: {ind_e}")
+        
+        # Step 1: Run Pattern LLM Agent
+        agent_start = time.monotonic()
+        
+        # Import Pattern LLM Agent
+        from agents.patterns.pattern_llm_agent import PatternLLMAgent
+        
+        # Create Pattern LLM Agent instance
+        pattern_agent = PatternLLMAgent()
+        
+        # Run comprehensive pattern analysis
+        pattern_result = await pattern_agent.analyze_patterns_with_llm(
+            symbol=req.symbol,
+            stock_data=stock_data,
+            indicators=indicators,
+            context=req.context
+        )
+        
+        agent_time = time.monotonic() - agent_start
+        print(f"[PATTERN_AGENT] Pattern analysis completed in {agent_time:.2f}s")
+        
+        # Step 2: Build comprehensive response
+        total_time = time.monotonic() - start_time
+        
+        if pattern_result.get('success', False):
+            # Extract key data from pattern result
+            technical_analysis = pattern_result.get('technical_analysis', {})
+            llm_synthesis = pattern_result.get('llm_synthesis', {})
+            confidence_score = pattern_result.get('confidence_score', 0.5)
+            
+            comprehensive_response = {
+                "success": True,
+                "agent": "pattern_analysis",
+                "symbol": req.symbol,
+                "exchange": req.exchange,
+                "timestamp": datetime.now().isoformat(),
+                "processing_time": total_time,
+                
+                # Pattern Analysis Results
+                "pattern_analysis": {
+                    "success": True,
+                    "processing_time": agent_time,
+                    "confidence_score": confidence_score,
+                    "technical_analysis": technical_analysis,
+                    "llm_synthesis": llm_synthesis,
+                    "pattern_summary": pattern_result.get('pattern_summary', ''),
+                },
+                
+                # Summary for final decision agent integration
+                "pattern_summary": {
+                    "overall_confidence": confidence_score,
+                    "patterns_detected": len(technical_analysis.get('pattern_results', {})),
+                    "key_patterns": list(technical_analysis.get('pattern_results', {}).keys())[:5],
+                    "trading_signals": technical_analysis.get('trading_signals', {}),
+                    "market_outlook": llm_synthesis.get('parsed_analysis', {}).get('market_outlook', 'Neutral')
+                },
+                
+                # For final decision agent integration
+                "pattern_insights_for_decision": llm_synthesis.get('raw_response', '') if llm_synthesis.get('success') else None,
+                
+                # Optional: Return prompt if requested
+                "prompt_details": {
+                    "returned": req.return_prompt,
+                    "prompt_content": "Pattern analysis prompt details" if req.return_prompt else None
+                } if req.return_prompt else None,
+                
+                # Metadata
+                "request_metadata": {
+                    "context": req.context,
+                    "correlation_id": req.correlation_id,
+                    "used_prefetched_data": bool(req.correlation_id and cached)
+                }
+            }
+        else:
+            # Pattern analysis failed
+            error_msg = pattern_result.get('error', 'Unknown pattern analysis error')
+            comprehensive_response = {
+                "success": False,
+                "error": error_msg,
+                "agent": "pattern_analysis",
+                "symbol": req.symbol,
+                "exchange": req.exchange,
+                "processing_time": total_time,
+                "timestamp": datetime.now().isoformat(),
+                "pattern_analysis": {
+                    "success": False,
+                    "error": error_msg,
+                    "processing_time": agent_time
+                }
+            }
+        
+        # Ensure JSON serializable
+        serializable_response = make_json_serializable(comprehensive_response)
+        
+        success_status = "✅" if pattern_result.get('success', False) else "❌"
+        print(f"[PATTERN_AGENT] {success_status} Pattern analysis completed for {req.symbol} in {total_time:.2f}s")
+        print(f"[PATTERN_AGENT] - Confidence: {pattern_result.get('confidence_score', 0):.2%}")
+        
+        return JSONResponse(content=serializable_response, status_code=200)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        total_time = time.monotonic() - start_time
+        error_msg = f"Pattern analysis failed for {req.symbol}: {str(e)}"
+        print(f"[PATTERN_AGENT] ❌ {error_msg} (after {total_time:.2f}s)")
+        import traceback
+        traceback.print_exc()
+        
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": error_msg,
+                "agent": "pattern_analysis",
                 "symbol": req.symbol,
                 "processing_time": total_time,
                 "timestamp": datetime.now().isoformat()

@@ -1,0 +1,1334 @@
+{
+  "individual_results": {
+    "reversal": {
+      "agent_name": "reversal",
+      "success": true,
+      "processing_time": 0.26197028160095215,
+      "analysis_data": {
+        "agent_name": "reversal_patterns",
+        "error": "unhashable type: 'slice'",
+        "success": false,
+        "confidence_score": 0.0
+      },
+      "prompt_text": null,
+      "llm_response": null,
+      "error_message": null,
+      "confidence_score": 0.0
+    },
+    "continuation": {
+      "agent_name": "continuation",
+      "success": true,
+      "processing_time": 0.45891499519348145,
+      "analysis_data": {
+        "agent_name": "continuation_patterns",
+        "processing_time": 0.026368,
+        "timestamp": "2025-10-10T17:52:03.370903",
+        "continuation_patterns": {
+          "triangles": [],
+          "flags_pennants": [
+            {
+              "type": "bull_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1329.95,
+              "stop_loss": 1280.2,
+              "target_levels": [
+                1397.25,
+                1430.9
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 5.4% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1329.95,
+              "stop_loss": 1276.05,
+              "target_levels": [
+                1429.0,
+                1478.525
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 8.1% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bear_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1201.5,
+              "stop_loss": 1244.9,
+              "target_levels": [
+                1109.9,
+                1064.1000000000001
+              ],
+              "confidence": 0.75,
+              "description": "Bear Flag after -6.9% move",
+              "direction": "bearish"
+            },
+            {
+              "type": "bear_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1201.5,
+              "stop_loss": 1239.5,
+              "target_levels": [
+                1095.25,
+                1042.125
+              ],
+              "confidence": 0.75,
+              "description": "Bear Flag after -8.1% move",
+              "direction": "bearish"
+            },
+            {
+              "type": "bear_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1208.1,
+              "stop_loss": 1233.55,
+              "target_levels": [
+                1135.2499999999998,
+                1098.8249999999998
+              ],
+              "confidence": 0.75,
+              "description": "Bear Flag after -5.6% move",
+              "direction": "bearish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1307.7,
+              "stop_loss": 1250.05,
+              "target_levels": [
+                1401.2500000000002,
+                1448.0250000000003
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 8.0% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1307.7,
+              "stop_loss": 1268.75,
+              "target_levels": [
+                1374.45,
+                1407.825
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 5.5% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "strong",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1439.5,
+              "stop_loss": 1369.0,
+              "target_levels": [
+                1620.25,
+                1710.625
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 14.8% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "strong",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1439.5,
+              "stop_loss": 1369.0,
+              "target_levels": [
+                1604.4,
+                1686.8500000000001
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 13.3% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "strong",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1439.5,
+              "stop_loss": 1398.0,
+              "target_levels": [
+                1622.6000000000001,
+                1714.15
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 14.8% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "strong",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1439.5,
+              "stop_loss": 1374.5,
+              "target_levels": [
+                1596.3,
+                1674.6999999999998
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 12.3% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1439.0,
+              "stop_loss": 1374.5,
+              "target_levels": [
+                1564.4,
+                1627.1000000000001
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 9.7% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "strong",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1461.4,
+              "stop_loss": 1400.0,
+              "target_levels": [
+                1597.5,
+                1665.55
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 10.5% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1531.9,
+              "stop_loss": 1496.0,
+              "target_levels": [
+                1619.4,
+                1663.15
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 6.1% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1544.8,
+              "stop_loss": 1500.1,
+              "target_levels": [
+                1642.0,
+                1690.6
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 6.8% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1544.9,
+              "stop_loss": 1508.7,
+              "target_levels": [
+                1633.6000000000001,
+                1677.9500000000003
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 6.2% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1551.0,
+              "stop_loss": 1510.1,
+              "target_levels": [
+                1635.5,
+                1677.75
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 5.9% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1551.0,
+              "stop_loss": 1490.3,
+              "target_levels": [
+                1635.7,
+                1678.0500000000002
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 5.8% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bull_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1551.0,
+              "stop_loss": 1479.1,
+              "target_levels": [
+                1637.8,
+                1681.1999999999998
+              ],
+              "confidence": 0.75,
+              "description": "Bull Flag after 6.0% move",
+              "direction": "bullish"
+            },
+            {
+              "type": "bear_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1384.1,
+              "stop_loss": 1431.9,
+              "target_levels": [
+                1259.3,
+                1196.9
+              ],
+              "confidence": 0.75,
+              "description": "Bear Flag after -8.1% move",
+              "direction": "bearish"
+            },
+            {
+              "type": "bear_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1383.0,
+              "stop_loss": 1426.0,
+              "target_levels": [
+                1288.6,
+                1241.3999999999999
+              ],
+              "confidence": 0.75,
+              "description": "Bear Flag after -6.2% move",
+              "direction": "bearish"
+            },
+            {
+              "type": "bear_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1383.0,
+              "stop_loss": 1423.3,
+              "target_levels": [
+                1268.7,
+                1211.5500000000002
+              ],
+              "confidence": 0.75,
+              "description": "Bear Flag after -7.5% move",
+              "direction": "bearish"
+            },
+            {
+              "type": "bear_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1382.2,
+              "stop_loss": 1423.3,
+              "target_levels": [
+                1278.7,
+                1226.95
+              ],
+              "confidence": 0.75,
+              "description": "Bear Flag after -6.9% move",
+              "direction": "bearish"
+            },
+            {
+              "type": "bear_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1382.2,
+              "stop_loss": 1423.3,
+              "target_levels": [
+                1286.1,
+                1238.0499999999997
+              ],
+              "confidence": 0.75,
+              "description": "Bear Flag after -6.5% move",
+              "direction": "bearish"
+            },
+            {
+              "type": "bear_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1382.2,
+              "stop_loss": 1423.3,
+              "target_levels": [
+                1306.7,
+                1268.95
+              ],
+              "confidence": 0.75,
+              "description": "Bear Flag after -5.1% move",
+              "direction": "bearish"
+            },
+            {
+              "type": "bear_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1382.2,
+              "stop_loss": 1416.1,
+              "target_levels": [
+                1296.0,
+                1252.9
+              ],
+              "confidence": 0.75,
+              "description": "Bear Flag after -5.8% move",
+              "direction": "bearish"
+            },
+            {
+              "type": "bear_flag",
+              "strength": "medium",
+              "completion": 80.0,
+              "reliability": "high",
+              "breakout_level": 1366.0,
+              "stop_loss": 1416.1,
+              "target_levels": [
+                1283.7,
+                1242.5500000000002
+              ],
+              "confidence": 0.75,
+              "description": "Bear Flag after -5.6% move",
+              "direction": "bearish"
+            }
+          ],
+          "channels": [
+            {
+              "type": "descending_channel",
+              "strength": "medium",
+              "completion": 85.0,
+              "reliability": "medium",
+              "breakout_level": 1224.3151612903227,
+              "stop_loss": 1203.3002150537634,
+              "target_levels": [
+                1245.330107526882
+              ],
+              "confidence": 0.65,
+              "description": "Descending Channel pattern",
+              "direction": "bearish"
+            },
+            {
+              "type": "descending_channel",
+              "strength": "medium",
+              "completion": 85.0,
+              "reliability": "medium",
+              "breakout_level": 1224.2220430107525,
+              "stop_loss": 1202.699892473118,
+              "target_levels": [
+                1245.7441935483869
+              ],
+              "confidence": 0.65,
+              "description": "Descending Channel pattern",
+              "direction": "bearish"
+            },
+            {
+              "type": "descending_channel",
+              "strength": "medium",
+              "completion": 85.0,
+              "reliability": "medium",
+              "breakout_level": 1226.2411827956994,
+              "stop_loss": 1204.897634408602,
+              "target_levels": [
+                1247.5847311827968
+              ],
+              "confidence": 0.65,
+              "description": "Descending Channel pattern",
+              "direction": "bearish"
+            },
+            {
+              "type": "descending_channel",
+              "strength": "medium",
+              "completion": 85.0,
+              "reliability": "medium",
+              "breakout_level": 1189.6543010752687,
+              "stop_loss": 1211.5124731182798,
+              "target_levels": [
+                1167.7961290322576
+              ],
+              "confidence": 0.65,
+              "description": "Descending Channel pattern",
+              "direction": "bearish"
+            },
+            {
+              "type": "descending_channel",
+              "strength": "medium",
+              "completion": 85.0,
+              "reliability": "medium",
+              "breakout_level": 1183.9641935483871,
+              "stop_loss": 1205.8547311827954,
+              "target_levels": [
+                1162.0736559139789
+              ],
+              "confidence": 0.65,
+              "description": "Descending Channel pattern",
+              "direction": "bearish"
+            },
+            {
+              "type": "ascending_channel",
+              "strength": "medium",
+              "completion": 85.0,
+              "reliability": "medium",
+              "breakout_level": 1266.5132258064516,
+              "stop_loss": 1287.9632258064519,
+              "target_levels": [
+                1245.0632258064513
+              ],
+              "confidence": 0.65,
+              "description": "Ascending Channel pattern",
+              "direction": "bullish"
+            },
+            {
+              "type": "ascending_channel",
+              "strength": "medium",
+              "completion": 85.0,
+              "reliability": "medium",
+              "breakout_level": 1377.457419354839,
+              "stop_loss": 1404.907849462366,
+              "target_levels": [
+                1350.006989247312
+              ],
+              "confidence": 0.65,
+              "description": "Ascending Channel pattern",
+              "direction": "bullish"
+            },
+            {
+              "type": "ascending_channel",
+              "strength": "medium",
+              "completion": 85.0,
+              "reliability": "medium",
+              "breakout_level": 1463.5074193548387,
+              "stop_loss": 1434.463225806452,
+              "target_levels": [
+                1492.5516129032253
+              ],
+              "confidence": 0.65,
+              "description": "Ascending Channel pattern",
+              "direction": "bullish"
+            },
+            {
+              "type": "ascending_channel",
+              "strength": "medium",
+              "completion": 85.0,
+              "reliability": "medium",
+              "breakout_level": 1514.5247311827957,
+              "stop_loss": 1536.9221505376345,
+              "target_levels": [
+                1492.1273118279569
+              ],
+              "confidence": 0.65,
+              "description": "Ascending Channel pattern",
+              "direction": "bullish"
+            },
+            {
+              "type": "descending_channel",
+              "strength": "medium",
+              "completion": 85.0,
+              "reliability": "medium",
+              "breakout_level": 1385.1909677419349,
+              "stop_loss": 1362.6698924731181,
+              "target_levels": [
+                1407.7120430107516
+              ],
+              "confidence": 0.65,
+              "description": "Descending Channel pattern",
+              "direction": "bearish"
+            },
+            {
+              "type": "descending_channel",
+              "strength": "medium",
+              "completion": 85.0,
+              "reliability": "medium",
+              "breakout_level": 1364.206666666667,
+              "stop_loss": 1341.5094623655918,
+              "target_levels": [
+                1386.903870967742
+              ],
+              "confidence": 0.65,
+              "description": "Descending Channel pattern",
+              "direction": "bearish"
+            }
+          ]
+        },
+        "key_levels": {
+          "support_levels": [
+            1156.0,
+            1201.5,
+            1193.35,
+            1217.25,
+            1218.5
+          ],
+          "resistance_levels": [
+            1551.0,
+            1461.4,
+            1431.9,
+            1422.0,
+            1329.95
+          ],
+          "support_strength": [
+            0.92,
+            0.9096774193548387,
+            0.8857142857142857,
+            0.8846153846153846,
+            0.8666666666666667
+          ],
+          "resistance_strength": [
+            1.0,
+            0.7655172413793103,
+            0.7555555555555555,
+            0.7311475409836066,
+            0.6
+          ],
+          "level_analysis": {
+            "strongest_support": 1156.0,
+            "strongest_resistance": 1551.0,
+            "support_quality": "strong",
+            "resistance_quality": "strong"
+          }
+        },
+        "primary_signal": "bullish_continuation",
+        "pattern_confluence": {
+          "has_confluence": true,
+          "bullish_confluence": 20,
+          "bearish_confluence": 18,
+          "neutral_patterns": 0,
+          "confluence_strength": "strong",
+          "dominant_direction": "bullish"
+        },
+        "breakout_potential": {
+          "potential": "high",
+          "direction": "bearish",
+          "closest_pattern": "bear_flag",
+          "proximity": 0.0010864054465126384,
+          "completion": 80.0
+        },
+        "risk_reward_ratio": 5.510232221238598,
+        "breakout_levels": [
+          1329.95,
+          1329.95,
+          1201.5,
+          1201.5,
+          1208.1,
+          1307.7,
+          1307.7,
+          1439.5,
+          1439.5,
+          1439.5,
+          1439.5,
+          1439.0,
+          1461.4,
+          1531.9,
+          1544.8,
+          1544.9,
+          1551.0,
+          1551.0,
+          1551.0,
+          1384.1,
+          1383.0,
+          1383.0,
+          1382.2,
+          1382.2,
+          1382.2,
+          1382.2,
+          1366.0,
+          1224.3151612903227,
+          1224.2220430107525,
+          1226.2411827956994,
+          1189.6543010752687,
+          1183.9641935483871,
+          1266.5132258064516,
+          1377.457419354839,
+          1463.5074193548387,
+          1514.5247311827957,
+          1385.1909677419349,
+          1364.206666666667
+        ],
+        "entry_points": [
+          1329.95,
+          1329.95,
+          1201.5,
+          1201.5,
+          1208.1,
+          1307.7,
+          1307.7,
+          1439.5,
+          1439.5,
+          1439.5,
+          1439.5,
+          1439.0,
+          1461.4,
+          1531.9,
+          1544.8,
+          1544.9,
+          1551.0,
+          1551.0,
+          1551.0,
+          1384.1,
+          1383.0,
+          1383.0,
+          1382.2,
+          1382.2,
+          1382.2,
+          1382.2,
+          1366.0,
+          1224.3151612903227,
+          1224.2220430107525,
+          1226.2411827956994,
+          1189.6543010752687,
+          1183.9641935483871,
+          1266.5132258064516,
+          1377.457419354839,
+          1463.5074193548387,
+          1514.5247311827957,
+          1385.1909677419349,
+          1364.206666666667
+        ],
+        "stop_loss_levels": [
+          1280.2,
+          1276.05,
+          1244.9,
+          1239.5,
+          1233.55,
+          1250.05,
+          1268.75,
+          1369.0,
+          1369.0,
+          1398.0,
+          1374.5,
+          1374.5,
+          1400.0,
+          1496.0,
+          1500.1,
+          1508.7,
+          1510.1,
+          1490.3,
+          1479.1,
+          1431.9,
+          1426.0,
+          1423.3,
+          1423.3,
+          1423.3,
+          1423.3,
+          1416.1,
+          1416.1,
+          1203.3002150537634,
+          1202.699892473118,
+          1204.897634408602,
+          1211.5124731182798,
+          1205.8547311827954,
+          1287.9632258064519,
+          1404.907849462366,
+          1434.463225806452,
+          1536.9221505376345,
+          1362.6698924731181,
+          1341.5094623655918
+        ],
+        "target_levels": [
+          1397.25,
+          1430.9,
+          1429.0,
+          1478.525,
+          1109.9,
+          1064.1000000000001,
+          1095.25,
+          1042.125,
+          1135.2499999999998,
+          1098.8249999999998,
+          1401.2500000000002,
+          1448.0250000000003,
+          1374.45,
+          1407.825,
+          1620.25,
+          1710.625,
+          1604.4,
+          1686.8500000000001,
+          1622.6000000000001,
+          1714.15,
+          1596.3,
+          1674.6999999999998,
+          1564.4,
+          1627.1000000000001,
+          1597.5,
+          1665.55,
+          1619.4,
+          1663.15,
+          1642.0,
+          1690.6,
+          1633.6000000000001,
+          1677.9500000000003,
+          1635.5,
+          1677.75,
+          1635.7,
+          1678.0500000000002,
+          1637.8,
+          1681.1999999999998,
+          1259.3,
+          1196.9,
+          1288.6,
+          1241.3999999999999,
+          1268.7,
+          1211.5500000000002,
+          1278.7,
+          1226.95,
+          1286.1,
+          1238.0499999999997,
+          1306.7,
+          1268.95,
+          1296.0,
+          1252.9,
+          1283.7,
+          1242.5500000000002,
+          1245.330107526882,
+          1245.7441935483869,
+          1247.5847311827968,
+          1167.7961290322576,
+          1162.0736559139789,
+          1245.0632258064513,
+          1350.006989247312,
+          1492.5516129032253,
+          1492.1273118279569,
+          1407.7120430107516,
+          1386.903870967742
+        ],
+        "pattern_failure_risk": "low",
+        "false_breakout_risk": "medium",
+        "confidence_score": 0.8710526315789472,
+        "reliability_assessment": "high",
+        "trading_strategy": {
+          "primary_action": "buy",
+          "entry_strategy": "breakout_confirmation",
+          "position_type": "continuation",
+          "time_horizon": "medium_term",
+          "patterns_supporting": 38,
+          "reasoning": "Based on 38 continuation pattern(s) with bullish_continuation bias"
+        },
+        "position_sizing": {
+          "recommended_size": "large",
+          "breakout_potential": "high",
+          "risk_reward_ratio": 5.510232221238598,
+          "reasoning": "Position sizing based on high breakout potential and 5.51 R:R"
+        },
+        "market_context": {
+          "trend_direction": "down",
+          "price_momentum": "weak",
+          "consolidation_phase": "True"
+        },
+        "volume_confirmation": {
+          "has_volume_support": "False",
+          "volume_trend": "stable",
+          "confirmation_strength": "weak"
+        }
+      },
+      "prompt_text": null,
+      "llm_response": null,
+      "error_message": null,
+      "confidence_score": 0.8710526315789472
+    },
+    "technical_overview": {
+      "agent_name": "technical_overview",
+      "success": true,
+      "processing_time": 0.2916860580444336,
+      "analysis_data": {
+        "agent_name": "technical_overview",
+        "error": "-1",
+        "success": false,
+        "confidence_score": 0.0
+      },
+      "prompt_text": null,
+      "llm_response": null,
+      "error_message": null,
+      "confidence_score": 0.0
+    },
+    "pattern_recognition": {
+      "agent_name": "pattern_recognition",
+      "success": true,
+      "processing_time": 0.010925054550170898,
+      "analysis_data": {
+        "analysis_type": "pattern_recognition",
+        "timestamp": "2025-10-10T17:52:03.663010",
+        "context": "",
+        "error": "-1",
+        "confidence_score": 0.0,
+        "processing_time": 0.010916
+      },
+      "prompt_text": null,
+      "llm_response": null,
+      "error_message": null,
+      "confidence_score": 0.0
+    }
+  },
+  "unified_analysis": {
+    "pattern_summary": {
+      "total_patterns_identified": 38,
+      "pattern_types": [
+        "bear_flag",
+        "ascending_channel",
+        "bull_flag",
+        "descending_channel"
+      ],
+      "high_confidence_patterns": [
+        {
+          "type": "bull_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1329.95,
+          "stop_loss": 1280.2,
+          "target_levels": [
+            1397.25,
+            1430.9
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 5.4% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1329.95,
+          "stop_loss": 1276.05,
+          "target_levels": [
+            1429.0,
+            1478.525
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 8.1% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bear_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1201.5,
+          "stop_loss": 1244.9,
+          "target_levels": [
+            1109.9,
+            1064.1000000000001
+          ],
+          "confidence": 0.75,
+          "description": "Bear Flag after -6.9% move",
+          "direction": "bearish"
+        },
+        {
+          "type": "bear_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1201.5,
+          "stop_loss": 1239.5,
+          "target_levels": [
+            1095.25,
+            1042.125
+          ],
+          "confidence": 0.75,
+          "description": "Bear Flag after -8.1% move",
+          "direction": "bearish"
+        },
+        {
+          "type": "bear_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1208.1,
+          "stop_loss": 1233.55,
+          "target_levels": [
+            1135.2499999999998,
+            1098.8249999999998
+          ],
+          "confidence": 0.75,
+          "description": "Bear Flag after -5.6% move",
+          "direction": "bearish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1307.7,
+          "stop_loss": 1250.05,
+          "target_levels": [
+            1401.2500000000002,
+            1448.0250000000003
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 8.0% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1307.7,
+          "stop_loss": 1268.75,
+          "target_levels": [
+            1374.45,
+            1407.825
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 5.5% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "strong",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1439.5,
+          "stop_loss": 1369.0,
+          "target_levels": [
+            1620.25,
+            1710.625
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 14.8% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "strong",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1439.5,
+          "stop_loss": 1369.0,
+          "target_levels": [
+            1604.4,
+            1686.8500000000001
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 13.3% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "strong",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1439.5,
+          "stop_loss": 1398.0,
+          "target_levels": [
+            1622.6000000000001,
+            1714.15
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 14.8% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "strong",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1439.5,
+          "stop_loss": 1374.5,
+          "target_levels": [
+            1596.3,
+            1674.6999999999998
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 12.3% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1439.0,
+          "stop_loss": 1374.5,
+          "target_levels": [
+            1564.4,
+            1627.1000000000001
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 9.7% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "strong",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1461.4,
+          "stop_loss": 1400.0,
+          "target_levels": [
+            1597.5,
+            1665.55
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 10.5% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1531.9,
+          "stop_loss": 1496.0,
+          "target_levels": [
+            1619.4,
+            1663.15
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 6.1% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1544.8,
+          "stop_loss": 1500.1,
+          "target_levels": [
+            1642.0,
+            1690.6
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 6.8% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1544.9,
+          "stop_loss": 1508.7,
+          "target_levels": [
+            1633.6000000000001,
+            1677.9500000000003
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 6.2% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1551.0,
+          "stop_loss": 1510.1,
+          "target_levels": [
+            1635.5,
+            1677.75
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 5.9% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1551.0,
+          "stop_loss": 1490.3,
+          "target_levels": [
+            1635.7,
+            1678.0500000000002
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 5.8% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bull_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1551.0,
+          "stop_loss": 1479.1,
+          "target_levels": [
+            1637.8,
+            1681.1999999999998
+          ],
+          "confidence": 0.75,
+          "description": "Bull Flag after 6.0% move",
+          "direction": "bullish"
+        },
+        {
+          "type": "bear_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1384.1,
+          "stop_loss": 1431.9,
+          "target_levels": [
+            1259.3,
+            1196.9
+          ],
+          "confidence": 0.75,
+          "description": "Bear Flag after -8.1% move",
+          "direction": "bearish"
+        },
+        {
+          "type": "bear_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1383.0,
+          "stop_loss": 1426.0,
+          "target_levels": [
+            1288.6,
+            1241.3999999999999
+          ],
+          "confidence": 0.75,
+          "description": "Bear Flag after -6.2% move",
+          "direction": "bearish"
+        },
+        {
+          "type": "bear_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1383.0,
+          "stop_loss": 1423.3,
+          "target_levels": [
+            1268.7,
+            1211.5500000000002
+          ],
+          "confidence": 0.75,
+          "description": "Bear Flag after -7.5% move",
+          "direction": "bearish"
+        },
+        {
+          "type": "bear_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1382.2,
+          "stop_loss": 1423.3,
+          "target_levels": [
+            1278.7,
+            1226.95
+          ],
+          "confidence": 0.75,
+          "description": "Bear Flag after -6.9% move",
+          "direction": "bearish"
+        },
+        {
+          "type": "bear_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1382.2,
+          "stop_loss": 1423.3,
+          "target_levels": [
+            1286.1,
+            1238.0499999999997
+          ],
+          "confidence": 0.75,
+          "description": "Bear Flag after -6.5% move",
+          "direction": "bearish"
+        },
+        {
+          "type": "bear_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1382.2,
+          "stop_loss": 1423.3,
+          "target_levels": [
+            1306.7,
+            1268.95
+          ],
+          "confidence": 0.75,
+          "description": "Bear Flag after -5.1% move",
+          "direction": "bearish"
+        },
+        {
+          "type": "bear_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1382.2,
+          "stop_loss": 1416.1,
+          "target_levels": [
+            1296.0,
+            1252.9
+          ],
+          "confidence": 0.75,
+          "description": "Bear Flag after -5.8% move",
+          "direction": "bearish"
+        },
+        {
+          "type": "bear_flag",
+          "strength": "medium",
+          "completion": 80.0,
+          "reliability": "high",
+          "breakout_level": 1366.0,
+          "stop_loss": 1416.1,
+          "target_levels": [
+            1283.7,
+            1242.5500000000002
+          ],
+          "confidence": 0.75,
+          "description": "Bear Flag after -5.6% move",
+          "direction": "bearish"
+        }
+      ]
+    },
+    "signal_consensus": {},
+    "confidence_metrics": {
+      "average_confidence": 0.8710526315789472,
+      "confidence_range": [
+        0.8710526315789472,
+        0.8710526315789472
+      ],
+      "agent_success_rate": 1.0
+    },
+    "key_levels": {},
+    "trading_recommendations": {}
+  },
+  "total_processing_time": 1.0237886905670166,
+  "successful_agents": 4,
+  "failed_agents": 0,
+  "overall_confidence": 0.8710526315789472,
+  "consensus_signals": {},
+  "conflicting_signals": []
+}
