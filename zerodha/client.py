@@ -96,9 +96,30 @@ def retry_api_call(func_to_retry, max_retries=3, base_delay=1.0, backoff_factor=
             # Don't retry on token errors, let auto_refresh_token handle it
             raise e
         except Exception as e:
-            # Don't retry on other exceptions (like data processing errors)
-            logger.error(f"Non-retryable error in {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'}: {e}")
-            return None
+            # Check if this is a timeout error that should be retried
+            error_str = str(e).lower()
+            if any(timeout_indicator in error_str for timeout_indicator in [
+                'read timed out', 'timeout', 'connection timeout', 
+                'httpsconnectionpool', 'connection pool', 'read timeout'
+            ]):
+                last_exception = e
+                
+                if attempt == max_retries:
+                    logger.error(f"Max retries ({max_retries}) exceeded for {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'} - timeout: {e}")
+                    break
+                
+                # Calculate delay with exponential backoff for timeouts
+                delay = base_delay * (backoff_factor ** attempt)
+                if jitter:
+                    delay = delay * (0.5 + random.random() * 0.5)  # Add 0-50% jitter
+                
+                logger.warning(f"Timeout error in {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'} (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {delay:.2f} seconds...")
+                time.sleep(delay)
+                continue
+            else:
+                # Don't retry on other exceptions (like data processing errors)
+                logger.error(f"Non-retryable error in {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'}: {e}")
+                return None
     
     # If we get here, all retries failed
     logger.error(f"All retry attempts failed for {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'}")

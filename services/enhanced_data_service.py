@@ -130,14 +130,8 @@ class EnhancedDataService:
         
         if data is None or data.empty:
             logger.error(f"Failed to get data for {request.symbol}")
-            return DataResponse(
-                data=pd.DataFrame(),
-                data_freshness="error",
-                market_status=strategy["market_status"],
-                source="error",
-                cost_estimate=0.0,
-                optimization_applied=False
-            )
+            # Raise exception instead of returning empty DataFrame to ensure proper error handling
+            raise ValueError(f"Stock '{request.symbol}' currently unavailable for analysis. Data retrieval failed from all sources (historical API timeout/error, live data unavailable). Please try again later or check if the symbol is correct.")
         
         # Calculate cost - always 0 for continuous flow
         cost = 0.0  # Continuous flow mode - no cost tracking

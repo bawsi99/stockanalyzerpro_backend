@@ -126,6 +126,12 @@ class StockAnalysisOrchestrator:
             )
             eds_resp = await enhanced_data_service.get_optimal_data(req)
             df = eds_resp.data
+            
+            # Check for error conditions (timeout, network failures, etc.)
+            if eds_resp.data_freshness == "error" or eds_resp.source == "error":
+                logger.error(f"Enhanced data service reported error for {symbol}: {eds_resp.data_freshness}")
+                raise ValueError(f"Stock '{symbol}' currently unavailable for analysis. Please try again later.")
+            
             if df is not None and not df.empty:
                 # Normalize index
                 if 'date' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
