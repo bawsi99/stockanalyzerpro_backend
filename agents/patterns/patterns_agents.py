@@ -152,7 +152,7 @@ class PatternAgentsOrchestrator:
         self.reversal = ReversalPatternsProcessor()
         self.continuation = ContinuationPatternsProcessor()
         self.technical_overview = TechnicalOverviewProcessor()
-        self.pattern_recognition = PatternRecognitionProcessor()
+        self.pattern_recognition = PatternRecognitionProcessor(llm_client=gemini_client)  # Pass LLM client for multi-stage processing
         
         # Initialize all chart generators
         self.reversal_charts = ReversalPatternsCharts()
@@ -330,12 +330,8 @@ class PatternAgentsOrchestrator:
             processor = config['processor']
             charts = config['charts']
             
-            # Generate chart if needed
+            # Skip chart generation to avoid blocking errors
             chart_image = None
-            if chart_images and agent_name in chart_images:
-                chart_image = chart_images[agent_name]
-            elif hasattr(charts, 'create_chart'):
-                chart_image = await charts.create_chart(stock_data, indicators)
             
             # Execute agent analysis
             if hasattr(processor, 'analyze_async'):

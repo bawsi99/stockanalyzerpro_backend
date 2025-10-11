@@ -72,10 +72,25 @@ class PatternLLMAgent:
                 from dataclasses import is_dataclass, asdict
                 if is_dataclass(analysis_data):
                     analysis_data = asdict(analysis_data)
-            except Exception as conv_err:
-                logger.warning(f"[PATTERN_LLM] asdict conversion failed, using __dict__ if available: {conv_err}")
-                if hasattr(analysis_data, '__dict__'):
+                elif hasattr(analysis_data, '__dict__'):
+                    # Fallback to __dict__ for objects that are not dataclasses
                     analysis_data = analysis_data.__dict__
+                elif not isinstance(analysis_data, dict):
+                    # Convert any other object to dict by trying to extract useful attributes
+                    logger.warning(f"[PATTERN_LLM] Unexpected analysis_data type: {type(analysis_data)}")
+                    analysis_data = {
+                        'error': f'Unable to convert analysis data of type {type(analysis_data)}',
+                        'raw_data': str(analysis_data)
+                    }
+            except Exception as conv_err:
+                logger.error(f"[PATTERN_LLM] Failed to convert analysis_data to dict: {conv_err}")
+                # Create a safe fallback dict structure
+                analysis_data = {
+                    'error': f'Conversion failed: {str(conv_err)}',
+                    'original_type': str(type(pattern_analysis.get('analysis_data', {}))),
+                    'fallback_data': 'Unable to process analysis data'
+                }
+                logger.info(f"[PATTERN_LLM] Using fallback analysis_data structure for {symbol}")
 
             # Remove embedded chart images from individual results to keep context lean
             try:

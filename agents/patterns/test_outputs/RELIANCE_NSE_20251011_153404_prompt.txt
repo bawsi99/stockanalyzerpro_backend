@@ -1,0 +1,56 @@
+# Pattern Analysis LLM Prompt for RELIANCE
+# Generated: 2025-10-11T15:34:04.601568
+# Exchange: NSE
+# ============================================================
+
+You are an expert technical analyst. Analyze the pattern data for RELIANCE and provide actionable insights.
+
+PATTERN ANALYSIS DATA:
+COMPREHENSIVE PATTERN ANALYSIS FOR RELIANCE
+Current Price: ₹1381.70
+Overall Confidence: 0.00
+
+INDIVIDUAL AGENT RESULTS:
+
+REVERSAL AGENT:
+- Success: True
+- Confidence: 0.00
+- No reversal patterns detected
+
+CONTINUATION AGENT:
+- Success: True
+- Confidence: 0.00
+- Primary Signal: neutral
+- Detected Patterns:
+- Key Levels:
+  * Resistance: ₹1422.00
+  * Support: ₹1356.90
+
+TECHNICAL OVERVIEW AGENT:
+- Success: True
+- Confidence: 0.00
+- Technical overview analysis completed
+
+PATTERN RECOGNITION AGENT:
+- Success: True
+- Confidence: 0.00
+- Pattern recognition analysis completed
+
+UNIFIED ANALYSIS:
+- Total Patterns Identified: 0
+- Pattern Types: 
+- High Confidence Patterns: 0
+
+CONSENSUS & CONFLICTS ANALYSIS:
+
+CONFIDENCE & RELIABILITY METRICS:
+- Overall Confidence Score: 0.00
+- Agent Success Rate: 100.00% (4/4)
+
+Provide comprehensive analysis including:
+1. Key patterns identified and their significance
+2. Trading recommendations with entry/exit levels  
+3. Risk assessment and management
+4. Market outlook based on patterns
+
+Format your response clearly with specific actionable recommendations.

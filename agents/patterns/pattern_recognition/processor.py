@@ -13,6 +13,10 @@ from typing import Dict, List, Any, Tuple, Optional
 import logging
 from datetime import datetime
 
+# Import market structure analyzer
+from ..market_structure_analyzer import MarketStructureAnalyzer
+from .multi_stage_llm_processor import MultiStageLLMProcessor
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -22,9 +26,14 @@ class PatternRecognitionProcessor:
     market structures, and relationships between different pattern types.
     """
     
-    def __init__(self):
+    def __init__(self, llm_client=None):
         self.name = "pattern_recognition"
-        self.version = "1.0.0"
+        self.version = "2.0.0"  # Updated for multi-stage LLM capability
+        self.market_structure_analyzer = MarketStructureAnalyzer(min_swing_strength=2)
+        self.multi_stage_processor = MultiStageLLMProcessor(llm_client) if llm_client else None
+        self.enable_multi_stage_llm = llm_client is not None
+        
+        logger.info(f"[PATTERN_RECOGNITION] Initialized v{self.version} with multi-stage LLM: {self.enable_multi_stage_llm}")
         
     async def analyze_async(self, stock_data: pd.DataFrame, indicators: Dict[str, np.ndarray] = None, context: str = "", chart_image: bytes = None) -> Dict[str, Any]:
         """
@@ -50,26 +59,38 @@ class PatternRecognitionProcessor:
             opens = stock_data['open'].values
             
             # Perform comprehensive pattern analysis
-            market_structure = await self._analyze_market_structure(prices, highs, lows)
+            # 1. Advanced market structure analysis (NEW)
+            logger.info(f"[PATTERN_RECOGNITION] Starting market structure analysis for {len(stock_data)} data points")
+            market_structure = self.market_structure_analyzer.analyze_market_structure(stock_data)
+            logger.info(f"[PATTERN_RECOGNITION] Market structure analysis complete: {type(market_structure)} with {len(market_structure)} keys")
+            
+            # 2. Traditional pattern analysis (enhanced)
+            logger.info(f"[PATTERN_RECOGNITION] Starting price patterns analysis")
             price_patterns = await self._identify_price_patterns(prices, highs, lows)
+            logger.info(f"[PATTERN_RECOGNITION] Starting volume patterns analysis")
             volume_patterns = await self._analyze_volume_patterns(volumes, prices)
-            momentum_patterns = await self._analyze_momentum_patterns(indicators or {})
+            logger.info(f"[PATTERN_RECOGNITION] Starting momentum patterns analysis")
+            try:
+                momentum_patterns = await self._analyze_momentum_patterns(indicators or {})
+                logger.info(f"[PATTERN_RECOGNITION] Momentum patterns analysis complete: {type(momentum_patterns)}")
+            except Exception as e:
+                logger.error(f"[PATTERN_RECOGNITION] Momentum patterns analysis failed: {e}")
+                momentum_patterns = {'error': str(e)}
+            logger.info(f"[PATTERN_RECOGNITION] Starting fractal patterns analysis")
             fractal_patterns = await self._identify_fractal_patterns(highs, lows, prices)
+            logger.info(f"[PATTERN_RECOGNITION] Starting wave patterns analysis")
             wave_patterns = await self._analyze_wave_patterns(prices)
             
-            # Cross-pattern analysis
+            # Cross-pattern analysis (enhanced with market structure)
             pattern_relationships = await self._analyze_pattern_relationships(
                 market_structure, price_patterns, volume_patterns, momentum_patterns
             )
             
             # Generate overall confidence and insights
-            confidence_score = self._calculate_confidence_score([
-                market_structure, price_patterns, volume_patterns, 
-                momentum_patterns, fractal_patterns, wave_patterns
-            ])
+            confidence_score = self._calculate_confidence_score(market_structure, price_patterns, volume_patterns, momentum_patterns)
             
-            # Consolidate findings
-            analysis_result = {
+            # Consolidate technical findings
+            technical_analysis = {
                 'analysis_type': 'pattern_recognition',
                 'timestamp': start_time.isoformat(),
                 'context': context,
@@ -81,12 +102,39 @@ class PatternRecognitionProcessor:
                 'fractal_patterns': fractal_patterns,
                 'wave_patterns': wave_patterns,
                 'pattern_relationships': pattern_relationships,
-                'overall_assessment': self._generate_overall_assessment(
-                    market_structure, price_patterns, volume_patterns,
-                    momentum_patterns, pattern_relationships, confidence_score
-                ),
                 'processing_time': (datetime.now() - start_time).total_seconds()
             }
+            
+            # Execute multi-stage LLM processing if available
+            if self.enable_multi_stage_llm and self.multi_stage_processor:
+                logger.info(f"[PATTERN_RECOGNITION] Executing multi-stage LLM processing for enhanced analysis")
+                
+                # Get current price for LLM context
+                current_price = stock_data['close'].iloc[-1] if not stock_data.empty else 0.0
+                
+                # Execute multi-stage LLM analysis
+                multi_stage_result = await self.multi_stage_processor.process_multi_stage_analysis(
+                    symbol=context.split()[0] if context else 'UNKNOWN',  # Extract symbol from context
+                    technical_analysis=technical_analysis,
+                    market_structure=market_structure,
+                    current_price=current_price,
+                    context=context
+                )
+                
+                # Combine technical and LLM results
+                analysis_result = {
+                    **technical_analysis,
+                    'multi_stage_llm_analysis': multi_stage_result,
+                    'llm_enhanced': True,
+                    'final_confidence_score': multi_stage_result.get('confidence_score', confidence_score),
+                    'processing_time': (datetime.now() - start_time).total_seconds()
+                }
+                
+                logger.info(f"[PATTERN_RECOGNITION] Multi-stage LLM processing completed")
+            else:
+                # Standard technical analysis only
+                analysis_result = technical_analysis
+                logger.info(f"[PATTERN_RECOGNITION] Standard technical analysis completed (no LLM)")
             
             processing_time = (datetime.now() - start_time).total_seconds()
             logger.info(f"[PATTERN_RECOGNITION] Analysis completed in {processing_time:.2f}s")
@@ -104,39 +152,141 @@ class PatternRecognitionProcessor:
                 'processing_time': (datetime.now() - start_time).total_seconds()
             }
     
-    async def _analyze_market_structure(self, prices: np.ndarray, highs: np.ndarray, lows: np.ndarray) -> Dict[str, Any]:
-        """Analyze overall market structure and trends."""
-        
-        structure_analysis = {
-            'trend_analysis': {},
-            'support_resistance': {},
-            'market_phases': {},
-            'structure_quality': {}
+    def _calculate_confidence_score(self, market_structure: Dict[str, Any], 
+                                   price_patterns: Dict[str, Any],
+                                   volume_patterns: Dict[str, Any], 
+                                   momentum_patterns: Dict[str, Any]) -> float:
+        """Calculate overall confidence score based on analysis results."""
+        try:
+            confidence_components = []
+            
+            # Market structure confidence
+            if market_structure.get('analysis_type') == 'market_structure':
+                struct_quality = market_structure.get('structure_quality', {})
+                confidence_components.append(struct_quality.get('overall_quality', 0.5))
+            
+            # Pattern detection confidence
+            pattern_count = 0
+            if price_patterns.get('chart_patterns'):
+                pattern_count += len(price_patterns['chart_patterns'])
+            
+            if pattern_count > 0:
+                confidence_components.append(min(pattern_count / 10.0, 0.8))  # Patterns detected
+            
+            # Volume pattern confidence
+            if volume_patterns.get('volume_trend', {}).get('trend_direction') != 'neutral':
+                confidence_components.append(0.6)
+            
+            # Momentum pattern confidence  
+            if momentum_patterns.get('momentum_divergences'):
+                confidence_components.append(0.7)
+            
+            # Calculate weighted average
+            if confidence_components:
+                return sum(confidence_components) / len(confidence_components)
+            else:
+                return 0.5  # Default neutral confidence
+                
+        except Exception as e:
+            logger.warning(f"[PATTERN_RECOGNITION] Error calculating confidence: {e}")
+            return 0.5
+    
+    # Helper methods for basic analysis
+    def _identify_trend(self, data: np.ndarray) -> str:
+        """Simple trend identification based on linear regression."""
+        if len(data) < 2:
+            return 'neutral'
+        x = np.arange(len(data))
+        slope = np.polyfit(x, data, 1)[0]
+        if slope > 0.001:
+            return 'bullish'
+        elif slope < -0.001:
+            return 'bearish'
+        return 'neutral'
+    
+    def _calculate_recent_change(self, data: np.ndarray) -> float:
+        """Calculate recent percentage change."""
+        if len(data) < 2:
+            return 0.0
+        return (data[-1] - data[0]) / data[0] if data[0] != 0 else 0.0
+    
+    def _calculate_fractal_strength(self, prices: np.ndarray, index: int, fractal_type: str) -> float:
+        """Calculate fractal strength based on surrounding price action."""
+        return 1.0  # Simple implementation for now
+    
+    # Async helper methods that return empty/default results
+    async def _identify_chart_patterns(self, prices: np.ndarray, highs: np.ndarray, lows: np.ndarray) -> List[Dict]:
+        """Identify chart patterns - basic implementation."""
+        return []
+    
+    async def _identify_candlestick_patterns(self, highs: np.ndarray, lows: np.ndarray, closes: np.ndarray) -> List[Dict]:
+        """Identify candlestick patterns - basic implementation."""
+        return []
+    
+    async def _identify_geometric_patterns(self, prices: np.ndarray) -> List[Dict]:
+        """Identify geometric patterns - basic implementation."""
+        return []
+    
+    async def _identify_statistical_patterns(self, prices: np.ndarray) -> List[Dict]:
+        """Identify statistical patterns - basic implementation."""
+        return []
+    
+    async def _analyze_price_volume_relationship(self, prices: np.ndarray, volumes: np.ndarray) -> Dict[str, Any]:
+        """Analyze price-volume relationship."""
+        return {'correlation': 0.0, 'divergence': False}
+    
+    async def _identify_volume_anomalies(self, volumes: np.ndarray, prices: np.ndarray) -> List[Dict]:
+        """Identify volume anomalies."""
+        return []
+    
+    async def _analyze_accumulation_distribution(self, prices: np.ndarray, volumes: np.ndarray) -> Dict[str, Any]:
+        """Analyze accumulation/distribution patterns."""
+        return {'trend': 'neutral', 'strength': 0.0}
+    
+    async def _analyze_macd_patterns(self, macd: np.ndarray, macd_signal: np.ndarray) -> Dict[str, Any]:
+        """Analyze MACD patterns."""
+        return {'crossover': 'none', 'divergence': False}
+    
+    async def _analyze_stochastic_patterns(self, stoch_k: np.ndarray, stoch_d: np.ndarray) -> Dict[str, Any]:
+        """Analyze stochastic patterns."""
+        return {'crossover': 'none', 'overbought': False, 'oversold': False}
+    
+    async def _identify_momentum_divergences(self, indicators: Dict[str, np.ndarray]) -> List[Dict]:
+        """Identify momentum divergences."""
+        return []
+    
+    async def _analyze_fractal_trend(self, fractal_highs: List[Dict], fractal_lows: List[Dict]) -> Dict[str, Any]:
+        """Analyze fractal trend."""
+        return {'trend': 'neutral', 'strength': 0.0}
+    
+    async def _identify_fractal_levels(self, fractal_highs: List[Dict], fractal_lows: List[Dict], current_price: float) -> List[Dict]:
+        """Identify fractal support/resistance levels."""
+        return []
+    
+    async def _identify_price_waves(self, prices: np.ndarray) -> List[Dict]:
+        """Identify price waves for Elliott Wave analysis."""
+        return []
+    
+    async def _analyze_wave_structure(self, waves: List[Dict]) -> Dict[str, Any]:
+        """Analyze wave structure."""
+        return {'structure': 'unclear'}
+    
+    async def _analyze_wave_relationships(self, waves: List[Dict]) -> Dict[str, Any]:
+        """Analyze wave relationships."""
+        return {'fibonacci_ratios': []}
+    
+    async def _calculate_wave_projections(self, waves: List[Dict], current_price: float) -> List[Dict]:
+        """Calculate wave projections."""
+        return []
+    
+    async def _analyze_pattern_relationships(self, market_structure: Dict, price_patterns: Dict, 
+                                          volume_patterns: Dict, momentum_patterns: Dict) -> Dict[str, Any]:
+        """Analyze relationships between different pattern types."""
+        return {
+            'pattern_confluence': [],
+            'pattern_conflicts': [],
+            'overall_alignment': 0.5
         }
-        
-        # Trend analysis across multiple timeframes
-        structure_analysis['trend_analysis'] = {
-            'short_term_trend': self._identify_trend(prices[-20:]) if len(prices) >= 20 else 'neutral',
-            'medium_term_trend': self._identify_trend(prices[-50:]) if len(prices) >= 50 else 'neutral',
-            'long_term_trend': self._identify_trend(prices[-100:]) if len(prices) >= 100 else 'neutral',
-            'trend_strength': self._calculate_trend_strength(prices),
-            'trend_consistency': self._calculate_trend_consistency(prices)
-        }
-        
-        # Support and resistance levels
-        structure_analysis['support_resistance'] = await self._identify_key_levels(highs, lows, prices)
-        
-        # Market phases (accumulation, distribution, trending)
-        structure_analysis['market_phases'] = await self._identify_market_phases(prices, highs, lows)
-        
-        # Structure quality assessment
-        structure_analysis['structure_quality'] = {
-            'clarity_score': self._assess_structure_clarity(prices, highs, lows),
-            'reliability_score': self._assess_structure_reliability(prices),
-            'complexity_level': self._assess_complexity(prices)
-        }
-        
-        return structure_analysis
     
     async def _identify_price_patterns(self, prices: np.ndarray, highs: np.ndarray, lows: np.ndarray) -> Dict[str, Any]:
         """Identify various price patterns and formations."""
@@ -204,25 +354,68 @@ class PatternRecognitionProcessor:
         
         # RSI patterns
         if 'rsi' in indicators:
-            rsi = indicators['rsi']
-            momentum_patterns['oscillator_patterns']['rsi'] = {
-                'current_level': rsi[-1] if len(rsi) > 0 else 50,
-                'trend': self._identify_trend(rsi[-20:]) if len(rsi) >= 20 else 'neutral',
-                'oversold_periods': len(rsi[rsi < 30]) if len(rsi) > 0 else 0,
-                'overbought_periods': len(rsi[rsi > 70]) if len(rsi) > 0 else 0
-            }
+            rsi_data = indicators['rsi']
+            # Handle different RSI data formats
+            if isinstance(rsi_data, dict) and 'values' in rsi_data:
+                rsi = rsi_data['values']
+            elif isinstance(rsi_data, (list, np.ndarray)):
+                rsi = np.array(rsi_data)
+            else:
+                rsi = np.array([])  # Fallback
+            
+            if len(rsi) > 0:
+                momentum_patterns['oscillator_patterns']['rsi'] = {
+                    'current_level': float(rsi[-1]) if len(rsi) > 0 else 50,
+                    'trend': self._identify_trend(rsi[-20:]) if len(rsi) >= 20 else 'neutral',
+                    'oversold_periods': int(np.sum(rsi < 30)) if len(rsi) > 0 else 0,
+                    'overbought_periods': int(np.sum(rsi > 70)) if len(rsi) > 0 else 0
+                }
         
         # MACD patterns
         if 'macd' in indicators and 'macd_signal' in indicators:
-            macd = indicators['macd']
-            macd_signal = indicators['macd_signal']
-            momentum_patterns['oscillator_patterns']['macd'] = await self._analyze_macd_patterns(macd, macd_signal)
+            macd_data = indicators['macd']
+            macd_signal_data = indicators['macd_signal']
+            
+            # Handle different MACD data formats
+            if isinstance(macd_data, dict) and 'values' in macd_data:
+                macd = np.array(macd_data['values'])
+            elif isinstance(macd_data, (list, np.ndarray)):
+                macd = np.array(macd_data)
+            else:
+                macd = np.array([])
+            
+            if isinstance(macd_signal_data, dict) and 'values' in macd_signal_data:
+                macd_signal = np.array(macd_signal_data['values'])
+            elif isinstance(macd_signal_data, (list, np.ndarray)):
+                macd_signal = np.array(macd_signal_data)
+            else:
+                macd_signal = np.array([])
+            
+            if len(macd) > 0 and len(macd_signal) > 0:
+                momentum_patterns['oscillator_patterns']['macd'] = await self._analyze_macd_patterns(macd, macd_signal)
         
         # Stochastic patterns
         if 'stoch_k' in indicators and 'stoch_d' in indicators:
-            stoch_k = indicators['stoch_k']
-            stoch_d = indicators['stoch_d']
-            momentum_patterns['oscillator_patterns']['stochastic'] = await self._analyze_stochastic_patterns(stoch_k, stoch_d)
+            stoch_k_data = indicators['stoch_k']
+            stoch_d_data = indicators['stoch_d']
+            
+            # Handle different Stochastic data formats
+            if isinstance(stoch_k_data, dict) and 'values' in stoch_k_data:
+                stoch_k = np.array(stoch_k_data['values'])
+            elif isinstance(stoch_k_data, (list, np.ndarray)):
+                stoch_k = np.array(stoch_k_data)
+            else:
+                stoch_k = np.array([])
+            
+            if isinstance(stoch_d_data, dict) and 'values' in stoch_d_data:
+                stoch_d = np.array(stoch_d_data['values'])
+            elif isinstance(stoch_d_data, (list, np.ndarray)):
+                stoch_d = np.array(stoch_d_data)
+            else:
+                stoch_d = np.array([])
+            
+            if len(stoch_k) > 0 and len(stoch_d) > 0:
+                momentum_patterns['oscillator_patterns']['stochastic'] = await self._analyze_stochastic_patterns(stoch_k, stoch_d)
         
         # Momentum divergences
         momentum_patterns['momentum_divergences'] = await self._identify_momentum_divergences(indicators)
@@ -470,32 +663,6 @@ class PatternRecognitionProcessor:
         
         return phases
     
-    def _calculate_confidence_score(self, analysis_components: List[Dict]) -> float:
-        """Calculate overall confidence score based on analysis components."""
-        
-        confidence_factors = []
-        
-        for component in analysis_components:
-            if not component:
-                continue
-                
-            # Extract confidence indicators from each component
-            if 'structure_quality' in component:
-                confidence_factors.append(component['structure_quality'].get('reliability_score', 0.5))
-            
-            if 'pattern_relationships' in component and isinstance(component['pattern_relationships'], dict):
-                confidence_factors.append(component['pattern_relationships'].get('overall_coherence', 0.5))
-            
-            # Add more specific confidence factors based on component type
-            if 'chart_patterns' in component:
-                pattern_count = len(component.get('chart_patterns', []))
-                confidence_factors.append(min(1.0, pattern_count / 10))  # Normalize pattern count
-        
-        if not confidence_factors:
-            return 0.5  # Default confidence
-        
-        # Calculate weighted average confidence
-        return np.mean(confidence_factors)
     
     def _generate_overall_assessment(self, market_structure: Dict, price_patterns: Dict,
                                    volume_patterns: Dict, momentum_patterns: Dict,

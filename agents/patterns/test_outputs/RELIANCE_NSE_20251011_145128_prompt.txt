@@ -1,11 +1,14 @@
-# Pattern Analysis Context for RELIANCE
-# Generated: 2025-10-10T17:52:03.676390
+# Pattern Analysis LLM Prompt for RELIANCE
+# Generated: 2025-10-11T14:51:28.713143
 # Exchange: NSE
 # ============================================================
 
+You are an expert technical analyst. Analyze the pattern data for RELIANCE and provide actionable insights.
+
+PATTERN ANALYSIS DATA:
 COMPREHENSIVE PATTERN ANALYSIS FOR RELIANCE
-Analysis Timestamp: 2025-10-10T17:52:03.675997
-Current Price: $1380.70
+Analysis Timestamp: 2025-10-11T14:51:28.709116
+Current Price: $1381.70
 Processing Time: 1.02s
 Pattern Agents: 4/4 successful
 Overall Confidence: 0.87
@@ -14,7 +17,7 @@ INDIVIDUAL AGENT RESULTS:
 
 REVERSAL AGENT:
 - Success: True
-- Processing Time: 0.26s
+- Processing Time: 0.27s
 - Confidence: 0.00
 - No reversal patterns detected
 
@@ -26,14 +29,14 @@ CONTINUATION AGENT:
 - Detected Patterns:
   * Flags/Pennants: 27 detected
   * Channels: 11 detected
-- Breakout Potential: {'potential': 'high', 'direction': 'bearish', 'closest_pattern': 'bear_flag', 'proximity': np.float64(0.0010864054465126384), 'completion': 80.0}
+- Breakout Potential: {'potential': 'high', 'direction': 'bearish', 'closest_pattern': 'bear_flag', 'proximity': np.float64(0.0003618730549323297), 'completion': 80.0}
 - Key Levels:
   * Resistance: $1551.00, $1461.40, $1431.90, $1422.00, $1329.95
   * Support: $1156.00, $1201.50, $1193.35, $1217.25, $1218.50
 
 TECHNICAL OVERVIEW AGENT:
 - Success: True
-- Processing Time: 0.29s
+- Processing Time: 0.28s
 - Confidence: 0.00
 - Technical overview analysis completed
 
@@ -45,7 +48,7 @@ PATTERN RECOGNITION AGENT:
 
 UNIFIED ANALYSIS:
 - Total Patterns Identified: 38
-- Pattern Types: bear_flag, ascending_channel, bull_flag, descending_channel
+- Pattern Types: bear_flag, ascending_channel, descending_channel, bull_flag
 - High Confidence Patterns: 27
 
 CONSENSUS & CONFLICTS ANALYSIS:
@@ -54,3 +57,11 @@ CONFIDENCE & RELIABILITY METRICS:
 - Overall Confidence Score: 0.87
 - Agent Success Rate: 100.00% (4/4)
 - Total Processing Time: 1.02s
+
+Provide comprehensive analysis including:
+1. Key patterns identified and their significance
+2. Trading recommendations with entry/exit levels  
+3. Risk assessment and management
+4. Market outlook based on patterns
+
+Format your response clearly with specific actionable recommendations.

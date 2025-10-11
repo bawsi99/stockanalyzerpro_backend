@@ -1,5 +1,5 @@
 # Pattern Analysis LLM Prompt for RELIANCE
-# Generated: 2025-10-10T17:52:03.676232
+# Generated: 2025-10-11T15:36:49.232403
 # Exchange: NSE
 # ============================================================
 
@@ -7,56 +7,44 @@ You are an expert technical analyst. Analyze the pattern data for RELIANCE and p
 
 PATTERN ANALYSIS DATA:
 COMPREHENSIVE PATTERN ANALYSIS FOR RELIANCE
-Analysis Timestamp: 2025-10-10T17:52:03.675997
-Current Price: $1380.70
-Processing Time: 1.02s
-Pattern Agents: 4/4 successful
-Overall Confidence: 0.87
+Current Price: ₹1381.70
+Overall Confidence: 0.00
 
 INDIVIDUAL AGENT RESULTS:
 
 REVERSAL AGENT:
 - Success: True
-- Processing Time: 0.26s
 - Confidence: 0.00
 - No reversal patterns detected
 
 CONTINUATION AGENT:
 - Success: True
-- Processing Time: 0.46s
-- Confidence: 0.87
-- Primary Signal: bullish_continuation
+- Confidence: 0.00
+- Primary Signal: neutral
 - Detected Patterns:
-  * Flags/Pennants: 27 detected
-  * Channels: 11 detected
-- Breakout Potential: {'potential': 'high', 'direction': 'bearish', 'closest_pattern': 'bear_flag', 'proximity': np.float64(0.0010864054465126384), 'completion': 80.0}
 - Key Levels:
-  * Resistance: $1551.00, $1461.40, $1431.90, $1422.00, $1329.95
-  * Support: $1156.00, $1201.50, $1193.35, $1217.25, $1218.50
+  * Resistance: ₹1422.00
 
 TECHNICAL OVERVIEW AGENT:
 - Success: True
-- Processing Time: 0.29s
 - Confidence: 0.00
 - Technical overview analysis completed
 
 PATTERN RECOGNITION AGENT:
 - Success: True
-- Processing Time: 0.01s
 - Confidence: 0.00
 - Pattern recognition analysis completed
 
 UNIFIED ANALYSIS:
-- Total Patterns Identified: 38
-- Pattern Types: bear_flag, ascending_channel, bull_flag, descending_channel
-- High Confidence Patterns: 27
+- Total Patterns Identified: 0
+- Pattern Types: 
+- High Confidence Patterns: 0
 
 CONSENSUS & CONFLICTS ANALYSIS:
 
 CONFIDENCE & RELIABILITY METRICS:
-- Overall Confidence Score: 0.87
+- Overall Confidence Score: 0.00
 - Agent Success Rate: 100.00% (4/4)
-- Total Processing Time: 1.02s
 
 Provide comprehensive analysis including:
 1. Key patterns identified and their significance

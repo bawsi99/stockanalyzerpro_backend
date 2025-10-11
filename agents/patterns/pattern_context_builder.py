@@ -42,6 +42,32 @@ class PatternContextBuilder:
         Returns:
             Formatted text context for LLM analysis
         """
+        # Input validation
+        if not isinstance(aggregated_analysis, dict):
+            logger.error(f"[PATTERN_CONTEXT] Expected dict, got {type(aggregated_analysis)}. Converting...")
+            try:
+                # Try to convert to dict if it's a dataclass or has __dict__
+                from dataclasses import is_dataclass, asdict
+                if is_dataclass(aggregated_analysis):
+                    aggregated_analysis = asdict(aggregated_analysis)
+                elif hasattr(aggregated_analysis, '__dict__'):
+                    aggregated_analysis = aggregated_analysis.__dict__
+                else:
+                    # Create error dict
+                    aggregated_analysis = {
+                        'error': f'Unable to process analysis data of type {type(aggregated_analysis)}',
+                        'individual_results': {},
+                        'unified_analysis': {},
+                        'total_processing_time': 0,
+                        'successful_agents': 0,
+                        'failed_agents': 1,
+                        'overall_confidence': 0
+                    }
+                    logger.warning(f"[PATTERN_CONTEXT] Created fallback analysis structure for {symbol}")
+            except Exception as conversion_error:
+                logger.error(f"[PATTERN_CONTEXT] Failed to convert aggregated_analysis: {conversion_error}")
+                return self._build_fallback_context(symbol, {}, f"conversion error: {conversion_error}")
+        
         try:
             # Build main context header
             context_parts = []
@@ -73,20 +99,10 @@ class PatternContextBuilder:
     def _build_header(self, symbol: str, current_price: Optional[float], analysis: Dict[str, Any]) -> str:
         """Build context header with basic information."""
         
-        header = f"""COMPREHENSIVE PATTERN ANALYSIS FOR {symbol}
-Analysis Timestamp: {datetime.now().isoformat()}"""
+        header = f"""COMPREHENSIVE PATTERN ANALYSIS FOR {symbol}"""
         
         if current_price:
-            header += f"\nCurrent Price: ${current_price:.2f}"
-        
-        # Add analysis metadata
-        if 'total_processing_time' in analysis:
-            header += f"\nProcessing Time: {analysis['total_processing_time']:.2f}s"
-        
-        if 'successful_agents' in analysis and 'failed_agents' in analysis:
-            successful = analysis['successful_agents']
-            total = successful + analysis['failed_agents']
-            header += f"\nPattern Agents: {successful}/{total} successful"
+            header += f"\nCurrent Price: ₹{current_price:.2f}"
         
         if 'overall_confidence' in analysis:
             header += f"\nOverall Confidence: {analysis['overall_confidence']:.2f}"
@@ -103,12 +119,23 @@ Analysis Timestamp: {datetime.now().isoformat()}"""
         sections = ["INDIVIDUAL AGENT RESULTS:"]
         
         for agent_name, result in individual_results.items():
+            # Convert result to dict if it's not already
             if not isinstance(result, dict):
-                continue
+                try:
+                    from dataclasses import is_dataclass, asdict
+                    if is_dataclass(result):
+                        result = asdict(result)
+                    elif hasattr(result, '__dict__'):
+                        result = result.__dict__
+                    else:
+                        logger.warning(f"[PATTERN_CONTEXT] Skipping agent {agent_name}, unexpected result type: {type(result)}")
+                        continue
+                except Exception as e:
+                    logger.warning(f"[PATTERN_CONTEXT] Failed to convert agent {agent_name} result: {e}")
+                    continue
                 
             sections.append(f"\n{agent_name.upper().replace('_', ' ')} AGENT:")
             sections.append(f"- Success: {result.get('success', False)}")
-            sections.append(f"- Processing Time: {result.get('processing_time', 0):.2f}s")
             sections.append(f"- Confidence: {result.get('confidence_score', 0):.2f}")
             
             if result.get('error_message'):
@@ -180,17 +207,17 @@ Analysis Timestamp: {datetime.now().isoformat()}"""
         if 'entry_points' in data:
             entry_points = data['entry_points']
             if entry_points:
-                sections.append(f"- Entry Points: {', '.join([f'${ep:.2f}' for ep in entry_points])}")
+                sections.append(f"- Entry Points: {', '.join([f'₹{ep:.2f}' for ep in entry_points])}")
         
         if 'stop_loss_levels' in data:
             stop_levels = data['stop_loss_levels']
             if stop_levels:
-                sections.append(f"- Stop Loss Levels: {', '.join([f'${sl:.2f}' for sl in stop_levels])}")
+                sections.append(f"- Stop Loss Levels: {', '.join([f'₹{sl:.2f}' for sl in stop_levels])}")
         
         if 'target_levels' in data:
             targets = data['target_levels']
             if targets:
-                sections.append(f"- Target Levels: {', '.join([f'${tl:.2f}' for tl in targets])}")
+                sections.append(f"- Target Levels: {', '.join([f'₹{tl:.2f}' for tl in targets])}")
         
         return "\n".join(sections) if sections else "- No reversal patterns detected"
     
@@ -223,36 +250,98 @@ Analysis Timestamp: {datetime.now().isoformat()}"""
             if channels:
                 sections.append(f"  * Channels: {len(channels)} detected")
         
-        # Breakout analysis
-        if 'breakout_potential' in data:
-            sections.append(f"- Breakout Potential: {data['breakout_potential']}")
-        
-        # Key levels
+        # Key levels (simplified)
         key_levels = data.get('key_levels', {})
         if key_levels:
             sections.append("- Key Levels:")
             if 'resistance_levels' in key_levels:
                 resistance = key_levels['resistance_levels']
                 if resistance:
-                    sections.append(f"  * Resistance: {', '.join([f'${r:.2f}' for r in resistance])}")
+                    sections.append(f"  * Resistance: {', '.join([f'₹{r:.2f}' for r in resistance])}")
             if 'support_levels' in key_levels:
                 support = key_levels['support_levels']
                 if support:
-                    sections.append(f"  * Support: {', '.join([f'${s:.2f}' for s in support])}")
+                    sections.append(f"  * Support: {', '.join([f'₹{s:.2f}' for s in support])}")
         
         return "\n".join(sections) if sections else "- No continuation patterns detected"
     
     def _format_pattern_recognition_data(self, data: Dict[str, Any]) -> str:
-        """Format pattern recognition agent data."""
+        """Format pattern recognition agent data with enhanced market structure details."""
         
         sections = []
         
-        # Market structure
+        # Enhanced Market Structure Analysis
         market_structure = data.get('market_structure', {})
-        if market_structure:
+        if market_structure and isinstance(market_structure, dict) and 'analysis_type' in market_structure:
+            sections.append("- Advanced Market Structure Analysis:")
+            
+            # Current trend and strength
+            summary = market_structure.get('summary', {})
+            if summary:
+                sections.append(f"  * Current Trend: {summary.get('current_trend', 'unknown')}")
+                sections.append(f"  * Trend Strength: {summary.get('trend_strength', 0):.2f}")
+                sections.append(f"  * Structure Clarity: {summary.get('structure_clarity', 0):.2f}")
+            
+            # Swing points analysis
+            swing_points = market_structure.get('swing_points', {})
+            if swing_points:
+                total_swings = swing_points.get('total_swings', 0)
+                swing_highs = len(swing_points.get('swing_highs', []))
+                swing_lows = len(swing_points.get('swing_lows', []))
+                sections.append(f"  * Swing Points: {total_swings} total ({swing_highs} highs, {swing_lows} lows)")
+            
+            # Structure breaks (BOS/CHOCH)
+            structure_breaks = market_structure.get('structure_breaks', [])
+            if structure_breaks:
+                recent_breaks = summary.get('recent_structure_breaks', 0)
+                sections.append(f"  * Recent Structure Breaks: {recent_breaks} (BOS/CHOCH detected)")
+                
+                # Detail recent breaks
+                for break_info in structure_breaks[-3:]:  # Last 3 breaks
+                    if isinstance(break_info, dict):
+                        break_type = break_info.get('break_type', 'BOS')
+                        direction = break_info.get('direction', 'unknown')
+                        price = break_info.get('price', 0)
+                        sections.append(f"    - {direction.title()} {break_type} at ₹{price:.2f}")
+            
+            # Swing sequence analysis
+            swing_analysis = market_structure.get('swing_analysis', {})
+            if swing_analysis:
+                sequence = swing_analysis.get('sequence', [])
+                pattern = swing_analysis.get('pattern', 'no_pattern')
+                trend_indication = swing_analysis.get('trend_indication', 'unclear')
+                if sequence:
+                    sections.append(f"  * Swing Sequence: {' → '.join(sequence[-4:])} ({pattern})")
+                    sections.append(f"  * Trend Indication: {trend_indication}")
+            
+            # Market phases
+            market_phases = market_structure.get('market_phases', {})
+            if market_phases:
+                current_phase = market_phases.get('current_phase', 'unknown')
+                phase_confidence = market_phases.get('phase_confidence', 0)
+                sections.append(f"  * Market Phase: {current_phase} (confidence: {phase_confidence:.2f})")
+            
+            # Key structural levels
+            key_levels = market_structure.get('key_levels', {})
+            if key_levels:
+                resistance = key_levels.get('resistance_levels', [])
+                support = key_levels.get('support_levels', [])
+                nearest_resistance = key_levels.get('nearest_resistance')
+                nearest_support = key_levels.get('nearest_support')
+                
+                if resistance:
+                    sections.append(f"  * Key Resistance: {', '.join([f'₹{r:.2f}' for r in resistance[:3]])}")
+                if support:
+                    sections.append(f"  * Key Support: {', '.join([f'₹{s:.2f}' for s in support[:3]])}")
+                if nearest_resistance:
+                    sections.append(f"  * Nearest Resistance: ₹{nearest_resistance:.2f}")
+                if nearest_support:
+                    sections.append(f"  * Nearest Support: ₹{nearest_support:.2f}")
+        else:
+            # Fallback to basic trend analysis if advanced structure not available
             trend_analysis = market_structure.get('trend_analysis', {})
             if trend_analysis:
-                sections.append("- Market Structure:")
+                sections.append("- Basic Market Structure:")
                 sections.append(f"  * Short-term Trend: {trend_analysis.get('short_term_trend', 'neutral')}")
                 sections.append(f"  * Medium-term Trend: {trend_analysis.get('medium_term_trend', 'neutral')}")
                 sections.append(f"  * Trend Strength: {trend_analysis.get('trend_strength', 0):.2f}")
@@ -365,10 +454,6 @@ Analysis Timestamp: {datetime.now().isoformat()}"""
         if total > 0:
             success_rate = successful / total
             sections.append(f"- Agent Success Rate: {success_rate:.2%} ({successful}/{total})")
-        
-        # Processing time
-        processing_time = analysis.get('total_processing_time', 0)
-        sections.append(f"- Total Processing Time: {processing_time:.2f}s")
         
         return "\n".join(sections)
     
