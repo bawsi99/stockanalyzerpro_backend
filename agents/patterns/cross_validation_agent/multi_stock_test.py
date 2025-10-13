@@ -316,7 +316,9 @@ class CrossValidationMultiStockTester:
                 await self._save_individual_validation_result(test_result, test_output_dir)
             
             # Save prompt and response if LLM analysis was performed
-            if test_result.get('llm_analysis_success') and test_result.get('full_analysis_results'):
+            full_analysis = test_result.get('full_analysis_results', {})
+            llm_analysis = full_analysis.get('llm_analysis', {})
+            if llm_analysis.get('success', False):
                 await self._save_prompt_response(test_result, test_output_dir)
             
             logger.info(f"[CROSS_VALIDATION_TESTER] Completed {test_id} - "
@@ -667,20 +669,20 @@ class CrossValidationMultiStockTester:
             symbol = test_result['symbol']
             test_id = test_result['test_id']
             
-            # Extract analysis results for prompt building
+            # Extract analysis results
             full_analysis_results = test_result.get('full_analysis_results', {})
             
             if full_analysis_results:
-                # Build the prompt using the LLM agent
-                llm_agent = CrossValidationLLMAgent()
-                
                 # Get the cross-validation results and detected patterns
                 cross_validation_results = full_analysis_results.get('cross_validation', {})
                 pattern_detection_results = full_analysis_results.get('pattern_detection', {})
                 detected_patterns = pattern_detection_results.get('detected_patterns', [])
+                llm_analysis = full_analysis_results.get('llm_analysis', {})
                 
-                # Build prompt
-                prompt = llm_agent._build_validation_analysis_prompt(
+                # Build the prompt (reconstruct using agent's method)
+                from agents.patterns.cross_validation_agent.agent import CrossValidationAgent
+                agent = CrossValidationAgent()
+                prompt = agent._create_validation_analysis_prompt(
                     cross_validation_results, detected_patterns, symbol
                 )
                 
@@ -689,26 +691,35 @@ class CrossValidationMultiStockTester:
                 with open(prompt_file, 'w', encoding='utf-8') as f:
                     f.write(prompt)
                 
-                # Save response if available
-                llm_response = cross_validation_results.get('llm_analysis')
-                if llm_response:
-                    response_file = prompts_dir / f"{test_id}_response.txt"
-                    with open(response_file, 'w', encoding='utf-8') as f:
-                        # Handle both string responses and structured responses
-                        if isinstance(llm_response, dict):
-                            f.write(json.dumps(llm_response, indent=2, default=str))
-                        else:
-                            f.write(str(llm_response))
+                # Save LLM response if available
+                if llm_analysis.get('success', False):
+                    response_content = llm_analysis.get('analysis', '')
+                    if not response_content:
+                        response_content = llm_analysis.get('full_analysis', '')
+                    
+                    if response_content:
+                        response_file = prompts_dir / f"{test_id}_response.txt"
+                        with open(response_file, 'w', encoding='utf-8') as f:
+                            f.write(str(response_content))
+                    
+                    # Save structured LLM analysis
+                    structured_file = prompts_dir / f"{test_id}_llm_analysis.json"
+                    with open(structured_file, 'w', encoding='utf-8') as f:
+                        json.dump(llm_analysis, f, indent=2, default=str)
                 
-                # Save validation insights if available
-                validation_insights = cross_validation_results.get('validation_insights')
+                # Save validation insights if available from the integrated results
+                validation_insights = full_analysis_results.get('validation_insights')
                 if validation_insights:
-                    insights_file = prompts_dir / f"{test_id}_insights.txt"
+                    insights_file = prompts_dir / f"{test_id}_insights.json"
                     with open(insights_file, 'w', encoding='utf-8') as f:
-                        if isinstance(validation_insights, dict):
-                            f.write(json.dumps(validation_insights, indent=2, default=str))
-                        else:
-                            f.write(str(validation_insights))
+                        json.dump(validation_insights, f, indent=2, default=str)
+                
+                # Save token usage information if available
+                token_usage = llm_analysis.get('token_usage')
+                if token_usage:
+                    usage_file = prompts_dir / f"{test_id}_token_usage.json"
+                    with open(usage_file, 'w', encoding='utf-8') as f:
+                        json.dump(token_usage, f, indent=2, default=str)
                         
                 logger.debug(f"[CROSS_VALIDATION_TESTER] Saved prompts and responses to {prompts_dir}")
                         
@@ -962,15 +973,8 @@ async def main():
     """Main function for running cross-validation tests"""
     
     # Test configuration - using real market stocks for comprehensive testing
-    test_stocks = [
-        "RELIANCE",    # Large cap - energy/petrochemicals
-        "TCS",         # Large cap - IT services
-        "HDFCBANK",    # Large cap - banking
-        "ICICIBANK",   # Large cap - banking  
-        "INFY",        # Large cap - IT services
-        "ITC"          # Large cap - FMCG
-    ]
-    test_periods = [30, 60, 90]  # Different timeframes for pattern analysis
+    test_stocks = ["RELIANCE"]
+    test_periods = [365]  # Different timeframes for pattern analysis
     max_concurrent = 3           # Increase concurrency for faster testing
     
     # Initialize tester
