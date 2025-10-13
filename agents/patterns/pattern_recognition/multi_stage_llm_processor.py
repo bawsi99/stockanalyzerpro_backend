@@ -34,7 +34,7 @@ class MultiStageLLMProcessor:
         self.llm_client = llm_client
         self.stage_results = {}
         
-        # Stage configuration
+        # Stage configuration - Optimized 4-stage architecture
         self.stages = {
             'market_structure': {
                 'enabled': True,
@@ -51,19 +51,14 @@ class MultiStageLLMProcessor:
                 'timeout': 25,
                 'max_retries': 1
             },
-            'trading_insights': {
+            'comprehensive_synthesis': {
                 'enabled': True,
-                'timeout': 35,
+                'timeout': 40,  # Longer timeout for comprehensive analysis
                 'max_retries': 2
-            },
-            'final_synthesis': {
-                'enabled': True,
-                'timeout': 20,
-                'max_retries': 1
             }
         }
         
-        logger.info(f"[MULTI_STAGE_LLM] Initialized processor v{self.version} with {len(self.stages)} stages")
+        logger.info(f"[MULTI_STAGE_LLM] Initialized optimized processor v{self.version} with {len(self.stages)} efficient stages")
     
     async def process_multi_stage_analysis(self, 
                                          symbol: str,
@@ -114,13 +109,9 @@ class MultiStageLLMProcessor:
             if self.stages['cross_validation']['enabled']:
                 await self._execute_cross_validation_stage(symbol, technical_analysis)
             
-            # Stage 4: Trading Insights Generation
-            if self.stages['trading_insights']['enabled']:
-                await self._execute_trading_insights_stage(symbol, current_price)
-            
-            # Stage 5: Final Synthesis
-            if self.stages['final_synthesis']['enabled']:
-                await self._execute_final_synthesis_stage(symbol, current_price, context)
+            # Stage 4: Comprehensive Trading Synthesis (combines insights + final recommendation)
+            if self.stages['comprehensive_synthesis']['enabled']:
+                await self._execute_comprehensive_synthesis_stage(symbol, current_price, context)
             
             # Build comprehensive result
             processing_time = (datetime.now() - start_time).total_seconds()
@@ -237,59 +228,27 @@ class MultiStageLLMProcessor:
             }
             self.stage_results['errors'].append(f"{stage_name}: {str(e)}")
     
-    async def _execute_trading_insights_stage(self, symbol: str, current_price: float):
-        """Stage 4: Generate actionable trading insights"""
-        stage_name = 'trading_insights'
+    async def _execute_comprehensive_synthesis_stage(self, symbol: str, current_price: float, context: str):
+        """Stage 4: Comprehensive synthesis combining trading insights and final recommendations"""
+        stage_name = 'comprehensive_synthesis'
         logger.info(f"[MULTI_STAGE_LLM] Executing {stage_name} stage for {symbol}")
         
         try:
-            # Build trading insights prompt using all previous stage results
-            prompt = self._build_trading_insights_prompt(symbol, current_price)
+            # Build comprehensive synthesis prompt
+            prompt = self._build_comprehensive_synthesis_prompt(symbol, current_price, context)
             
             # Execute LLM call
             response = await self._execute_llm_with_retries(
                 prompt, stage_name, self.stages[stage_name]['timeout'], self.stages[stage_name]['max_retries']
             )
             
-            # Process and store result
+            # Process and store result with comprehensive data extraction
             self.stage_results['stages'][stage_name] = {
                 'success': True,
                 'response': response,
                 'trading_signals': self._extract_trading_signals(response),
                 'risk_assessment': self._extract_risk_assessment(response),
                 'price_targets': self._extract_price_targets(response),
-                'timestamp': datetime.now().isoformat()
-            }
-            
-            logger.info(f"[MULTI_STAGE_LLM] {stage_name} stage completed for {symbol}")
-            
-        except Exception as e:
-            logger.error(f"[MULTI_STAGE_LLM] {stage_name} stage failed for {symbol}: {e}")
-            self.stage_results['stages'][stage_name] = {
-                'success': False,
-                'error': str(e),
-                'timestamp': datetime.now().isoformat()
-            }
-            self.stage_results['errors'].append(f"{stage_name}: {str(e)}")
-    
-    async def _execute_final_synthesis_stage(self, symbol: str, current_price: float, context: str):
-        """Stage 5: Final synthesis and consolidation"""
-        stage_name = 'final_synthesis'
-        logger.info(f"[MULTI_STAGE_LLM] Executing {stage_name} stage for {symbol}")
-        
-        try:
-            # Build final synthesis prompt
-            prompt = self._build_final_synthesis_prompt(symbol, current_price, context)
-            
-            # Execute LLM call
-            response = await self._execute_llm_with_retries(
-                prompt, stage_name, self.stages[stage_name]['timeout'], self.stages[stage_name]['max_retries']
-            )
-            
-            # Process and store result
-            self.stage_results['stages'][stage_name] = {
-                'success': True,
-                'response': response,
                 'final_recommendation': self._extract_final_recommendation(response),
                 'confidence_score': self._extract_final_confidence(response),
                 'key_insights': self._extract_key_insights(response),
@@ -414,8 +373,8 @@ TASK: Cross-validate and identify:
 
 Provide a balanced assessment of signal reliability and conflicts."""
     
-    def _build_trading_insights_prompt(self, symbol: str, current_price: float) -> str:
-        """Build prompt for trading insights generation"""
+    def _build_comprehensive_synthesis_prompt(self, symbol: str, current_price: float, context: str) -> str:
+        """Build comprehensive prompt combining trading insights and final synthesis"""
         
         # Summarize key findings from all previous stages
         successful_stages = {
@@ -423,50 +382,43 @@ Provide a balanced assessment of signal reliability and conflicts."""
             if result.get('success', False)
         }
         
-        combined_analysis = ""
+        stage_analysis = ""
         for stage, result in successful_stages.items():
-            combined_analysis += f"{stage.upper()}: {result.get('response', '')[:300]}...\n\n"
+            status = "✅" if result.get('success', False) else "❌"
+            stage_analysis += f"{status} {stage.upper()}:\n{result.get('response', result.get('error', ''))[:400]}\n\n"
         
-        return f"""You are an expert trading strategist. Generate actionable trading insights for {symbol} at ${current_price:.2f}.
+        return f"""You are a senior technical analyst and trading strategist. Provide comprehensive analysis and actionable trading recommendations for {symbol} at ${current_price:.2f}.
 
-COMPREHENSIVE ANALYSIS SUMMARY:
-{combined_analysis}
-
-TASK: Provide specific trading insights:
-1. Primary trading bias (bullish/bearish/neutral) with conviction level
-2. Specific entry points and entry conditions
-3. Stop loss levels with rationale
-4. Target price levels with timeframes
-5. Risk assessment and position sizing recommendations
-6. Key levels to monitor for trade management
-
-Format as clear, actionable trading recommendations with specific price levels."""
-    
-    def _build_final_synthesis_prompt(self, symbol: str, current_price: float, context: str) -> str:
-        """Build prompt for final synthesis"""
-        
-        # Summarize all stage results
-        stage_summary = ""
-        for stage, result in self.stage_results['stages'].items():
-            status = "✓" if result.get('success', False) else "✗"
-            stage_summary += f"{status} {stage}: {result.get('response', result.get('error', ''))[:200]}...\n\n"
-        
-        return f"""You are a senior technical analyst providing final synthesis for {symbol} at ${current_price:.2f}.
-
-COMPLETE MULTI-STAGE ANALYSIS:
-{stage_summary}
+MULTI-STAGE ANALYSIS RESULTS:
+{stage_analysis}
 
 ADDITIONAL CONTEXT: {context}
 
-TASK: Provide final comprehensive synthesis:
-1. Overall market outlook for {symbol}
-2. Key patterns and structure insights (most important findings)
-3. Primary recommendation with clear rationale
-4. Risk factors and mitigation strategies
-5. Confidence level in the overall analysis (1-10 scale)
-6. Next key levels/events to monitor
+TASK: Provide comprehensive synthesis with:
 
-Synthesize all stages into a cohesive, actionable final recommendation."""
+A. MARKET ASSESSMENT:
+1. Overall market outlook and key structural insights
+2. Most significant patterns and their implications
+3. Cross-validation results and signal reliability
+
+B. TRADING RECOMMENDATIONS:
+4. Primary trading bias (bullish/bearish/neutral) with conviction level (1-10)
+5. Specific entry points and entry conditions
+6. Stop loss levels with clear rationale
+7. Target price levels with expected timeframes
+8. Position sizing recommendations based on risk assessment
+
+C. RISK MANAGEMENT:
+9. Key risk factors and mitigation strategies
+10. Critical levels to monitor for trade management
+11. Scenario analysis (best/worst/most likely outcomes)
+
+D. FINAL SYNTHESIS:
+12. Overall confidence in the analysis (1-10 scale)
+13. Primary recommendation with clear rationale
+14. Next key events/levels to monitor
+
+Format as clear, actionable analysis with specific price levels and timeframes."""
     
     # Result extraction methods
     def _extract_market_structure_insights(self, response: str) -> Dict[str, Any]:
@@ -597,13 +549,13 @@ Synthesize all stages into a cohesive, actionable final recommendation."""
                     consolidated['detected_patterns'] = result.get('patterns', [])
                 elif stage_name == 'cross_validation':
                     consolidated['validation_results'] = result.get('validations', {})
-                elif stage_name == 'trading_insights':
+                elif stage_name == 'comprehensive_synthesis':
+                    # Comprehensive synthesis contains both trading insights and final synthesis
                     consolidated['trading_insights'] = {
                         'signals': result.get('trading_signals', {}),
                         'risk_assessment': result.get('risk_assessment', {}),
                         'price_targets': result.get('price_targets', {})
                     }
-                elif stage_name == 'final_synthesis':
                     consolidated['final_synthesis'] = {
                         'recommendation': result.get('final_recommendation', ''),
                         'confidence': result.get('confidence_score', 0.5),
