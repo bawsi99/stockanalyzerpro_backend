@@ -1,0 +1,417 @@
+{
+  "symbol": "RELIANCE",
+  "scenario": "uptrend",
+  "timestamp": "2025-10-13T16:15:16.433924",
+  "test_duration": 14.212672,
+  "success": true,
+  "confidence_score": 100,
+  "has_llm_analysis": true,
+  "processing_time": 14.212611,
+  "error": null,
+  "insights": [
+    "Structure quality: excellent (100/100)",
+    "Identified 14 swing points (density: 0.140)",
+    "Trend: uptrend (strong strength, excellent quality)",
+    "Structural bias: neutral (4 BOS, 0 CHoCH events)",
+    "Current state: trending up, price position: mid range",
+    "Key levels: 10 support, 4 resistance",
+    "Multi-timeframe: conflicting alignment, uptrend consensus",
+    "Enhanced with AI-powered structural analysis"
+  ],
+  "technical_analysis_summary": {
+    "swing_points": {
+      "total": 14,
+      "density": 0.14
+    },
+    "trend": {
+      "direction": "uptrend",
+      "strength": "strong",
+      "quality": "excellent"
+    },
+    "structure_quality": {
+      "score": 100,
+      "rating": "excellent"
+    },
+    "bos_choch": {
+      "structural_bias": "neutral",
+      "total_events": 4
+    },
+    "current_state": "trending_up",
+    "confidence": 1.0
+  },
+  "result": {
+    "success": true,
+    "agent_name": "market_structure",
+    "symbol": "RELIANCE",
+    "timestamp": "2025-10-13T16:15:30.646560",
+    "processing_time": 14.212611,
+    "technical_analysis": {
+      "success": true,
+      "agent_name": "market_structure",
+      "processing_time": 0.001858,
+      "timestamp": "2025-10-13T16:15:16.435807",
+      "swing_points": {
+        "swing_highs": [
+          {
+            "date": "2025-07-16 16:15:16.433432",
+            "price": 241.38,
+            "index": 11,
+            "strength": "weak",
+            "type": "swing_high"
+          },
+          {
+            "date": "2025-08-04 16:15:16.433432",
+            "price": 243.67,
+            "index": 30,
+            "strength": "medium",
+            "type": "swing_high"
+          },
+          {
+            "date": "2025-08-16 16:15:16.433432",
+            "price": 252.73,
+            "index": 42,
+            "strength": "weak",
+            "type": "swing_high"
+          },
+          {
+            "date": "2025-09-18 16:15:16.433432",
+            "price": 256.89,
+            "index": 75,
+            "strength": "weak",
+            "type": "swing_high"
+          }
+        ],
+        "swing_lows": [
+          {
+            "date": "2025-07-11 16:15:16.433432",
+            "price": 224.08,
+            "index": 6,
+            "strength": "weak",
+            "type": "swing_low"
+          },
+          {
+            "date": "2025-07-26 16:15:16.433432",
+            "price": 218.57,
+            "index": 21,
+            "strength": "weak",
+            "type": "swing_low"
+          },
+          {
+            "date": "2025-08-02 16:15:16.433432",
+            "price": 220.02,
+            "index": 28,
+            "strength": "weak",
+            "type": "swing_low"
+          },
+          {
+            "date": "2025-08-08 16:15:16.433432",
+            "price": 223.57,
+            "index": 34,
+            "strength": "medium",
+            "type": "swing_low"
+          },
+          {
+            "date": "2025-08-14 16:15:16.433432",
+            "price": 232.26,
+            "index": 40,
+            "strength": "strong",
+            "type": "swing_low"
+          },
+          {
+            "date": "2025-08-23 16:15:16.433432",
+            "price": 224.41,
+            "index": 49,
+            "strength": "weak",
+            "type": "swing_low"
+          },
+          {
+            "date": "2025-09-07 16:15:16.433432",
+            "price": 229.56,
+            "index": 64,
+            "strength": "weak",
+            "type": "swing_low"
+          },
+          {
+            "date": "2025-09-20 16:15:16.433432",
+            "price": 231.17,
+            "index": 77,
+            "strength": "medium",
+            "type": "swing_low"
+          },
+          {
+            "date": "2025-09-27 16:15:16.433432",
+            "price": 234.95,
+            "index": 84,
+            "strength": "medium",
+            "type": "swing_low"
+          },
+          {
+            "date": "2025-10-07 16:15:16.433432",
+            "price": 233.22,
+            "index": 94,
+            "strength": "medium",
+            "type": "swing_low"
+          }
+        ],
+        "total_swings": 14,
+        "swing_density": 0.14,
+        "analysis_method": "local_extrema",
+        "lookback_period": 5
+      },
+      "bos_choch_analysis": {
+        "bos_events": [
+          {
+            "type": "bullish_bos",
+            "date": "2025-08-16 16:15:16.433432",
+            "break_price": 252.73,
+            "previous_level": 243.67,
+            "percentage_break": 3.72,
+            "strength": "strong"
+          },
+          {
+            "type": "bullish_bos",
+            "date": "2025-09-18 16:15:16.433432",
+            "break_price": 256.89,
+            "previous_level": 252.73,
+            "percentage_break": 1.65,
+            "strength": "medium"
+          },
+          {
+            "type": "bearish_bos",
+            "date": "2025-07-26 16:15:16.433432",
+            "break_price": 218.57,
+            "previous_level": 224.08,
+            "percentage_break": 2.46,
+            "strength": "medium"
+          },
+          {
+            "type": "bearish_bos",
+            "date": "2025-08-23 16:15:16.433432",
+            "break_price": 224.41,
+            "previous_level": 232.26,
+            "percentage_break": 3.38,
+            "strength": "strong"
+          }
+        ],
+        "choch_events": [],
+        "total_bos_events": 4,
+        "total_choch_events": 0,
+        "recent_structural_break": {
+          "type": "bearish_bos",
+          "date": "2025-08-23 16:15:16.433432",
+          "break_price": 224.41,
+          "previous_level": 232.26,
+          "percentage_break": 3.38,
+          "strength": "strong"
+        },
+        "structural_bias": "neutral"
+      },
+      "trend_analysis": {
+        "trend_direction": "uptrend",
+        "trend_strength": "strong",
+        "trend_consistency": {
+          "consistency": "high",
+          "score": 0.75,
+          "consistent_swings": 9,
+          "total_evaluated_swings": 12
+        },
+        "price_position_in_range": 0.71,
+        "current_price": 245.85,
+        "range_high": 256.89,
+        "range_low": 218.57,
+        "trend_quality": "excellent",
+        "market_regime": {
+          "regime": "mixed",
+          "confidence": 0.43,
+          "volatility": 0.21,
+          "price_change_pct": 7.19,
+          "swing_rate": 0.14,
+          "regime_scores": {
+            "trending": 2,
+            "volatile": 0,
+            "consolidating": 2,
+            "mixed": 3
+          }
+        }
+      },
+      "key_levels": {
+        "resistance_levels": [
+          {
+            "level": 241.38,
+            "date": "2025-07-16 16:15:16.433432",
+            "strength": "weak",
+            "type": "resistance"
+          },
+          {
+            "level": 243.67,
+            "date": "2025-08-04 16:15:16.433432",
+            "strength": "medium",
+            "type": "resistance"
+          },
+          {
+            "level": 252.73,
+            "date": "2025-08-16 16:15:16.433432",
+            "strength": "weak",
+            "type": "resistance"
+          },
+          {
+            "level": 256.89,
+            "date": "2025-09-18 16:15:16.433432",
+            "strength": "weak",
+            "type": "resistance"
+          }
+        ],
+        "support_levels": [
+          {
+            "level": 224.08,
+            "date": "2025-07-11 16:15:16.433432",
+            "strength": "weak",
+            "type": "support"
+          },
+          {
+            "level": 218.57,
+            "date": "2025-07-26 16:15:16.433432",
+            "strength": "weak",
+            "type": "support"
+          },
+          {
+            "level": 220.02,
+            "date": "2025-08-02 16:15:16.433432",
+            "strength": "weak",
+            "type": "support"
+          },
+          {
+            "level": 223.57,
+            "date": "2025-08-08 16:15:16.433432",
+            "strength": "medium",
+            "type": "support"
+          },
+          {
+            "level": 232.26,
+            "date": "2025-08-14 16:15:16.433432",
+            "strength": "strong",
+            "type": "support"
+          },
+          {
+            "level": 224.41,
+            "date": "2025-08-23 16:15:16.433432",
+            "strength": "weak",
+            "type": "support"
+          },
+          {
+            "level": 229.56,
+            "date": "2025-09-07 16:15:16.433432",
+            "strength": "weak",
+            "type": "support"
+          },
+          {
+            "level": 231.17,
+            "date": "2025-09-20 16:15:16.433432",
+            "strength": "medium",
+            "type": "support"
+          },
+          {
+            "level": 234.95,
+            "date": "2025-09-27 16:15:16.433432",
+            "strength": "medium",
+            "type": "support"
+          },
+          {
+            "level": 233.22,
+            "date": "2025-10-07 16:15:16.433432",
+            "strength": "medium",
+            "type": "support"
+          }
+        ],
+        "nearest_resistance": {
+          "level": 252.73,
+          "date": "2025-08-16 16:15:16.433432",
+          "strength": "weak",
+          "type": "resistance"
+        },
+        "nearest_support": {
+          "level": 234.95,
+          "date": "2025-09-27 16:15:16.433432",
+          "strength": "medium",
+          "type": "support"
+        },
+        "current_price": 245.85,
+        "total_key_levels": 14
+      },
+      "structure_quality": {
+        "quality_score": 100,
+        "quality_rating": "excellent",
+        "quality_factors": [
+          "optimal_swing_density",
+          "high_trend_consistency",
+          "strong_bos_present",
+          "clear_trend_direction",
+          "sufficient_swing_data"
+        ],
+        "assessment_criteria": {
+          "swing_density": 0.14,
+          "trend_consistency_score": 0.75,
+          "strong_bos_count": 2,
+          "total_bos_count": 4,
+          "trend_clarity": true,
+          "total_swings": 14
+        }
+      },
+      "current_state": {
+        "current_price": 245.85,
+        "price_momentum_10d": 0.58,
+        "position_in_recent_range": 0.57,
+        "price_position_description": "mid_range",
+        "recent_range_high": 256.89,
+        "recent_range_low": 231.17,
+        "trend_alignment": "uptrend",
+        "structure_state": "trending_up"
+      },
+      "fractal_analysis": {
+        "daily_structure": {
+          "swing_count": 14,
+          "trend": "uptrend"
+        },
+        "weekly_structure": {
+          "swing_count": 1,
+          "trend": "insufficient_data"
+        },
+        "monthly_structure": {
+          "swing_count": 14,
+          "trend": "uptrend"
+        },
+        "timeframe_alignment": "conflicting",
+        "trend_consensus": "uptrend"
+      },
+      "analysis_period_days": 100,
+      "total_swing_highs": 4,
+      "total_swing_lows": 10,
+      "confidence_score": 1.0,
+      "data_quality": {
+        "data_length": 100,
+        "missing_data_percentage": 0.0,
+        "length_quality": "excellent",
+        "overall_quality_score": 100,
+        "sufficient_for_analysis": "True"
+      }
+    },
+    "chart_image": "<bytes: 392904 bytes>",
+    "llm_analysis": "```json\n{\n  \"swing_points\": {\n    \"total_swing_points\": 14,\n    \"swing_quality\": \"strong\",\n    \"recent_swing_highs\": 3,\n    \"recent_swing_lows\": 3,\n    \"swing_density\": \"optimal\"\n  },\n  \"structural_breaks\": {\n    \"bos_events\": 4,\n    \"choch_events\": 0,\n    \"recent_break_type\": \"bearish_bos\",\n    \"structural_bias\": \"neutral\",\n    \"break_strength\": \"strong\"\n  },\n  \"trend_structure\": {\n    \"trend_direction\": \"uptrend\",\n    \"trend_strength\": \"strong\",\n    \"higher_highs_lows\": \"present\",\n    \"structure_integrity\": \"intact\"\n  },\n  \"key_levels\": {\n    \"nearest_resistance\": 252.73,\n    \"nearest_support\": 234.95,\n    \"current_position\": \"mid_range\",\n    \"level_count\": 14\n  },\n  \"current_state\": \"trending_up\",\n  \"confidence_score\": 100,\n  \"key_insight\": \"RELIANCE exhibits a strong uptrend with excellent structure quality and optimal swing density. Despite a recent strong bearish BOS event contributing to a neutral structural bias, the overall trend remains robustly bullish. Price is currently positioned mid-range between key structural levels.\"\n}\n```",
+    "has_llm_analysis": true,
+    "agent_info": {
+      "agent_name": "market_structure",
+      "agent_version": "1.0.0",
+      "description": "Analyzes market structure, swing points, BOS/CHOCH events, and trend structure",
+      "capabilities": [
+        "swing_point_analysis",
+        "bos_choch_detection",
+        "trend_structure_analysis",
+        "support_resistance_from_structure",
+        "fractal_analysis",
+        "llm_enhanced_insights",
+        "multi_modal_analysis"
+      ]
+    },
+    "confidence_score": 100
+  }
+}

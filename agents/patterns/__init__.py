@@ -13,25 +13,28 @@ Agents:
 """
 
 # Import all pattern agents (technical_overview removed - use dedicated indicators system)
-from .reversal import ReversalPatternsProcessor, ReversalPatternsCharts
-from .continuation import ContinuationPatternsProcessor, ContinuationPatternsCharts
-from .pattern_recognition import PatternRecognitionProcessor, PatternRecognitionCharts
-from .patterns_agents import PatternAgentsOrchestrator
+# Temporarily commented out missing modules
+# from .reversal import ReversalPatternsProcessor, ReversalPatternsCharts
+# from .continuation import ContinuationPatternsProcessor, ContinuationPatternsCharts
+# from .pattern_recognition import PatternRecognitionProcessor, PatternRecognitionCharts
+# from .patterns_agents import PatternAgentsOrchestrator, patterns_orchestrator
 
 # Also export core components
-from .market_structure_analyzer import MarketStructureAnalyzer
-from .pattern_context_builder import PatternContextBuilder
-from .pattern_llm_agent import PatternLLMAgent
+# from .market_structure_analyzer import MarketStructureAnalyzer
+# from .pattern_context_builder import PatternContextBuilder
+# from .pattern_llm_agent import PatternLLMAgent
 
 __all__ = [
-    'ReversalPatternsProcessor',
-    'ReversalPatternsCharts',
-    'ContinuationPatternsProcessor',
-    'ContinuationPatternsCharts', 
-    'PatternRecognitionProcessor',
-    'PatternRecognitionCharts',
-    'PatternAgentsOrchestrator',
-    'MarketStructureAnalyzer',
-    'PatternContextBuilder',
-    'PatternLLMAgent'
+    # Temporarily removed missing classes
+    # 'ReversalPatternsProcessor',
+    # 'ReversalPatternsCharts',
+    # 'ContinuationPatternsProcessor',
+    # 'ContinuationPatternsCharts', 
+    # 'PatternRecognitionProcessor',
+    # 'PatternRecognitionCharts',
+    # 'PatternAgentsOrchestrator',
+    # 'patterns_orchestrator',
+    # 'MarketStructureAnalyzer',
+    # 'PatternContextBuilder',
+    # 'PatternLLMAgent'
 ]

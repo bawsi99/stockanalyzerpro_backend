@@ -107,6 +107,14 @@ agents:
     enable_code_execution: true  # Needs code execution for level calculations
     max_retries: 3
     timeout: 90 # Support/resistance analysis
+    
+  # Market Structure Agent (Pattern Analysis)
+  market_structure_agent:
+    provider: "gemini"
+    model: "gemini-2.5-flash"  # Fast for market structure analysis with image processing
+    enable_code_execution: false  # Market structure analysis doesn't need code execution
+    max_retries: 3
+    timeout: 90  # Market structure analysis with chart images requires more time
 
 # Future provider configurations (will be activated in Phase 7)
 future_configs:
@@ -143,6 +151,8 @@ environments:
         timeout: 90  # Respect agent-specific timeout
       final_decision_agent:
         timeout: 90  # Respect agent-specific timeout
+      market_structure_agent:
+        timeout: 90  # Respect agent-specific timeout for chart analysis
       
   staging:
     # Same as production but with shorter timeouts for non-critical agents
@@ -154,6 +164,8 @@ environments:
         timeout: 90  # Respect agent-specific timeout
       final_decision_agent:
         timeout: 90  # Respect agent-specific timeout
+      market_structure_agent:
+        timeout: 90  # Respect agent-specific timeout for chart analysis
       
   production:
     # Production-optimized settings
