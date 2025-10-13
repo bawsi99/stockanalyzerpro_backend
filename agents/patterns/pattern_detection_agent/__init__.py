@@ -9,19 +9,17 @@ This module provides comprehensive chart pattern detection including:
 - Entry/exit point identification from patterns
 
 The agent follows the distributed architecture pattern with separate components
-for technical processing, chart generation, and LLM-powered insights.
+for technical processing and chart generation.
 """
 
 from .agent import PatternDetectionAgent
 from .processor import PatternDetectionProcessor
-from .charts import PatternDetectionCharts
-from .llm_agent import PatternDetectionLLMAgent
+from .charts import PatternDetectionChartGenerator
 
 __all__ = [
     'PatternDetectionAgent',
     'PatternDetectionProcessor', 
-    'PatternDetectionCharts',
-    'PatternDetectionLLMAgent'
+    'PatternDetectionChartGenerator'
 ]
 
 __version__ = "1.0.0"

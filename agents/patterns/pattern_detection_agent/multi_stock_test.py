@@ -62,7 +62,6 @@ class PatternDetectionMultiStockTester:
         # Test configuration
         self.test_config = {
             'include_charts': True,
-            'include_llm_analysis': True,
             'save_individual_results': True,
             'save_charts': True
         }
@@ -194,7 +193,6 @@ class PatternDetectionMultiStockTester:
                 stock_data=stock_data,
                 symbol=symbol,
                 include_charts=self.test_config['include_charts'],
-                include_llm_analysis=self.test_config['include_llm_analysis'],
                 save_path=save_path if self.test_config['save_charts'] else None
             )
             analysis_time = time.time() - analysis_start
@@ -223,12 +221,7 @@ class PatternDetectionMultiStockTester:
                 
                 # Component status
                 'charts_generated': analysis_results.get('charts_generated', 0),
-                'llm_analysis_success': analysis_results.get('llm_analysis', {}).get('success', False),
                 'components_executed': analysis_results.get('analysis_summary', {}).get('components_list', []),
-                
-                # AI insights (if available)
-                'ai_insights_available': bool(analysis_results.get('ai_insights')),
-                'ai_analysis_quality': analysis_results.get('ai_analysis_quality', 'unknown'),
                 
                 # Executive summary
                 'executive_summary': analysis_results.get('executive_summary', {}),
@@ -352,7 +345,6 @@ class PatternDetectionMultiStockTester:
             confidence_scores = [r.get('overall_confidence', 0) for r in self.test_results if r.get('analysis_success')]
             
             # Component success rates
-            llm_success_count = len([r for r in self.test_results if r.get('llm_analysis_success', False)])
             charts_generated_count = len([r for r in self.test_results if r.get('charts_generated', 0) > 0])
             
             # Pattern type analysis
@@ -392,7 +384,6 @@ class PatternDetectionMultiStockTester:
                     'low_confidence_tests': len([c for c in confidence_scores if c < 0.5])
                 },
                 'component_success_rates': {
-                    'llm_analysis_success_rate': (llm_success_count / total_tests * 100) if total_tests > 0 else 0,
                     'charts_generation_rate': (charts_generated_count / total_tests * 100) if total_tests > 0 else 0
                 },
                 'pattern_types_detected': pattern_types,
@@ -445,10 +436,6 @@ class PatternDetectionMultiStockTester:
             
             if pattern_detection_rate < 60:
                 recommendations.append(f"Pattern detection rate ({pattern_detection_rate:.1f}%) is low. Review pattern detection sensitivity.")
-            
-            llm_success_rate = analysis_results.get('component_success_rates', {}).get('llm_analysis_success_rate', 0)
-            if llm_success_rate < 90:
-                recommendations.append(f"LLM analysis success rate ({llm_success_rate:.1f}%) could be improved.")
             
             if not recommendations:
                 recommendations.append("All metrics are performing well. Consider expanding test coverage.")
@@ -546,7 +533,7 @@ async def main():
     """Main function for running pattern detection tests"""
     
     # Test configuration
-    test_stocks = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN']
+    test_stocks = ["RELIANCE"]
     test_periods = [30, 60, 90]
     max_concurrent = 2
     
