@@ -12,22 +12,26 @@ Agents:
 - Pattern Recognition: General pattern identification and analysis
 """
 
-# Import all pattern agents
+# Import all pattern agents (technical_overview removed - use dedicated indicators system)
 from .reversal import ReversalPatternsProcessor, ReversalPatternsCharts
 from .continuation import ContinuationPatternsProcessor, ContinuationPatternsCharts
-from .technical_overview import TechnicalOverviewProcessor, TechnicalOverviewCharts
 from .pattern_recognition import PatternRecognitionProcessor, PatternRecognitionCharts
-from .patterns_agents import PatternAgentsOrchestrator, patterns_orchestrator
+from .patterns_agents import PatternAgentsOrchestrator
+
+# Also export core components
+from .market_structure_analyzer import MarketStructureAnalyzer
+from .pattern_context_builder import PatternContextBuilder
+from .pattern_llm_agent import PatternLLMAgent
 
 __all__ = [
     'ReversalPatternsProcessor',
     'ReversalPatternsCharts',
     'ContinuationPatternsProcessor',
     'ContinuationPatternsCharts', 
-    'TechnicalOverviewProcessor',
-    'TechnicalOverviewCharts',
     'PatternRecognitionProcessor',
     'PatternRecognitionCharts',
     'PatternAgentsOrchestrator',
-    'patterns_orchestrator'
+    'MarketStructureAnalyzer',
+    'PatternContextBuilder',
+    'PatternLLMAgent'
 ]

@@ -19,7 +19,7 @@ import traceback
 # Import all pattern agents
 from .reversal import ReversalPatternsProcessor, ReversalPatternsCharts
 from .continuation import ContinuationPatternsProcessor, ContinuationPatternsCharts
-from .technical_overview import TechnicalOverviewProcessor, TechnicalOverviewCharts
+# Removed: TechnicalOverviewProcessor - redundant with indicators agent system
 
 # Import pattern recognition agent
 from .pattern_recognition import PatternRecognitionProcessor, PatternRecognitionCharts
@@ -138,33 +138,32 @@ class PatternAgentsOrchestrator:
     """
     Central orchestrator for all pattern analysis agents
     
-    Manages simultaneous execution of all 4 pattern agents:
+    Manages simultaneous execution of 3 specialized pattern agents:
     - reversal: Divergences, double tops/bottoms reversal patterns
     - continuation: Triangles, flags, channels continuation patterns  
-    - technical_overview: Comprehensive technical analysis overview
-    - pattern_recognition: General pattern identification and analysis
+    - pattern_recognition: Advanced pattern identification with multi-stage LLM analysis
+    
+    Note: Technical overview functionality moved to dedicated indicators system
     """
     
     def __init__(self, gemini_client=None):
         self.gemini_client = gemini_client
         
-        # Initialize all agent processors
+        # Initialize all agent processors (technical_overview removed - redundant with indicators system)
         self.reversal = ReversalPatternsProcessor()
         self.continuation = ContinuationPatternsProcessor()
-        self.technical_overview = TechnicalOverviewProcessor()
         self.pattern_recognition = PatternRecognitionProcessor(llm_client=gemini_client)  # Pass LLM client for multi-stage processing
         
         # Initialize all chart generators
         self.reversal_charts = ReversalPatternsCharts()
         self.continuation_charts = ContinuationPatternsCharts()
-        self.technical_charts = TechnicalOverviewCharts()
         self.recognition_charts = PatternRecognitionCharts()
         
-        # Agent configuration
+        # Agent configuration (technical_overview removed - use dedicated indicators system instead)
         self.agent_config = {
             'reversal': {
                 'enabled': True,
-                'weight': 0.25,
+                'weight': 0.33,  # Increased weight since we removed technical_overview
                 'timeout': 30,
                 'processor': self.reversal,
                 'charts': self.reversal_charts,
@@ -172,23 +171,15 @@ class PatternAgentsOrchestrator:
             },
             'continuation': {
                 'enabled': True,
-                'weight': 0.25,
+                'weight': 0.33,  # Increased weight since we removed technical_overview
                 'timeout': 30,
                 'processor': self.continuation,
                 'charts': self.continuation_charts,
                 'prompt_template': 'optimized_continuation_levels'
             },
-            'technical_overview': {
-                'enabled': True,
-                'weight': 0.25,
-                'timeout': 30,
-                'processor': self.technical_overview,
-                'charts': self.technical_charts,
-                'prompt_template': 'optimized_technical_overview'
-            },
             'pattern_recognition': {
                 'enabled': True,
-                'weight': 0.25,
+                'weight': 0.34,  # Increased weight since we removed technical_overview (includes multi-stage LLM)
                 'timeout': 30,
                 'processor': self.pattern_recognition,
                 'charts': self.recognition_charts,
