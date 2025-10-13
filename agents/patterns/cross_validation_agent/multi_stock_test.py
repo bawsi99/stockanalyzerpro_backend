@@ -22,11 +22,22 @@ import time
 import traceback
 from pathlib import Path
 
+# Load environment variables
+try:
+    import dotenv
+    # Load .env file from the backend/config directory
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'config', '.env')
+    dotenv.load_dotenv(dotenv_path=env_path)
+    print(f"✅ Environment variables loaded from: {env_path}")
+except ImportError:
+    print("⚠️ python-dotenv not available, using system environment variables")
+
 # Add the backend directory to sys.path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
 # Import the cross-validation agent
 from agents.patterns.cross_validation_agent.agent import CrossValidationAgent
+from agents.patterns.cross_validation_agent.llm_agent import CrossValidationLLMAgent
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -256,6 +267,10 @@ class CrossValidationMultiStockTester:
             # Save individual test result if configured
             if self.test_config['save_individual_results']:
                 await self._save_individual_validation_result(test_result, test_output_dir)
+            
+            # Save prompt and response if LLM analysis was performed
+            if test_result.get('llm_analysis_success') and test_result.get('full_validation_results'):
+                await self._save_prompt_response(test_result, test_output_dir)
             
             logger.info(f"[CROSS_VALIDATION_TESTER] Completed {test_id} - "
                        f"Success: {test_result['validation_success']}, "
@@ -496,6 +511,62 @@ class CrossValidationMultiStockTester:
         except Exception as e:
             logger.error(f"[CROSS_VALIDATION_TESTER] Failed to save individual validation result: {e}")
     
+    async def _save_prompt_response(self, test_result: Dict[str, Any], test_output_dir: Path):
+        """Save LLM prompt and response for debugging and analysis."""
+        try:
+            # Create prompts_responses directory
+            prompts_dir = test_output_dir / "prompts_responses"
+            prompts_dir.mkdir(exist_ok=True)
+            
+            symbol = test_result['symbol']
+            test_id = test_result['test_id']
+            
+            # Extract validation results for prompt building
+            full_validation_results = test_result.get('full_validation_results', {})
+            
+            if full_validation_results:
+                # Build the prompt using the LLM agent
+                llm_agent = CrossValidationLLMAgent()
+                
+                # Get the data needed for prompt generation
+                detected_patterns = full_validation_results.get('detected_patterns', [])
+                
+                # Build prompt
+                prompt = llm_agent._build_validation_analysis_prompt(
+                    full_validation_results, detected_patterns, symbol
+                )
+                
+                # Save prompt
+                prompt_file = prompts_dir / f"{test_id}_prompt.txt"
+                with open(prompt_file, 'w', encoding='utf-8') as f:
+                    f.write(prompt)
+                
+                # Save response if available
+                llm_response = full_validation_results.get('llm_analysis')
+                if llm_response:
+                    response_file = prompts_dir / f"{test_id}_response.txt"
+                    with open(response_file, 'w', encoding='utf-8') as f:
+                        # Handle both string responses and structured responses
+                        if isinstance(llm_response, dict):
+                            f.write(json.dumps(llm_response, indent=2, default=str))
+                        else:
+                            f.write(str(llm_response))
+                
+                # Save validation insights if available
+                validation_insights = full_validation_results.get('validation_insights')
+                if validation_insights:
+                    insights_file = prompts_dir / f"{test_id}_insights.txt"
+                    with open(insights_file, 'w', encoding='utf-8') as f:
+                        if isinstance(validation_insights, dict):
+                            f.write(json.dumps(validation_insights, indent=2, default=str))
+                        else:
+                            f.write(str(validation_insights))
+                        
+                logger.debug(f"[CROSS_VALIDATION_TESTER] Saved prompts and responses to {prompts_dir}")
+                        
+        except Exception as e:
+            logger.error(f"[CROSS_VALIDATION_TESTER] Failed to save prompt/response for {test_result.get('test_id', 'unknown')}: {e}")
+    
     def _analyze_validation_test_results(self) -> Dict[str, Any]:
         """Analyze aggregated validation test results"""
         try:
@@ -732,7 +803,7 @@ async def main():
     """Main function for running cross-validation tests"""
     
     # Test configuration
-    test_stocks = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN']
+    test_stocks = ["RELIANCE"]
     test_periods = [30, 60, 90]
     max_concurrent = 2
     

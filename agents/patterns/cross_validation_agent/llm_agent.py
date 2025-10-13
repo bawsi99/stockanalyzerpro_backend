@@ -20,7 +20,7 @@ import os
 # Add the parent directory to sys.path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
-from llm.gemini_llm import GeminiLLM
+from llm import get_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,13 @@ class CrossValidationLLMAgent:
     def __init__(self):
         self.name = "cross_validation_llm"
         self.version = "1.0.0"
-        self.llm = GeminiLLM()
+        try:
+            # Use the cross_validation_agent configuration from llm_assignments.yaml
+            self.llm_client = get_llm_client("cross_validation_agent")
+            print("✅ Cross-Validation LLM Agent initialized with backend/llm")
+        except Exception as e:
+            print(f"❌ Failed to initialize Cross-Validation LLM Agent: {e}")
+            self.llm_client = None
     
     async def generate_validation_analysis(
         self, 
@@ -303,8 +309,11 @@ Structure your response as a professional validation analysis report with clear 
     async def _get_llm_response(self, prompt: str, symbol: str) -> str:
         """Get response from LLM with error handling"""
         try:
-            # Make async call to LLM
-            response = await self.llm.generate_response_async(prompt)
+            if not self.llm_client:
+                return f"Cross-validation analysis for {symbol} could not be completed: LLM client not initialized."
+            
+            # Make async call to LLM using new backend/llm system
+            response, token_usage = await self.llm_client.generate_text(prompt)
             
             if not response or len(response.strip()) < 50:
                 return f"Cross-validation analysis for {symbol} could not be completed due to insufficient LLM response."

@@ -23,7 +23,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 # Import agent components
 from agents.patterns.cross_validation_agent.processor import CrossValidationProcessor
 from agents.patterns.cross_validation_agent.charts import CrossValidationChartGenerator
-from agents.patterns.cross_validation_agent.llm_agent import CrossValidationLLMAgent
+from llm import get_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +43,15 @@ class CrossValidationAgent:
         self.version = "1.0.0"
         self.description = "Comprehensive pattern cross-validation and confidence assessment system"
         
+        # Set up logging first
+        self.logger = logging.getLogger(__name__)
+        
         # Initialize sub-components
         self.processor = CrossValidationProcessor()
         self.chart_generator = CrossValidationChartGenerator()
-        self.llm_agent = CrossValidationLLMAgent()
+        self.llm_client = self._initialize_llm()
+        
+        self.logger.info(f"{self.name.title().replace('_', ' ')} Agent v{self.version} initialized")
     
     async def validate_patterns(
         self, 
@@ -177,8 +182,8 @@ class CrossValidationAgent:
                 try:
                     logger.info(f"[CROSS_VALIDATION_AGENT] Executing LLM validation analysis for {symbol}")
                     
-                    llm_results = await self.llm_agent.generate_validation_analysis(
-                        validation_results, detected_patterns, symbol, market_context
+                    llm_results = await self._generate_llm_analysis(
+                        validation_results, detected_patterns, symbol
                     )
                     
                     results['llm_analysis'] = llm_results
@@ -540,6 +545,118 @@ class CrossValidationAgent:
         except Exception as e:
             logger.error(f"[CROSS_VALIDATION_AGENT] Results validation failed: {e}")
             return False
+    
+    def _initialize_llm(self):
+        """Initialize LLM client for cross-validation analysis"""
+        try:
+            # Use cross_validation_agent configuration from llm_assignments.yaml
+            llm_client = get_llm_client("cross_validation_agent")
+            self.logger.info("✅ Cross Validation LLM Agent initialized with backend/llm")
+            return llm_client
+        except Exception as e:
+            self.logger.error(f"❌ Failed to initialize Cross Validation LLM Agent: {e}")
+            return None
+    
+    async def _generate_llm_analysis(self, validation_results: Dict[str, Any], detected_patterns: List[Dict[str, Any]], symbol: str) -> Dict[str, Any]:
+        """Generate LLM analysis for validation results"""
+        try:
+            if not self.llm_client:
+                return {'success': False, 'error': 'LLM client not initialized'}
+            
+            # Create analysis prompt
+            prompt = self._create_validation_analysis_prompt(validation_results, detected_patterns, symbol)
+            
+            self.logger.info(f"[CROSS_VALIDATION_LLM] Sending analysis request for {symbol}")
+            self.logger.info(f"[CROSS_VALIDATION_LLM] Prompt length: {len(prompt)} characters")
+            
+            # Get LLM response with timeout
+            response, token_usage = await asyncio.wait_for(
+                self.llm_client.generate_text(prompt, return_token_usage=True),
+                timeout=90.0  # 90 second timeout
+            )
+            
+            if response and len(response.strip()) > 0:
+                self.logger.info(f"[CROSS_VALIDATION_LLM] Analysis completed for {symbol}")
+                self.logger.info(f"[CROSS_VALIDATION_LLM] Response length: {len(response)} characters")
+                
+                return {
+                    'success': True,
+                    'analysis': response,
+                    'token_usage': token_usage if token_usage else {},
+                    'model_used': 'gemini-2.5-flash',
+                    'response_time': 0  # Will be populated by the LLM client
+                }
+            else:
+                error_msg = 'No response from LLM or empty response'
+                self.logger.error(f"[CROSS_VALIDATION_LLM] Analysis failed for {symbol}: {error_msg}")
+                return {'success': False, 'error': error_msg}
+                
+        except asyncio.TimeoutError:
+            error_msg = "LLM analysis timed out after 90 seconds"
+            self.logger.error(f"[CROSS_VALIDATION_LLM] {error_msg} for {symbol}")
+            return {'success': False, 'error': error_msg}
+        except Exception as e:
+            error_msg = f"LLM analysis failed: {str(e)}"
+            self.logger.error(f"[CROSS_VALIDATION_LLM] {error_msg} for {symbol}")
+            return {'success': False, 'error': error_msg}
+    
+    def _create_validation_analysis_prompt(self, validation_results: Dict[str, Any], detected_patterns: List[Dict[str, Any]], symbol: str) -> str:
+        """Create structured prompt for LLM validation analysis"""
+        
+        validation_summary = validation_results.get('validation_summary', {})
+        market_regime = validation_results.get('market_regime_analysis', {})
+        
+        prompt = f"""Please analyze this comprehensive cross-validation analysis for {symbol} and provide actionable insights.
+
+## VALIDATION SUMMARY
+- Patterns Validated: {validation_summary.get('patterns_validated', 0)}
+- Validation Methods Used: {validation_summary.get('validation_methods_used', 0)}
+- Overall Validation Score: {validation_summary.get('overall_validation_score', 0):.2f}
+- Validation Confidence: {validation_summary.get('validation_confidence', 'unknown')}
+- Market Regime: {market_regime.get('regime', 'unknown')}
+
+## DETECTED PATTERNS"""
+        
+        for i, pattern in enumerate(detected_patterns[:5]):  # Limit to top 5 patterns
+            prompt += f"""
+### Pattern {i+1}: {pattern.get('pattern_name', 'Unknown')}
+- Type: {pattern.get('pattern_type', 'unknown')}
+- Completion: {pattern.get('completion_percentage', 0):.1f}%
+- Reliability: {pattern.get('reliability', 'unknown')}
+- Pattern Quality: {pattern.get('pattern_quality', 'unknown')}"""
+        
+        # Add validation method results
+        statistical_val = validation_results.get('statistical_validation', {})
+        volume_conf = validation_results.get('volume_confirmation', {})
+        historical_val = validation_results.get('historical_validation', {})
+        
+        prompt += f"""
+
+## VALIDATION RESULTS
+### Statistical Validation
+- Overall Score: {statistical_val.get('overall_statistical_score', 0):.2f}
+- Patterns Tested: {statistical_val.get('patterns_tested', 0)}
+
+### Volume Confirmation  
+- Overall Score: {volume_conf.get('overall_volume_score', 0):.2f}
+- Patterns Analyzed: {volume_conf.get('patterns_analyzed', 0)}
+
+### Historical Performance
+- Overall Score: {historical_val.get('overall_historical_score', 0):.2f}
+- Patterns Analyzed: {historical_val.get('patterns_analyzed', 0)}
+
+## ANALYSIS REQUEST
+Provide a comprehensive validation assessment including:
+1. **Validation Confidence**: Overall confidence in the detected patterns based on cross-validation results
+2. **Pattern Reliability**: Which patterns have the strongest validation support
+3. **Risk Assessment**: Potential risks and limitations identified through validation
+4. **Market Context**: How the current market regime affects pattern reliability
+5. **Trading Implications**: Actionable insights for trading decisions
+6. **Recommendations**: Specific recommendations based on validation findings
+
+Format your response as clear, actionable insights for {symbol} pattern validation."""
+        
+        return prompt
     
     def _build_error_result(self, error_message: str, symbol: str = "UNKNOWN", processing_time: float = 0.0) -> Dict[str, Any]:
         """Build standardized error result"""
