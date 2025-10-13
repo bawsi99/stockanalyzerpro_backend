@@ -23,6 +23,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 # Import agent components
 from agents.patterns.cross_validation_agent.processor import CrossValidationProcessor
 from agents.patterns.cross_validation_agent.charts import CrossValidationChartGenerator
+from agents.patterns.cross_validation_agent.pattern_detection import PatternDetector
 from llm import get_llm_client
 
 logger = logging.getLogger(__name__)
@@ -47,11 +48,110 @@ class CrossValidationAgent:
         self.logger = logging.getLogger(__name__)
         
         # Initialize sub-components
+        self.pattern_detector = PatternDetector()
         self.processor = CrossValidationProcessor()
         self.chart_generator = CrossValidationChartGenerator()
         self.llm_client = self._initialize_llm()
         
         self.logger.info(f"{self.name.title().replace('_', ' ')} Agent v{self.version} initialized")
+    
+    async def analyze_and_validate_patterns(
+        self, 
+        stock_data: pd.DataFrame,
+        symbol: str = "STOCK",
+        include_charts: bool = True,
+        include_llm_analysis: bool = True,
+        market_context: Optional[Dict[str, Any]] = None,
+        save_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Complete analysis pipeline: detect patterns and then validate them.
+        
+        This is the primary method for end-to-end pattern analysis including:
+        1. Pattern detection from stock data
+        2. Cross-validation of detected patterns
+        3. Chart generation and LLM analysis (optional)
+        
+        Args:
+            stock_data: DataFrame with OHLCV data
+            symbol: Stock symbol for analysis
+            include_charts: Whether to generate charts
+            include_llm_analysis: Whether to include LLM analysis
+            market_context: Additional market context for analysis
+            save_path: Optional path to save charts and results
+            
+        Returns:
+            Dictionary containing comprehensive pattern analysis and validation results
+        """
+        analysis_start_time = datetime.now()
+        
+        try:
+            logger.info(f"[CROSS_VALIDATION_AGENT] Starting complete pattern analysis for {symbol}")
+            
+            # Validate inputs
+            if stock_data is None or stock_data.empty:
+                return self._build_error_result("No stock data provided for analysis", symbol)
+            
+            if len(stock_data) < 20:
+                return self._build_error_result("Insufficient data for pattern analysis (minimum 20 periods required)", symbol)
+            
+            # Initialize result structure
+            results = {
+                'success': False,
+                'agent_name': self.name,
+                'symbol': symbol,
+                'analysis_timestamp': analysis_start_time.isoformat(),
+                'components_executed': [],
+                'total_processing_time': 0.0
+            }
+            
+            # Step 1: Pattern Detection
+            logger.info(f"[CROSS_VALIDATION_AGENT] Detecting patterns for {symbol}")
+            pattern_detection_results = self.pattern_detector.detect_patterns(stock_data)
+            
+            if not pattern_detection_results.get('success', False):
+                logger.warning(f"[CROSS_VALIDATION_AGENT] Pattern detection failed for {symbol}")
+                # Still continue with validation using empty patterns if detection fails
+                detected_patterns = []
+                pattern_summary = {'total_patterns': 0, 'dominant_pattern': 'none'}
+            else:
+                detected_patterns = pattern_detection_results.get('detected_patterns', [])
+                pattern_summary = pattern_detection_results.get('pattern_summary', {})
+            
+            results['pattern_detection'] = pattern_detection_results
+            results['components_executed'].append('pattern_detection')
+            
+            # Step 2: Cross-Validation (proceed even if no patterns detected)
+            validation_results = await self.validate_patterns(
+                stock_data=stock_data,
+                detected_patterns=detected_patterns,
+                pattern_summary=pattern_summary,
+                symbol=symbol,
+                include_charts=include_charts,
+                include_llm_analysis=include_llm_analysis,
+                market_context=market_context,
+                save_path=save_path
+            )
+            
+            # Merge validation results
+            results.update(validation_results)
+            
+            # Calculate total processing time
+            total_time = (datetime.now() - analysis_start_time).total_seconds()
+            results['total_processing_time'] = total_time
+            
+            # Final validation and summary
+            results['success'] = self._validate_results(results)
+            results['analysis_summary'] = self._generate_analysis_summary(results)
+            
+            logger.info(f"[CROSS_VALIDATION_AGENT] Complete analysis completed for {symbol} in {total_time:.2f}s")
+            
+            return results
+            
+        except Exception as e:
+            total_time = (datetime.now() - analysis_start_time).total_seconds()
+            logger.error(f"[CROSS_VALIDATION_AGENT] Complete analysis failed for {symbol}: {e}")
+            return self._build_error_result(str(e), symbol, total_time)
     
     async def validate_patterns(
         self, 
@@ -92,8 +192,9 @@ class CrossValidationAgent:
             if len(stock_data) < 20:
                 return self._build_error_result("Insufficient data for cross-validation (minimum 20 periods required)", symbol)
             
+            # Allow validation even with empty patterns for baseline analysis
             if not detected_patterns:
-                return self._build_no_patterns_result("No patterns provided for cross-validation", symbol)
+                logger.info(f"[CROSS_VALIDATION_AGENT] No patterns detected for {symbol}, proceeding with baseline validation")
             
             # Initialize result structure
             results = {

@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 """
-Pattern Detection Processor - Technical Analysis Module
+Pattern Detector - Technical Analysis Module
 
-This module handles the detection and analysis of classic chart patterns including:
-- Triangle patterns (ascending, descending, symmetrical)
-- Flag and pennant patterns
-- Channel and rectangle patterns
-- Head and shoulders patterns
-- Double top/bottom patterns
+This module detects classic chart patterns for the cross-validation pipeline.
+It's a streamlined version focused on pattern detection without agent overhead.
 """
 
 import pandas as pd
@@ -18,11 +14,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class PatternDetectionProcessor:
+class PatternDetector:
     """
-    Processor for detecting classic chart patterns in stock data.
+    Detector for classic chart patterns in stock data.
     
-    This processor specializes in:
+    This detector specializes in:
     - Triangle pattern detection (ascending, descending, symmetrical)
     - Flag and pennant identification
     - Channel and rectangle patterns
@@ -31,27 +27,27 @@ class PatternDetectionProcessor:
     """
     
     def __init__(self):
-        self.name = "pattern_detection"
-        self.description = "Detects and analyzes classic chart patterns"
+        self.name = "pattern_detector"
+        self.description = "Detects classic chart patterns for cross-validation"
         self.version = "1.0.0"
     
-    def process_pattern_detection_data(self, stock_data: pd.DataFrame) -> Dict[str, Any]:
+    def detect_patterns(self, stock_data: pd.DataFrame) -> Dict[str, Any]:
         """
-        Process pattern detection analysis from stock data.
+        Detect chart patterns in stock data.
         
         Args:
             stock_data: DataFrame with OHLCV data
             
         Returns:
-            Dictionary containing comprehensive pattern detection analysis
+            Dictionary containing detected patterns and summary
         """
         start_time = datetime.now()
         
         try:
-            logger.info(f"[PATTERN_DETECTION] Starting pattern detection analysis")
+            logger.info(f"[PATTERN_DETECTOR] Starting pattern detection")
             
             if stock_data is None or stock_data.empty or len(stock_data) < 20:
-                return self._build_error_result("Insufficient data for pattern detection analysis")
+                return self._build_error_result("Insufficient data for pattern detection")
             
             # Ensure required columns exist
             required_columns = ['open', 'high', 'low', 'close', 'volume']
@@ -74,16 +70,22 @@ class PatternDetectionProcessor:
             # 5. Double Top/Bottom Detection
             double_patterns = self._detect_double_patterns(stock_data)
             
-            # 6. Pattern Summary and Analysis
+            # 6. Compile and analyze all patterns
+            all_patterns = self._compile_all_patterns(
+                triangle_patterns, flag_pennant_patterns, channel_patterns,
+                head_shoulders_patterns, double_patterns
+            )
+            
+            # 7. Generate pattern summary
             pattern_summary = self._analyze_pattern_summary(
                 triangle_patterns, flag_pennant_patterns, channel_patterns, 
                 head_shoulders_patterns, double_patterns
             )
             
-            # 7. Formation Stage Analysis
+            # 8. Formation stage analysis
             formation_stage = self._analyze_formation_stage(stock_data, pattern_summary)
             
-            # 8. Key Levels from Patterns
+            # 9. Key levels identification
             key_levels = self._identify_pattern_levels(
                 stock_data, triangle_patterns, flag_pennant_patterns, 
                 channel_patterns, head_shoulders_patterns, double_patterns
@@ -91,37 +93,34 @@ class PatternDetectionProcessor:
             
             processing_time = (datetime.now() - start_time).total_seconds()
             
-            # Build comprehensive result
+            # Build result
             result = {
                 'success': True,
-                'agent_name': self.name,
+                'detector_name': self.name,
                 'processing_time': processing_time,
                 'timestamp': datetime.now().isoformat(),
                 
                 # Core Pattern Detection
-                'detected_patterns': self._compile_all_patterns(
-                    triangle_patterns, flag_pennant_patterns, channel_patterns,
-                    head_shoulders_patterns, double_patterns
-                ),
+                'detected_patterns': all_patterns,
                 'pattern_summary': pattern_summary,
                 'formation_stage': formation_stage,
                 'key_levels': key_levels,
                 
                 # Statistics
                 'analysis_period_days': len(stock_data),
-                'total_patterns_detected': pattern_summary.get('total_patterns', 0),
+                'total_patterns_detected': len(all_patterns),
                 
-                # Confidence Metrics
+                # Confidence and quality metrics
                 'confidence_score': self._calculate_confidence_score(pattern_summary, formation_stage),
                 'data_quality': self._assess_data_quality(stock_data)
             }
             
-            logger.info(f"[PATTERN_DETECTION] Analysis completed in {processing_time:.2f}s")
+            logger.info(f"[PATTERN_DETECTOR] Detection completed in {processing_time:.2f}s - {len(all_patterns)} patterns found")
             return result
             
         except Exception as e:
             processing_time = (datetime.now() - start_time).total_seconds()
-            logger.error(f"[PATTERN_DETECTION] Analysis failed: {str(e)}")
+            logger.error(f"[PATTERN_DETECTOR] Detection failed: {str(e)}")
             return self._build_error_result(str(e), processing_time)
     
     def _detect_triangle_patterns(self, stock_data: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -181,7 +180,7 @@ class PatternDetectionProcessor:
             return patterns
             
         except Exception as e:
-            logger.error(f"[PATTERN_DETECTION] Triangle detection failed: {e}")
+            logger.error(f"[PATTERN_DETECTOR] Triangle detection failed: {e}")
             return []
     
     def _detect_flag_pennant_patterns(self, stock_data: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -252,7 +251,7 @@ class PatternDetectionProcessor:
             return patterns
             
         except Exception as e:
-            logger.error(f"[PATTERN_DETECTION] Flag/pennant detection failed: {e}")
+            logger.error(f"[PATTERN_DETECTOR] Flag/pennant detection failed: {e}")
             return []
     
     def _detect_channel_patterns(self, stock_data: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -331,7 +330,7 @@ class PatternDetectionProcessor:
             return patterns
             
         except Exception as e:
-            logger.error(f"[PATTERN_DETECTION] Channel detection failed: {e}")
+            logger.error(f"[PATTERN_DETECTOR] Channel detection failed: {e}")
             return []
     
     def _detect_head_shoulders_patterns(self, stock_data: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -427,7 +426,7 @@ class PatternDetectionProcessor:
             return patterns
             
         except Exception as e:
-            logger.error(f"[PATTERN_DETECTION] Head and shoulders detection failed: {e}")
+            logger.error(f"[PATTERN_DETECTOR] Head and shoulders detection failed: {e}")
             return []
     
     def _detect_double_patterns(self, stock_data: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -512,7 +511,7 @@ class PatternDetectionProcessor:
             return patterns
             
         except Exception as e:
-            logger.error(f"[PATTERN_DETECTION] Double pattern detection failed: {e}")
+            logger.error(f"[PATTERN_DETECTOR] Double pattern detection failed: {e}")
             return []
     
     def _calculate_trend_line(self, values: np.ndarray) -> Optional[List[float]]:
@@ -672,7 +671,7 @@ class PatternDetectionProcessor:
             }
             
         except Exception as e:
-            logger.error(f"[PATTERN_DETECTION] Pattern summary analysis failed: {e}")
+            logger.error(f"[PATTERN_DETECTOR] Pattern summary analysis failed: {e}")
             return {'error': str(e)}
     
     def _analyze_formation_stage(self, stock_data: pd.DataFrame, pattern_summary: Dict[str, Any]) -> Dict[str, Any]:
@@ -700,7 +699,7 @@ class PatternDetectionProcessor:
                 }
                 
         except Exception as e:
-            logger.error(f"[PATTERN_DETECTION] Formation stage analysis failed: {e}")
+            logger.error(f"[PATTERN_DETECTOR] Formation stage analysis failed: {e}")
             return {'error': str(e)}
     
     def _identify_pattern_levels(self, stock_data: pd.DataFrame, *pattern_lists) -> Dict[str, Any]:
@@ -752,7 +751,7 @@ class PatternDetectionProcessor:
             }
             
         except Exception as e:
-            logger.error(f"[PATTERN_DETECTION] Level identification failed: {e}")
+            logger.error(f"[PATTERN_DETECTOR] Level identification failed: {e}")
             return {'error': str(e)}
     
     def _calculate_confidence_score(self, pattern_summary: Dict[str, Any], formation_stage: Dict[str, Any]) -> float:
@@ -834,9 +833,11 @@ class PatternDetectionProcessor:
         """Build error result dictionary"""
         return {
             'success': False,
-            'agent_name': self.name,
+            'detector_name': self.name,
             'error': error_message,
             'processing_time': processing_time,
             'timestamp': datetime.now().isoformat(),
-            'confidence_score': 0.0
+            'confidence_score': 0.0,
+            'detected_patterns': [],
+            'total_patterns_detected': 0
         }

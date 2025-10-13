@@ -3,10 +3,11 @@
 Cross-Validation Agent - Multi-Stock Testing Framework
 
 This module provides comprehensive testing capabilities for the cross-validation agent including:
-- Multi-stock validation testing with synthetic patterns
-- Validation method performance analysis
-- Cross-validation accuracy assessment
+- Multi-stock validation testing with REAL MARKET DATA
+- Validation method performance analysis on real patterns
+- Cross-validation accuracy assessment using real market conditions
 - Comprehensive result analysis and reporting
+- Fallback to synthetic data if real data sources are unavailable
 """
 
 import asyncio
@@ -39,6 +40,22 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 from agents.patterns.cross_validation_agent.agent import CrossValidationAgent
 from agents.patterns.cross_validation_agent.llm_agent import CrossValidationLLMAgent
 
+# Import data clients for real data
+try:
+    # Add the backend directory to sys.path for proper imports
+    backend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..')
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+    
+    from core.orchestrator import StockAnalysisOrchestrator
+    from zerodha.client import ZerodhaDataClient
+    print("✅ Real data client imports successful")
+except ImportError as e:
+    print(f"⚠️ Real data client import failed: {e}")
+    print("Will fall back to synthetic data if real data is not available")
+    StockAnalysisOrchestrator = None
+    ZerodhaDataClient = None
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -60,6 +77,24 @@ class CrossValidationMultiStockTester:
         
         # Initialize agent for testing
         self.agent = CrossValidationAgent()
+        
+        # Initialize real data clients
+        self.orchestrator = None
+        self.zerodha_client = None
+        self.use_real_data = False
+        
+        # Try to initialize real data clients
+        if StockAnalysisOrchestrator and ZerodhaDataClient:
+            try:
+                self.orchestrator = StockAnalysisOrchestrator()
+                self.zerodha_client = ZerodhaDataClient()
+                self.use_real_data = True
+                print("✅ Real data clients initialized successfully")
+            except Exception as e:
+                print(f"⚠️ Could not initialize real data clients: {e}")
+                print("Will use synthetic data for testing")
+        else:
+            print("⚠️ Real data client classes not available - using synthetic data")
         
         # Setup output directory - make it relative to the script location if it's a relative path
         if not os.path.isabs(output_dir):
@@ -188,34 +223,45 @@ class CrossValidationMultiStockTester:
             
             logger.info(f"[CROSS_VALIDATION_TESTER] Testing {test_id}")
             
-            # Generate synthetic stock data and patterns
-            stock_data = self._generate_synthetic_stock_data(symbol, period_days)
-            detected_patterns = self._generate_synthetic_patterns(symbol, period_days)
-            pattern_summary = self._generate_synthetic_pattern_summary(detected_patterns)
+            # Get real stock data or fall back to synthetic
+            data_source = "unknown"
+            if self.use_real_data:
+                stock_data = await self._get_real_stock_data(symbol, period_days)
+                if stock_data is not None and len(stock_data) >= 20:
+                    data_source = "real_market_data"
+                    logger.info(f"[CROSS_VALIDATION_TESTER] Using REAL market data for {symbol} ({len(stock_data)} days)")
+                else:
+                    logger.warning(f"[CROSS_VALIDATION_TESTER] Real data unavailable/insufficient for {symbol}, falling back to synthetic")
+                    stock_data = self._generate_synthetic_stock_data(symbol, period_days)
+                    data_source = "synthetic_fallback"
+            else:
+                stock_data = self._generate_synthetic_stock_data(symbol, period_days)
+                data_source = "synthetic_only"
+                logger.info(f"[CROSS_VALIDATION_TESTER] Using synthetic data for {symbol}")
             
             if stock_data is None or len(stock_data) < 20:
                 return self._build_failed_test_result(test_case, "Insufficient stock data")
-            
-            if not detected_patterns:
-                return self._build_failed_test_result(test_case, "No synthetic patterns generated")
             
             # Prepare save path for this test
             test_output_dir = self.output_dir / test_id
             test_output_dir.mkdir(exist_ok=True)
             save_path = str(test_output_dir / f"{test_id}_charts.html")
             
-            # Run cross-validation analysis
-            validation_start = time.time()
-            validation_results = await self.agent.validate_patterns(
+            # Run complete analysis (pattern detection + validation)
+            analysis_start = time.time()
+            analysis_results = await self.agent.analyze_and_validate_patterns(
                 stock_data=stock_data,
-                detected_patterns=detected_patterns,
-                pattern_summary=pattern_summary,
                 symbol=symbol,
                 include_charts=self.test_config['include_charts'],
                 include_llm_analysis=self.test_config['include_llm_analysis'],
                 save_path=save_path if self.test_config['save_charts'] else None
             )
-            validation_time = time.time() - validation_start
+            analysis_time = time.time() - analysis_start
+            
+            # Extract validation results from the complete analysis
+            validation_results = analysis_results.get('cross_validation', {})
+            pattern_detection_results = analysis_results.get('pattern_detection', {})
+            detected_patterns = pattern_detection_results.get('detected_patterns', [])
             
             # Build test result
             test_result = {
@@ -224,9 +270,10 @@ class CrossValidationMultiStockTester:
                 'period_days': period_days,
                 'test_timestamp': datetime.now().isoformat(),
                 'test_duration': time.time() - test_start,
-                'validation_duration': validation_time,
+                'analysis_duration': analysis_time,
                 'data_points': len(stock_data),
-                'synthetic_patterns_count': len(detected_patterns),
+                'patterns_detected_count': len(detected_patterns),
+                'data_source': data_source,  # Track whether real or synthetic data was used
                 
                 # Validation results
                 'validation_success': validation_results.get('success', False),
@@ -261,7 +308,7 @@ class CrossValidationMultiStockTester:
                 'validation_recommendations': validation_results.get('validation_recommendations', []),
                 
                 # Full results for detailed analysis
-                'full_validation_results': validation_results
+                'full_analysis_results': analysis_results
             }
             
             # Save individual test result if configured
@@ -269,13 +316,14 @@ class CrossValidationMultiStockTester:
                 await self._save_individual_validation_result(test_result, test_output_dir)
             
             # Save prompt and response if LLM analysis was performed
-            if test_result.get('llm_analysis_success') and test_result.get('full_validation_results'):
+            if test_result.get('llm_analysis_success') and test_result.get('full_analysis_results'):
                 await self._save_prompt_response(test_result, test_output_dir)
             
             logger.info(f"[CROSS_VALIDATION_TESTER] Completed {test_id} - "
                        f"Success: {test_result['validation_success']}, "
                        f"Patterns Validated: {test_result['patterns_validated']}, "
                        f"Methods: {test_result['validation_methods_used']}, "
+                       f"Data Source: {test_result['data_source']}, "
                        f"Time: {test_result['test_duration']:.2f}s")
             
             return test_result
@@ -283,6 +331,104 @@ class CrossValidationMultiStockTester:
         except Exception as e:
             logger.error(f"[CROSS_VALIDATION_TESTER] Single validation test failed for {test_case.get('test_id', 'unknown')}: {e}")
             return self._build_failed_test_result(test_case, str(e))
+    
+    async def _get_real_stock_data(self, symbol: str, period_days: int) -> pd.DataFrame:
+        """
+        Get real stock data using the orchestrator or Zerodha client.
+        Falls back to synthetic data if real data fetch fails.
+        """
+        try:
+            logger.info(f"[CROSS_VALIDATION_TESTER] Fetching real data for {symbol} ({period_days} days)")
+            
+            # Try using orchestrator first (preferred method)
+            if self.orchestrator:
+                try:
+                    stock_data = await self.orchestrator.retrieve_stock_data(
+                        symbol=symbol,
+                        exchange="NSE",
+                        interval="day",
+                        period=period_days
+                    )
+                    
+                    if stock_data is not None and len(stock_data) > 0:
+                        logger.info(f"[CROSS_VALIDATION_TESTER] Retrieved {len(stock_data)} days of real data via orchestrator for {symbol}")
+                        return stock_data
+                    else:
+                        logger.warning(f"[CROSS_VALIDATION_TESTER] Orchestrator returned empty data for {symbol}")
+                        
+                except Exception as e:
+                    logger.warning(f"[CROSS_VALIDATION_TESTER] Orchestrator failed for {symbol}: {e}")
+            
+            # Fallback to direct Zerodha client
+            if self.zerodha_client:
+                try:
+                    # Skip explicit authentication - trust that environment variables are set correctly
+                    # The client will use ZERODHA_ACCESS_TOKEN from .env if available
+                    logger.info(f"[CROSS_VALIDATION_TESTER] Using Zerodha client with environment credentials for {symbol}")
+                    
+                    # Check if async method exists
+                    if hasattr(self.zerodha_client, 'get_historical_data_async'):
+                        stock_data = await self.zerodha_client.get_historical_data_async(
+                            symbol=symbol,
+                            exchange="NSE",
+                            interval="day",
+                            period=period_days
+                        )
+                    else:
+                        # Use sync method in executor
+                        import asyncio
+                        loop = asyncio.get_event_loop()
+                        stock_data = await loop.run_in_executor(
+                            None,
+                            self.zerodha_client.get_historical_data,
+                            symbol,
+                            "NSE",
+                            "day",
+                            None,
+                            None,
+                            period_days
+                        )
+                    
+                    if stock_data is not None and len(stock_data) > 0:
+                        # Ensure proper data structure
+                        required_columns = ['open', 'high', 'low', 'close', 'volume']
+                        
+                        # Handle date column properly
+                        if 'date' not in stock_data.columns:
+                            if stock_data.index.name == 'date' or hasattr(stock_data.index, 'date'):
+                                stock_data = stock_data.reset_index()
+                            else:
+                                stock_data['date'] = stock_data.index
+                                stock_data = stock_data.reset_index(drop=True)
+                        
+                        # Check for missing columns
+                        missing_columns = [col for col in required_columns if col not in stock_data.columns]
+                        if missing_columns:
+                            logger.error(f"[CROSS_VALIDATION_TESTER] Missing required columns for {symbol}: {missing_columns}")
+                            return None
+                        
+                        # Sort by date and set as index for pattern analysis
+                        stock_data = stock_data.sort_values('date').reset_index(drop=True)
+                        stock_data = stock_data.set_index('date')
+                        
+                        logger.info(f"[CROSS_VALIDATION_TESTER] Retrieved {len(stock_data)} days of real data via Zerodha for {symbol}")
+                        logger.info(f"[CROSS_VALIDATION_TESTER] Date range: {stock_data.index.min()} to {stock_data.index.max()}")
+                        logger.info(f"[CROSS_VALIDATION_TESTER] Volume range: {stock_data['volume'].min():,} to {stock_data['volume'].max():,}")
+                        
+                        return stock_data
+                    else:
+                        logger.warning(f"[CROSS_VALIDATION_TESTER] Zerodha returned empty data for {symbol}")
+                        
+                except Exception as e:
+                    logger.warning(f"[CROSS_VALIDATION_TESTER] Zerodha client failed for {symbol}: {e}")
+            
+            # If all real data methods failed, return None (will trigger fallback to synthetic)
+            logger.warning(f"[CROSS_VALIDATION_TESTER] All real data sources failed for {symbol}, falling back to synthetic data")
+            return None
+            
+        except Exception as e:
+            logger.error(f"[CROSS_VALIDATION_TESTER] Real data fetch failed for {symbol}: {e}")
+            return None
     
     def _generate_synthetic_stock_data(self, symbol: str, period_days: int) -> pd.DataFrame:
         """Generate realistic synthetic stock data for testing"""
@@ -495,16 +641,16 @@ class CrossValidationMultiStockTester:
         try:
             result_file = output_dir / "validation_test_result.json"
             
-            # Create a clean version without the full validation results for JSON serialization
-            clean_result = {k: v for k, v in test_result.items() if k != 'full_validation_results'}
+            # Create a clean version without the full analysis results for JSON serialization
+            clean_result = {k: v for k, v in test_result.items() if k != 'full_analysis_results'}
             
             with open(result_file, 'w') as f:
                 json.dump(clean_result, f, indent=2, default=str)
             
-            # Save detailed validation separately
+            # Save detailed analysis separately
             detailed_file = output_dir / "detailed_validation.json"
             with open(detailed_file, 'w') as f:
-                json.dump(test_result['full_validation_results'], f, indent=2, default=str)
+                json.dump(test_result['full_analysis_results'], f, indent=2, default=str)
             
             logger.debug(f"[CROSS_VALIDATION_TESTER] Saved individual validation result to {output_dir}")
             
@@ -521,19 +667,21 @@ class CrossValidationMultiStockTester:
             symbol = test_result['symbol']
             test_id = test_result['test_id']
             
-            # Extract validation results for prompt building
-            full_validation_results = test_result.get('full_validation_results', {})
+            # Extract analysis results for prompt building
+            full_analysis_results = test_result.get('full_analysis_results', {})
             
-            if full_validation_results:
+            if full_analysis_results:
                 # Build the prompt using the LLM agent
                 llm_agent = CrossValidationLLMAgent()
                 
-                # Get the data needed for prompt generation
-                detected_patterns = full_validation_results.get('detected_patterns', [])
+                # Get the cross-validation results and detected patterns
+                cross_validation_results = full_analysis_results.get('cross_validation', {})
+                pattern_detection_results = full_analysis_results.get('pattern_detection', {})
+                detected_patterns = pattern_detection_results.get('detected_patterns', [])
                 
                 # Build prompt
                 prompt = llm_agent._build_validation_analysis_prompt(
-                    full_validation_results, detected_patterns, symbol
+                    cross_validation_results, detected_patterns, symbol
                 )
                 
                 # Save prompt
@@ -542,7 +690,7 @@ class CrossValidationMultiStockTester:
                     f.write(prompt)
                 
                 # Save response if available
-                llm_response = full_validation_results.get('llm_analysis')
+                llm_response = cross_validation_results.get('llm_analysis')
                 if llm_response:
                     response_file = prompts_dir / f"{test_id}_response.txt"
                     with open(response_file, 'w', encoding='utf-8') as f:
@@ -553,7 +701,7 @@ class CrossValidationMultiStockTester:
                             f.write(str(llm_response))
                 
                 # Save validation insights if available
-                validation_insights = full_validation_results.get('validation_insights')
+                validation_insights = cross_validation_results.get('validation_insights')
                 if validation_insights:
                     insights_file = prompts_dir / f"{test_id}_insights.txt"
                     with open(insights_file, 'w', encoding='utf-8') as f:
@@ -595,6 +743,11 @@ class CrossValidationMultiStockTester:
             # Component success rates
             llm_success_count = len([r for r in self.test_results if r.get('llm_analysis_success', False)])
             charts_generated_count = len([r for r in self.test_results if r.get('charts_generated', 0) > 0])
+            
+            # Data source statistics
+            real_data_count = len([r for r in self.test_results if r.get('data_source') == 'real_market_data'])
+            synthetic_fallback_count = len([r for r in self.test_results if r.get('data_source') == 'synthetic_fallback'])
+            synthetic_only_count = len([r for r in self.test_results if r.get('data_source') == 'synthetic_only'])
             
             # Validation method performance
             method_performance = {}
@@ -639,6 +792,12 @@ class CrossValidationMultiStockTester:
                 'component_success_rates': {
                     'llm_analysis_success_rate': (llm_success_count / total_tests * 100) if total_tests > 0 else 0,
                     'charts_generation_rate': (charts_generated_count / total_tests * 100) if total_tests > 0 else 0
+                },
+                'data_source_statistics': {
+                    'real_market_data': real_data_count,
+                    'synthetic_fallback': synthetic_fallback_count,
+                    'synthetic_only': synthetic_only_count,
+                    'real_data_success_rate': (real_data_count / total_tests * 100) if total_tests > 0 else 0
                 },
                 'validation_method_performance': avg_method_performance,
                 'best_performing_methods': sorted(avg_method_performance.items(), key=lambda x: x[1], reverse=True)[:5]
@@ -802,13 +961,27 @@ Cross-Validation Agent Test Summary:
 async def main():
     """Main function for running cross-validation tests"""
     
-    # Test configuration
-    test_stocks = ["RELIANCE"]
-    test_periods = [30, 60, 90]
-    max_concurrent = 2
+    # Test configuration - using real market stocks for comprehensive testing
+    test_stocks = [
+        "RELIANCE",    # Large cap - energy/petrochemicals
+        "TCS",         # Large cap - IT services
+        "HDFCBANK",    # Large cap - banking
+        "ICICIBANK",   # Large cap - banking  
+        "INFY",        # Large cap - IT services
+        "ITC"          # Large cap - FMCG
+    ]
+    test_periods = [30, 60, 90]  # Different timeframes for pattern analysis
+    max_concurrent = 3           # Increase concurrency for faster testing
     
     # Initialize tester
     tester = CrossValidationMultiStockTester("test_results")
+    
+    # Show data source configuration
+    print(f"Data Source Configuration:")
+    print(f"  Real Data Available: {tester.use_real_data}")
+    print(f"  Orchestrator: {'Available' if tester.orchestrator else 'Not Available'}")
+    print(f"  Zerodha Client: {'Available' if tester.zerodha_client else 'Not Available'}")
+    print(f"  Will use: {'Real market data (with synthetic fallback)' if tester.use_real_data else 'Synthetic data only'}")
     
     # Run tests
     print("Starting Cross-Validation Agent Multi-Stock Test...")
