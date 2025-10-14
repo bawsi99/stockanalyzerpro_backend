@@ -38,6 +38,10 @@ logger = logging.getLogger('ZerodhaClient')
 ENV_PATH = get_config_path()
 dotenv.load_dotenv(dotenv_path=ENV_PATH)
 
+# Read-only mode for production environments (e.g., Render)
+# When enabled, never writes to CSV or .env files - only reads committed files
+READ_ONLY_INSTRUMENTS = os.getenv("RUNTIME_READ_ONLY_INSTRUMENTS", "0") == "1"
+
 # Utility function to always read the latest value from .env
 def get_env_value(key: str, env_path: str = ENV_PATH) -> str:
     """Read a value from the .env file directly, with fallback to system environment."""
@@ -175,7 +179,22 @@ class ZerodhaDataClient:
         
         # Mark as initialized
         self._initialized = True
-        logger.info("ZerodhaDataClient initialized with new session")
+        
+        # Log read-only status for debugging
+        if READ_ONLY_INSTRUMENTS:
+            logger.info("ZerodhaDataClient initialized in READ-ONLY mode (no CSV/env writes)")
+            csv_path = get_zerodha_instruments_csv_path()
+            if os.path.exists(csv_path):
+                try:
+                    import pandas as pd
+                    df = pd.read_csv(csv_path)
+                    logger.info(f"READ-ONLY: Found instruments CSV with {len(df)} rows at {csv_path}")
+                except Exception as e:
+                    logger.warning(f"READ-ONLY: Issue reading instruments CSV: {e}")
+            else:
+                logger.warning(f"READ-ONLY: No instruments CSV found at {csv_path}")
+        else:
+            logger.info("ZerodhaDataClient initialized with new session (normal mode)")
 
         # Initialize KiteConnect client
         self.kite = KiteConnect(api_key=self.api_key)
@@ -235,6 +254,10 @@ class ZerodhaDataClient:
         
     def _save_access_token(self, access_token: str):
         """Save the access token to the .env file, replacing the old value if present."""
+        if READ_ONLY_INSTRUMENTS:
+            logger.info("READ-ONLY mode: Skipping write of ZERODHA_ACCESS_TOKEN to .env")
+            return
+            
         env_path = ENV_PATH
         lines = []
         found = False
@@ -259,6 +282,10 @@ class ZerodhaDataClient:
         Args:
             request_token: The request token obtained from the user
         """
+        if READ_ONLY_INSTRUMENTS:
+            logger.info("READ-ONLY mode: Skipping write of ZERODHA_REQUEST_TOKEN to .env")
+            return
+            
         env_path = ENV_PATH
         try:
             # Create .env file if it doesn't exist
@@ -432,6 +459,24 @@ class ZerodhaDataClient:
         env_path = get_config_path()
         csv_path = get_zerodha_instruments_csv_path()
         
+        # READ-ONLY MODE: Just read the CSV without any refresh logic
+        if READ_ONLY_INSTRUMENTS:
+            try:
+                if os.path.exists(csv_path):
+                    df = pd.read_csv(csv_path)
+                    logger.info(f"READ-ONLY mode: Loaded instruments from {csv_path} ({len(df)} instruments)")
+                    if exchange:
+                        filtered_df = df[df['exchange'] == exchange]
+                        logger.info(f"READ-ONLY mode: Filtered to {len(filtered_df)} instruments for exchange {exchange}")
+                        return filtered_df
+                    return df
+                else:
+                    logger.error(f"READ-ONLY mode: Instruments CSV not found at {csv_path}. Please redeploy with a fresh CSV.")
+                    return None
+            except Exception as e:
+                logger.error(f"READ-ONLY mode: Failed to load instruments CSV: {e}. Please redeploy with a valid CSV.")
+                return None
+        
         # Load environment variables
         if os.path.exists(env_path):
             load_dotenv(dotenv_path=env_path)
@@ -571,7 +616,11 @@ class ZerodhaDataClient:
             instruments = self._load_all_instruments(exchange)
 
             if instruments is None:
-                logger.error("Failed to get instruments")
+                if READ_ONLY_INSTRUMENTS:
+                    logger.error(f"READ-ONLY: Failed to load instruments from CSV for symbol lookup: {exchange}:{symbol}")
+                    logger.error("READ-ONLY: Please redeploy with a fresh zerodha_instruments.csv file")
+                else:
+                    logger.error("Failed to get instruments")
                 return None
             
             # Find the instrument with matching symbol and exchange
