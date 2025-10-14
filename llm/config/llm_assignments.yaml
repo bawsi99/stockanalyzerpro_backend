@@ -115,6 +115,14 @@ agents:
     enable_code_execution: false  # Market structure analysis doesn't need code execution
     max_retries: 3
     timeout: 90  # Market structure analysis with chart images requires more time
+    
+  # Cross-Validation Agent (Pattern Validation)
+  cross_validation_agent:
+    provider: "gemini"
+    model: "gemini-2.5-flash"  # Fast for comprehensive pattern validation analysis
+    enable_code_execution: false  # Cross-validation analysis doesn't need code execution
+    max_retries: 3
+    timeout: 90  # Cross-validation analysis with temporal context requires more time
 
 # Future provider configurations (will be activated in Phase 7)
 future_configs:
@@ -153,6 +161,8 @@ environments:
         timeout: 90  # Respect agent-specific timeout
       market_structure_agent:
         timeout: 90  # Respect agent-specific timeout for chart analysis
+      cross_validation_agent:
+        timeout: 90  # Respect agent-specific timeout for pattern validation
       
   staging:
     # Same as production but with shorter timeouts for non-critical agents
@@ -166,6 +176,8 @@ environments:
         timeout: 90  # Respect agent-specific timeout
       market_structure_agent:
         timeout: 90  # Respect agent-specific timeout for chart analysis
+      cross_validation_agent:
+        timeout: 90  # Respect agent-specific timeout for pattern validation
       
   production:
     # Production-optimized settings

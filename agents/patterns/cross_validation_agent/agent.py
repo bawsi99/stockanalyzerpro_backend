@@ -16,6 +16,8 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import sys
 import os
+import json
+from copy import deepcopy
 
 # Add the backend directory to sys.path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
@@ -24,6 +26,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 from agents.patterns.cross_validation_agent.processor import CrossValidationProcessor
 from agents.patterns.cross_validation_agent.charts import CrossValidationChartGenerator
 from agents.patterns.cross_validation_agent.pattern_detection import PatternDetector
+from agents.patterns.cross_validation_agent.llm_agent import CrossValidationLLMAgent
+from agents.patterns.market_structure_agent.processor import MarketStructureProcessor
 from llm import get_llm_client
 
 logger = logging.getLogger(__name__)
@@ -52,6 +56,12 @@ class CrossValidationAgent:
         self.processor = CrossValidationProcessor()
         self.chart_generator = CrossValidationChartGenerator()
         self.llm_client = self._initialize_llm()
+        
+        # Initialize enhanced LLM agent with temporal analysis capabilities
+        self.llm_agent = CrossValidationLLMAgent()
+        
+        # Initialize Market Structure processor for regime/context summary
+        self.ms_processor = MarketStructureProcessor()
         
         self.logger.info(f"{self.name.title().replace('_', ' ')} Agent v{self.version} initialized")
     
@@ -261,6 +271,15 @@ class CrossValidationAgent:
                 logger.warning(f"[CROSS_VALIDATION_AGENT] Cross-validation processing failed for {symbol}")
                 return results
             
+            # Early exit efficiency: if no patterns validated, skip charts and LLM
+            try:
+                patterns_validated = validation_results.get('validation_summary', {}).get('patterns_validated', 0)
+            except Exception:
+                patterns_validated = 0
+            if patterns_validated == 0:
+                logger.info(f"[CROSS_VALIDATION_AGENT] No patterns to analyze for {symbol} — skipping charts and LLM")
+                return results
+            
             # Step 2: Chart Generation (if requested)
             charts_results = None
             if include_charts:
@@ -277,14 +296,67 @@ class CrossValidationAgent:
                     logger.error(f"[CROSS_VALIDATION_AGENT] Chart generation failed for {symbol}: {e}")
                     results['charts'] = {'success': False, 'error': str(e)}
             
+            # Step 2.5: Build Market Structure context (lightweight)
+            market_context = None
+            try:
+                logger.info(f"[CROSS_VALIDATION_AGENT] Building market structure context for {symbol}")
+                ms_result = self.ms_processor.process_market_structure_data(stock_data)
+                if ms_result and ms_result.get('success'):
+                    market_context = self._build_market_context_from_structure(ms_result)
+                else:
+                    logger.warning(f"[CROSS_VALIDATION_AGENT] Market structure analysis unavailable for {symbol}")
+            except Exception as e:
+                logger.warning(f"[CROSS_VALIDATION_AGENT] Market structure context failed for {symbol}: {e}")
+                market_context = None
+            results['market_context'] = market_context
+            # Persist into cross_validation block as well for any downstream consumers/savers
+            try:
+                if 'cross_validation' in results and isinstance(results['cross_validation'], dict):
+                    results['cross_validation']['market_context'] = market_context
+            except Exception:
+                pass
+
+            # Step 2.6: Score, filter, rank detected patterns for LLM focus
+            try:
+                filtering_output = self._score_filter_rank_patterns(
+                    detected_patterns=detected_patterns,
+                    validation_results=validation_results,
+                    top_k=5,
+                    recency_days=60
+                )
+                filtered_patterns = filtering_output['filtered_patterns']
+                filtered_validation_data = filtering_output['filtered_validation_data']
+                discarded_patterns = filtering_output['discarded_patterns']
+                # Attach market context into filtered_validation_data for prompt fallback
+                try:
+                    if market_context:
+                        filtered_validation_data['market_context'] = market_context
+                except Exception:
+                    pass
+                results['filtered_patterns'] = filtered_patterns
+                results['discarded_patterns'] = discarded_patterns
+            except Exception as e:
+                logger.warning(f"[CROSS_VALIDATION_AGENT] Pattern filtering/ranking failed for {symbol}: {e}")
+                filtered_patterns = detected_patterns
+                filtered_validation_data = validation_results
+                results['filtering_error'] = str(e)
+            
             # Step 3: LLM Analysis (if requested)
             llm_results = None
             if include_llm_analysis:
                 try:
                     logger.info(f"[CROSS_VALIDATION_AGENT] Executing LLM validation analysis for {symbol}")
-                    
+                    # Debug: confirm market_context presence and source
+                    try:
+                        mc_source = market_context.get('source') if isinstance(market_context, dict) else None
+                        logger.info(f"[CROSS_VALIDATION_AGENT] Market context present: {bool(market_context)}; source={mc_source}")
+                        if isinstance(market_context, dict):
+                            logger.info("[CROSS_VALIDATION_AGENT] Market structure context payload:\n%s", json.dumps(market_context, indent=2, default=str))
+                    except Exception:
+                        logger.info(f"[CROSS_VALIDATION_AGENT] Market context present: False; source=None")
+
                     llm_results = await self._generate_llm_analysis(
-                        validation_results, detected_patterns, symbol
+                        filtered_validation_data, filtered_patterns, symbol, market_context
                     )
                     
                     results['llm_analysis'] = llm_results
@@ -658,106 +730,24 @@ class CrossValidationAgent:
             self.logger.error(f"❌ Failed to initialize Cross Validation LLM Agent: {e}")
             return None
     
-    async def _generate_llm_analysis(self, validation_results: Dict[str, Any], detected_patterns: List[Dict[str, Any]], symbol: str) -> Dict[str, Any]:
-        """Generate LLM analysis for validation results"""
+    async def _generate_llm_analysis(self, validation_results: Dict[str, Any], detected_patterns: List[Dict[str, Any]], symbol: str, market_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Generate LLM analysis for validation results using enhanced LLM agent"""
         try:
-            if not self.llm_client:
-                return {'success': False, 'error': 'LLM client not initialized'}
-            
-            # Create analysis prompt
-            prompt = self._create_validation_analysis_prompt(validation_results, detected_patterns, symbol)
-            
-            self.logger.info(f"[CROSS_VALIDATION_LLM] Sending analysis request for {symbol}")
-            self.logger.info(f"[CROSS_VALIDATION_LLM] Prompt length: {len(prompt)} characters")
-            
-            # Get LLM response with timeout
-            response, token_usage = await asyncio.wait_for(
-                self.llm_client.generate_text(prompt, return_token_usage=True),
-                timeout=90.0  # 90 second timeout
+            # Use the enhanced LLM agent with temporal analysis capabilities
+            return await self.llm_agent.generate_validation_analysis(
+                validation_data=validation_results,
+                detected_patterns=detected_patterns,
+                symbol=symbol,
+                market_context=market_context  # pass market structure context when available
             )
-            
-            if response and len(response.strip()) > 0:
-                self.logger.info(f"[CROSS_VALIDATION_LLM] Analysis completed for {symbol}")
-                self.logger.info(f"[CROSS_VALIDATION_LLM] Response length: {len(response)} characters")
                 
-                return {
-                    'success': True,
-                    'analysis': response,
-                    'token_usage': token_usage if token_usage else {},
-                    'model_used': 'gemini-2.5-flash',
-                    'response_time': 0  # Will be populated by the LLM client
-                }
-            else:
-                error_msg = 'No response from LLM or empty response'
-                self.logger.error(f"[CROSS_VALIDATION_LLM] Analysis failed for {symbol}: {error_msg}")
-                return {'success': False, 'error': error_msg}
-                
-        except asyncio.TimeoutError:
-            error_msg = "LLM analysis timed out after 90 seconds"
-            self.logger.error(f"[CROSS_VALIDATION_LLM] {error_msg} for {symbol}")
-            return {'success': False, 'error': error_msg}
         except Exception as e:
-            error_msg = f"LLM analysis failed: {str(e)}"
+            error_msg = f"Enhanced LLM analysis failed: {str(e)}"
             self.logger.error(f"[CROSS_VALIDATION_LLM] {error_msg} for {symbol}")
             return {'success': False, 'error': error_msg}
     
-    def _create_validation_analysis_prompt(self, validation_results: Dict[str, Any], detected_patterns: List[Dict[str, Any]], symbol: str) -> str:
-        """Create structured prompt for LLM validation analysis"""
-        
-        validation_summary = validation_results.get('validation_summary', {})
-        market_regime = validation_results.get('market_regime_analysis', {})
-        
-        prompt = f"""Please analyze this comprehensive cross-validation analysis for {symbol} and provide actionable insights.
-
-## VALIDATION SUMMARY
-- Patterns Validated: {validation_summary.get('patterns_validated', 0)}
-- Validation Methods Used: {validation_summary.get('validation_methods_used', 0)}
-- Overall Validation Score: {validation_summary.get('overall_validation_score', 0):.2f}
-- Validation Confidence: {validation_summary.get('validation_confidence', 'unknown')}
-- Market Regime: {market_regime.get('regime', 'unknown')}
-
-## DETECTED PATTERNS"""
-        
-        for i, pattern in enumerate(detected_patterns[:5]):  # Limit to top 5 patterns
-            prompt += f"""
-### Pattern {i+1}: {pattern.get('pattern_name', 'Unknown')}
-- Type: {pattern.get('pattern_type', 'unknown')}
-- Completion: {pattern.get('completion_percentage', 0):.1f}%
-- Reliability: {pattern.get('reliability', 'unknown')}
-- Pattern Quality: {pattern.get('pattern_quality', 'unknown')}"""
-        
-        # Add validation method results
-        statistical_val = validation_results.get('statistical_validation', {})
-        volume_conf = validation_results.get('volume_confirmation', {})
-        historical_val = validation_results.get('historical_validation', {})
-        
-        prompt += f"""
-
-## VALIDATION RESULTS
-### Statistical Validation
-- Overall Score: {statistical_val.get('overall_statistical_score', 0):.2f}
-- Patterns Tested: {statistical_val.get('patterns_tested', 0)}
-
-### Volume Confirmation  
-- Overall Score: {volume_conf.get('overall_volume_score', 0):.2f}
-- Patterns Analyzed: {volume_conf.get('patterns_analyzed', 0)}
-
-### Historical Performance
-- Overall Score: {historical_val.get('overall_historical_score', 0):.2f}
-- Patterns Analyzed: {historical_val.get('patterns_analyzed', 0)}
-
-## ANALYSIS REQUEST
-Provide a comprehensive validation assessment including:
-1. **Validation Confidence**: Overall confidence in the detected patterns based on cross-validation results
-2. **Pattern Reliability**: Which patterns have the strongest validation support
-3. **Risk Assessment**: Potential risks and limitations identified through validation
-4. **Market Context**: How the current market regime affects pattern reliability
-5. **Trading Implications**: Actionable insights for trading decisions
-6. **Recommendations**: Specific recommendations based on validation findings
-
-Format your response as clear, actionable insights for {symbol} pattern validation."""
-        
-        return prompt
+    # Note: Old simple prompt creation method removed - now using enhanced LLM agent
+    # with comprehensive temporal analysis capabilities in CrossValidationLLMAgent
     
     def _build_error_result(self, error_message: str, symbol: str = "UNKNOWN", processing_time: float = 0.0) -> Dict[str, Any]:
         """Build standardized error result"""
@@ -794,6 +784,265 @@ Format your response as clear, actionable insights for {symbol} pattern validati
                 'key_findings': ['No patterns to validate'],
                 'validation_quality': 'not_applicable'
             }
+        }
+
+    def _build_market_context_from_structure(self, ms_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Build compact market context payload from Market Structure analysis"""
+        try:
+            from datetime import datetime
+            ta = ms_result.get('trend_analysis', {}) or {}
+            bos = ms_result.get('bos_choch_analysis', {}) or {}
+            kl = ms_result.get('key_levels', {}) or {}
+            cs = ms_result.get('current_state', {}) or {}
+            fr = ms_result.get('fractal_analysis', {}) or {}
+
+            current_price = kl.get('current_price')
+            def dist_pct(level):
+                try:
+                    if current_price is None or level is None or float(current_price) == 0:
+                        return None
+                    return round(100.0 * (float(level) - float(current_price)) / float(current_price), 2)
+                except Exception:
+                    return None
+
+            ns = kl.get('nearest_support') or {}
+            nr = kl.get('nearest_resistance') or {}
+            regime = ta.get('market_regime', {}) or {}
+
+            return {
+                'source': 'market_structure_agent',
+                'timestamp': datetime.now().isoformat(),
+                'regime': {
+                    'regime': regime.get('regime', 'unknown'),
+                    'confidence': regime.get('confidence', 0.0)
+                },
+                'structure_bias': bos.get('structural_bias', 'unknown'),
+                'trend': {
+                    'direction': ta.get('trend_direction', 'unknown'),
+                    'strength': ta.get('trend_strength', 'unknown'),
+                    'quality': ta.get('trend_quality', 'unknown')
+                },
+                'bos_choch': {
+                    'total_bos_events': bos.get('total_bos_events', 0),
+                    'total_choch_events': bos.get('total_choch_events', 0),
+                    'recent_structural_break': bos.get('recent_structural_break')
+                },
+                'key_levels': {
+                    'current_price': current_price,
+                    'nearest_support': (
+                        {'level': ns.get('level'), 'distance_pct': dist_pct(ns.get('level'))} if ns else None
+                    ),
+                    'nearest_resistance': (
+                        {'level': nr.get('level'), 'distance_pct': dist_pct(nr.get('level'))} if nr else None
+                    ),
+                    'price_position_description': cs.get('price_position_description', 'unknown')
+                },
+                'fractal': {
+                    'timeframe_alignment': fr.get('timeframe_alignment', 'unknown'),
+                    'trend_consensus': fr.get('trend_consensus', 'unknown')
+                }
+            }
+        except Exception as e:
+            self.logger.error(f"[CROSS_VALIDATION_AGENT] Failed to build market context from structure: {e}")
+            return {'source': 'market_structure_agent', 'error': str(e)}
+
+    def _score_filter_rank_patterns(
+        self,
+        detected_patterns: List[Dict[str, Any]],
+        validation_results: Dict[str, Any],
+        top_k: int = 5,
+        recency_days: int = 60
+    ) -> Dict[str, Any]:
+        """Compute composite scores, filter stale/low-quality patterns, deduplicate, and rank.
+        Returns filtered patterns list, filtered validation data copy, and discarded reasons.
+        """
+        # Defensive copies
+        filtered_validation_data = deepcopy(validation_results)
+        pattern_details = validation_results.get('pattern_validation_details', []) or []
+
+        # Helper: extract per-pattern scores from detail
+        def extract_scores(detail: Dict[str, Any]) -> Dict[str, float]:
+            vr = detail.get('validation_results', {}) or {}
+            # Initialize defaults
+            s = {
+                'statistical': None,
+                'volume': None,
+                'time_series': None,
+                'historical': None
+            }
+            # Statistical
+            stat = vr.get('statistical_validation', {}) or {}
+            if isinstance(stat, dict):
+                s['statistical'] = stat.get('statistical_score')
+            # Volume
+            vol = vr.get('volume_confirmation', {}) or {}
+            if isinstance(vol, dict):
+                s['volume'] = vol.get('volume_confirmation_score')
+            # Time series
+            ts = vr.get('time_series_validation', {}) or {}
+            if isinstance(ts, dict):
+                s['time_series'] = ts.get('time_series_score')
+            # Historical
+            hist = vr.get('historical_performance', {}) or {}
+            if isinstance(hist, dict):
+                s['historical'] = hist.get('adjusted_success_rate')
+            return s
+
+        def compute_composite(s: Dict[str, Optional[float]]) -> float:
+            # Weights
+            w = {
+                'statistical': 0.40,
+                'volume': 0.20,
+                'time_series': 0.20,
+                'historical': 0.20
+            }
+            total = 0.0
+            total_w = 0.0
+            for k, wt in w.items():
+                val = s.get(k)
+                if isinstance(val, (int, float)):
+                    total += float(val) * wt
+                    total_w += wt
+            if total_w == 0:
+                return 0.5
+            return max(0.0, min(1.0, total / total_w))
+
+        def reliability_rank(rel: str) -> int:
+            r = (rel or '').lower()
+            return {'high': 0, 'medium': 1, 'low': 2}.get(r, 3)
+
+        # Build pattern rows with computed composite and reasons
+        rows = []
+        for idx, pattern in enumerate(detected_patterns):
+            detail = pattern_details[idx] if idx < len(pattern_details) else {}
+            scores = extract_scores(detail)
+            composite = compute_composite(scores)
+            age_days = pattern.get('pattern_age_days')
+            status = (pattern.get('completion_status') or '').lower()
+            completion = pattern.get('completion_percentage', 0) or 0
+            reliability = (pattern.get('reliability') or 'unknown').lower()
+            name = pattern.get('pattern_name', f'Pattern_{idx+1}')
+
+            # Quality flags
+            reasons = []
+            # Recency filter
+            if isinstance(age_days, (int, float)):
+                if age_days > recency_days:
+                    reasons.append('stale')
+            # Completion for completed
+            if status == 'completed' and completion < 80:
+                reasons.append('low_completion')
+            # Reliability gate
+            allow_low = (reliability == 'low' and composite >= 0.65 and (not isinstance(age_days, (int, float)) or age_days <= recency_days))
+            if reliability == 'low' and not allow_low:
+                reasons.append('low_reliability')
+            # Volume+Stat joint weakness
+            vol_score = scores.get('volume')
+            stat_score = scores.get('statistical')
+            if isinstance(vol_score, (int, float)) and isinstance(stat_score, (int, float)):
+                if vol_score < 0.5 and stat_score < 0.55:
+                    # Exception: forming & very recent (<=7 days)
+                    very_recent = isinstance(age_days, (int, float)) and age_days <= 7
+                    if not (status == 'forming' and very_recent):
+                        reasons.append('weak_vol_and_stats')
+
+            rows.append({
+                'index': idx,
+                'pattern': pattern,
+                'detail': detail,
+                'scores': scores,
+                'composite_score': round(composite, 3),
+                'reliability': reliability,
+                'age_days': age_days,
+                'status': status,
+                'completion': completion,
+                'name': name,
+                'reasons': reasons
+            })
+
+        # Apply initial filters (remove if any reasons exist)
+        kept = [r for r in rows if len(r['reasons']) == 0]
+        discarded = [
+            {
+                'name': r['name'],
+                'age_days': r['age_days'],
+                'status': r['status'],
+                'reliability': r['reliability'],
+                'composite_score': r['composite_score'],
+                'reasons': r['reasons']
+            }
+            for r in rows if len(r['reasons']) > 0
+        ]
+
+        # Deduplicate by pattern_name (keep best: higher composite, then newer, then higher completion)
+        dedup_map = {}
+        for r in kept:
+            key = (r['name'] or '').lower()
+            prev = dedup_map.get(key)
+            if prev is None:
+                dedup_map[key] = r
+            else:
+                better = False
+                if r['composite_score'] > prev['composite_score']:
+                    better = True
+                elif r['composite_score'] == prev['composite_score']:
+                    # Prefer more recent (smaller age_days)
+                    prev_age = prev['age_days'] if isinstance(prev['age_days'], (int, float)) else float('inf')
+                    this_age = r['age_days'] if isinstance(r['age_days'], (int, float)) else float('inf')
+                    if this_age < prev_age:
+                        better = True
+                    elif this_age == prev_age and r['completion'] > prev['completion']:
+                        better = True
+                if better:
+                    # Move previous to discarded as duplicate lower rank
+                    discarded.append({
+                        'name': prev['name'], 'age_days': prev['age_days'], 'status': prev['status'],
+                        'reliability': prev['reliability'], 'composite_score': prev['composite_score'],
+                        'reasons': prev['reasons'] + ['duplicate_lower_rank']
+                    })
+                    dedup_map[key] = r
+                else:
+                    discarded.append({
+                        'name': r['name'], 'age_days': r['age_days'], 'status': r['status'],
+                        'reliability': r['reliability'], 'composite_score': r['composite_score'],
+                        'reasons': r['reasons'] + ['duplicate_lower_rank']
+                    })
+
+        kept_dedup = list(dedup_map.values())
+
+        # Rank: composite desc, age asc, reliability rank
+        def sort_key(r):
+            age = r['age_days'] if isinstance(r['age_days'], (int, float)) else float('inf')
+            return (-r['composite_score'], age, reliability_rank(r['reliability']))
+
+        kept_sorted = sorted(kept_dedup, key=sort_key)
+
+        # Cap top_k
+        final_rows = kept_sorted[:top_k]
+        # Add any excess to discarded with reason 'exceeds_top_k'
+        for r in kept_sorted[top_k:]:
+            discarded.append({
+                'name': r['name'], 'age_days': r['age_days'], 'status': r['status'],
+                'reliability': r['reliability'], 'composite_score': r['composite_score'],
+                'reasons': r['reasons'] + ['exceeds_top_k']
+            })
+
+        # Build filtered lists
+        filtered_indices = [r['index'] for r in final_rows]
+        filtered_patterns = [detected_patterns[i] for i in filtered_indices]
+        filtered_details = [pattern_details[i] for i in filtered_indices]
+
+        # Rewrite validation data copy for LLM (limit to filtered details and counts)
+        filtered_validation_data['pattern_validation_details'] = filtered_details
+        # Adjust patterns_validated count to filtered set for clarity in LLM output
+        if 'validation_summary' in filtered_validation_data:
+            filtered_validation_data['validation_summary'] = dict(filtered_validation_data['validation_summary'])
+            filtered_validation_data['validation_summary']['patterns_validated'] = len(filtered_details)
+
+        return {
+            'filtered_patterns': filtered_patterns,
+            'filtered_validation_data': filtered_validation_data,
+            'discarded_patterns': discarded
         }
 
 # Convenience function for external usage

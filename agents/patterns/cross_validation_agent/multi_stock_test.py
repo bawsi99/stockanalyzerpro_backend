@@ -107,10 +107,10 @@ class CrossValidationMultiStockTester:
         
         # Test configuration
         self.test_config = {
-            'include_charts': True,
+            'include_charts': False,
             'include_llm_analysis': True,
-            'save_individual_results': True,
-            'save_charts': True
+            'save_individual_results': False,
+            'save_charts': False
         }
         
         # Results storage
@@ -679,11 +679,34 @@ class CrossValidationMultiStockTester:
                 detected_patterns = pattern_detection_results.get('detected_patterns', [])
                 llm_analysis = full_analysis_results.get('llm_analysis', {})
                 
-                # Build the prompt (reconstruct using agent's method)
-                from agents.patterns.cross_validation_agent.agent import CrossValidationAgent
-                agent = CrossValidationAgent()
-                prompt = agent._create_validation_analysis_prompt(
-                    cross_validation_results, detected_patterns, symbol
+                # Extract market context from analysis results to match actual execution
+                market_context_for_prompt = None
+                try:
+                    # First try to get it from cross-validation results (where it's stored during execution)
+                    market_context_for_prompt = cross_validation_results.get('market_context')
+                    # If not there, try the full analysis results
+                    if not market_context_for_prompt:
+                        market_context_for_prompt = full_analysis_results.get('market_context')
+                    
+                    # Debug: Log what we found
+                    if market_context_for_prompt:
+                        ctx_source = market_context_for_prompt.get('source', 'unknown') if isinstance(market_context_for_prompt, dict) else 'non-dict'
+                        logger.info(f"[CROSS_VALIDATION_TESTER] Extracted market context for prompt: source={ctx_source}, type={type(market_context_for_prompt).__name__}")
+                    else:
+                        logger.warning(f"[CROSS_VALIDATION_TESTER] No market context found in results for {test_id}")
+                        # Debug: Check what keys are available
+                        cv_keys = list(cross_validation_results.keys()) if cross_validation_results else []
+                        full_keys = list(full_analysis_results.keys()) if full_analysis_results else []
+                        logger.debug(f"[CROSS_VALIDATION_TESTER] Available keys - CV: {cv_keys}, Full: {full_keys}")
+                        
+                except Exception as e:
+                    logger.warning(f"[CROSS_VALIDATION_TESTER] Failed to extract market context for prompt: {e}")
+                
+                # Build the prompt using enhanced LLM agent with correct market context
+                from agents.patterns.cross_validation_agent.llm_agent import CrossValidationLLMAgent
+                llm_agent = CrossValidationLLMAgent()
+                prompt = llm_agent._build_validation_analysis_prompt(
+                    cross_validation_results, detected_patterns, symbol, market_context_for_prompt
                 )
                 
                 # Save prompt

@@ -108,10 +108,16 @@ class CrossValidationLLMAgent:
         final_conf_score = final_confidence.get('overall_confidence', 0)
         confidence_level = final_confidence.get('confidence_level', 'unknown')
         
+        # Add current analysis timestamp for context
+        from datetime import datetime
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        
         prompt = f"""# Cross-Validation Analysis Report for {symbol}
 
 ## ANALYSIS CONTEXT
 You are an expert quantitative analyst specializing in pattern validation and risk assessment. Analyze the cross-validation results for detected chart patterns and provide comprehensive insights for trading decisions.
+
+**Analysis Date**: {current_date}
 
 ## STOCK INFORMATION
 - **Symbol**: {symbol}
@@ -133,11 +139,35 @@ Total patterns originally detected: {len(detected_patterns)}
                 original_reliability = pattern.get('reliability', 'unknown')
                 completion = pattern.get('completion_percentage', 0)
                 
+                # Extract temporal information
+                start_date = pattern.get('start_date', 'Unknown')
+                end_date = pattern.get('end_date', 'Unknown')
+                duration_days = pattern.get('pattern_duration_days', 'Unknown')
+                age_days = pattern.get('pattern_age_days', 'Unknown')
+                
+                # Format temporal display
+                if start_date != 'Unknown' and 'T' not in start_date:
+                    start_display = start_date.split(' ')[0] if ' ' in start_date else start_date
+                else:
+                    start_display = start_date
+                
+                if end_date != 'Unknown' and 'T' not in end_date:
+                    end_display = end_date.split(' ')[0] if ' ' in end_date else end_date
+                else:
+                    end_display = end_date
+                
+                # Duration and age display
+                duration_display = f"{duration_days} days" if isinstance(duration_days, (int, float)) else str(duration_days)
+                age_display = f"{age_days} days ago" if isinstance(age_days, (int, float)) else str(age_days)
+                
                 prompt += f"""
 **{i}. {pattern_name.replace('_', ' ').title()}**
 - Type: {pattern_type.title()}
 - Original Reliability: {original_reliability.title()}
 - Completion: {completion}%
+- **Formation Period**: {start_display} → {end_display} ({duration_display})
+- **Pattern Age**: {age_display}
+- **Status**: {pattern.get('completion_status', 'Unknown').title()}
 """
         
         # Add validation method results
@@ -233,14 +263,144 @@ Total patterns originally detected: {len(detected_patterns)}
 
 """
         
-        # Add market context if provided
-        if market_context:
+        # Add confidence calculation diagnostics (caps and factors)
+        try:
+            factors = final_confidence.get('confidence_factors', {}) or {}
             prompt += f"""
-## MARKET CONTEXT
-- Market Environment: {market_context.get('market_trend', 'unknown')}
-- Sector Performance: {market_context.get('sector_performance', 'unknown')}
-- Volatility Environment: {market_context.get('volatility_regime', 'unknown')}
+## CONFIDENCE CALCULATION DIAGNOSTICS
+- Preliminary Confidence: {final_confidence.get('preliminary_confidence', 'n/a')}
+- Conflict Adjustment: {final_confidence.get('conflict_adjustment', 'n/a')}
+- Adjusted (Pre-cap): {final_confidence.get('adjusted_confidence', 'n/a')}
+- Max Allowed Confidence (Cap): {final_confidence.get('max_allowed_confidence', 'n/a')}
+- Cap Applied: {final_confidence.get('confidence_cap_applied', False)}
+- Cap Reason: {final_confidence.get('confidence_cap_reason', 'n/a')}
+- Factors:
+  - Statistical: {factors.get('statistical_score', 'n/a')}
+  - Volume: {factors.get('volume_score', 'n/a')}
+  - Weighted base: {factors.get('weighted_base', 'n/a')}
+  - Method completeness: {factors.get('method_completeness', 'n/a')}
+  - Pattern consistency: {factors.get('pattern_consistency', 'n/a')}
+  - Market regime adj: {factors.get('market_regime_adjustment', 'n/a')}
+"""
+        except Exception:
+            pass
+        
+        # Add market or structure context if provided
+        # Prefer param if it's from market_structure_agent; otherwise fallback to validation_data
+        ctx_from_results = validation_data.get('market_context') if isinstance(validation_data, dict) else None
+        selected_ctx = market_context
+        if (not selected_ctx) and ctx_from_results:
+            selected_ctx = ctx_from_results
+        # If both exist and only results has market_structure_agent source, prefer it
+        try:
+            if selected_ctx and isinstance(selected_ctx, dict):
+                if market_context and ctx_from_results:
+                    if (market_context.get('source') != 'market_structure_agent') and (ctx_from_results.get('source') == 'market_structure_agent'):
+                        selected_ctx = ctx_from_results
+            if selected_ctx and isinstance(selected_ctx, dict):
+                sel_source = selected_ctx.get('source')
+                logger.info(f"[CROSS_VALIDATION_LLM] Using market context from {'param' if selected_ctx is market_context else 'validation_data'} with source={sel_source}")
+        except Exception:
+            pass
 
+        if selected_ctx:
+            try:
+                # Prefer structured context from Market Structure agent
+                if isinstance(selected_ctx, dict) and selected_ctx.get('source') == 'market_structure_agent':
+                    regime = selected_ctx.get('regime', {}) or {}
+                    trend = selected_ctx.get('trend', {}) or {}
+                    bos = selected_ctx.get('bos_choch', {}) or {}
+                    kl = selected_ctx.get('key_levels', {}) or {}
+                    fractal = selected_ctx.get('fractal', {}) or {}
+
+                    # Extract recent break details for enhanced context
+                    recent_break = bos.get('recent_structural_break', {})
+                    break_details = ""
+                    if recent_break:
+                        break_date = recent_break.get('date', 'Unknown')
+                        break_price = recent_break.get('break_price')
+                        prev_level = recent_break.get('previous_level')
+                        pct_break = recent_break.get('percentage_break')
+                        break_strength = recent_break.get('strength', 'unknown')
+                        
+                        # Format date for readability
+                        if break_date != 'Unknown' and 'T' not in str(break_date):
+                            try:
+                                from datetime import datetime
+                                if '+' in str(break_date):
+                                    # Handle timezone
+                                    break_date_clean = str(break_date).split('+')[0]
+                                else:
+                                    break_date_clean = str(break_date).split(' ')[0] if ' ' in str(break_date) else str(break_date)
+                            except:
+                                break_date_clean = str(break_date)
+                        else:
+                            break_date_clean = str(break_date)
+                            
+                        break_details = f"""
+- **Recent Structural Break**: {recent_break.get('type', 'unknown').replace('_', ' ').title()}
+  - Date: {break_date_clean}
+  - Break Price: {break_price} (from previous level: {prev_level})
+  - Break Magnitude: {pct_break}% ({break_strength} strength)
+  - Days Since Break: {(datetime.now() - datetime.fromisoformat(str(break_date).replace('+05:30', ''))).days if break_date != 'Unknown' and '+' in str(break_date) else 'Unknown'}"""
+
+                    prompt += f"""
+## MARKET STRUCTURE SUMMARY
+- **Context Source**: market_structure_agent
+- **Market Regime**: {regime.get('regime', 'unknown').title()} (confidence: {regime.get('confidence', 0.0):.0%})
+- **Structural Bias**: {selected_ctx.get('structure_bias', 'unknown').title()}
+- **Trend Analysis**: {trend.get('direction', 'unknown').title()} | Strength: {trend.get('strength', 'unknown').title()} | Quality: {trend.get('quality', 'unknown').title()}
+- **Structure Events**: {bos.get('total_bos_events', 0)} BOS events, {bos.get('total_choch_events', 0)} CHOCH events{break_details}
+- **Key Price Levels**:
+  - Current Price: {kl.get('current_price', 'NA')}
+  - Nearest Support: {kl.get('nearest_support', {}).get('level', 'NA') if kl.get('nearest_support') else 'NA'} ({kl.get('nearest_support', {}).get('distance_pct', 'NA')}% away)
+  - Nearest Resistance: {kl.get('nearest_resistance', {}).get('level', 'NA') if kl.get('nearest_resistance') else 'NA'} ({kl.get('nearest_resistance', {}).get('distance_pct', 'NA')}% away)
+  - Price Position: {kl.get('price_position_description', 'unknown').replace('_', ' ').title()}
+- **Multi-Timeframe Context**: {fractal.get('timeframe_alignment', 'unknown').title()} alignment | Consensus: {fractal.get('trend_consensus', 'unknown').title()}
+- **Analysis Timestamp**: {selected_ctx.get('timestamp', 'unknown')}
+"""
+                else:
+                    # Generic market context fallback (legacy shape)
+                    prompt += f"""
+## MARKET CONTEXT
+- Market Environment: {selected_ctx.get('market_trend', 'unknown')}
+- Sector Performance: {selected_ctx.get('sector_performance', 'unknown')}
+- Volatility Environment: {selected_ctx.get('volatility_regime', 'unknown')}
+"""
+            except Exception as e:
+                logger.error(f"[CROSS_VALIDATION_LLM] Failed to build market structure section: {e}")
+                # Fallback on error: add minimal context indicator
+                try:
+                    prompt += f"""
+## MARKET CONTEXT (ERROR FALLBACK)
+- Market structure analysis encountered an error during prompt generation
+- Source: {selected_ctx.get('source', 'unknown') if isinstance(selected_ctx, dict) else 'non-dict'}
+- Available keys: {list(selected_ctx.keys()) if isinstance(selected_ctx, dict) else 'none'}
+"""
+                except Exception:
+                    prompt += "\n## MARKET CONTEXT (ERROR FALLBACK)\n- Market context processing failed\n"
+        else:
+            # Fallback: include internal regime from validation_data if present
+            try:
+                mr = validation_data.get('market_regime_analysis', {}) or {}
+                if mr:
+                    prompt += f"""
+## MARKET REGIME (FALLBACK)
+- Regime: {mr.get('regime', 'unknown')} (confidence: {mr.get('confidence', 0.0)})
+- Volatility: {mr.get('volatility', 'NA')} | Trend Strength: {mr.get('trend_strength', 'NA')} | Price Range: {mr.get('price_range', 'NA')}
+"""
+                else:
+                    # No market context at all - add a minimal indicator
+                    prompt += """
+## MARKET CONTEXT (NO DATA AVAILABLE)
+- No market structure or regime data available for this analysis
+- Pattern validation will proceed without market context consideration
+"""
+            except Exception as e:
+                logger.error(f"[CROSS_VALIDATION_LLM] Failed to add fallback market regime: {e}")
+                prompt += """
+## MARKET CONTEXT (ERROR)
+- Market context processing failed completely
 """
         
         # Add pattern-specific validation details if available
@@ -263,7 +423,7 @@ Total patterns originally detected: {len(detected_patterns)}
                         if score is not None:
                             prompt += f"- {method.replace('_', ' ').title()}: {score:.2f}\n"
         
-        prompt += f"""
+        prompt += """
 ## ANALYSIS REQUIREMENTS
 
 Please provide a comprehensive cross-validation analysis covering:
@@ -292,16 +452,70 @@ Please provide a comprehensive cross-validation analysis covering:
 - Entry and exit criteria considering validation results
 - Risk management protocols for different confidence levels
 
-### 5. VALIDATION INSIGHTS AND RECOMMENDATIONS
+### 5. TEMPORAL ANALYSIS AND PATTERN TIMING
+- Pattern formation timeline and duration analysis
+- Pattern age and recency assessment for trading relevance
+- Temporal clustering or pattern overlap analysis
+- Formation period quality and market conditions context
+- Pattern maturity and potential expiration considerations
+
+### 6. VALIDATION INSIGHTS AND RECOMMENDATIONS
 - Key findings from cross-validation analysis
 - Most reliable patterns and validation methods
 - Areas requiring additional confirmation
 - Recommendations for improving validation confidence
+- Time-sensitive trading opportunities or warnings
 
 ## OUTPUT FORMAT
 Structure your response as a professional validation analysis report with clear sections and actionable insights. Focus on practical applications while maintaining rigorous analytical standards.
 
-**Important**: Base your analysis strictly on the provided cross-validation data. Highlight both strengths and limitations of the validation process.
+**Important**: Base your analysis strictly on the provided cross-validation data. Pay special attention to pattern timing and relevance. Highlight both strengths and limitations of the validation process.
+
+## JSON OUTPUT REQUIREMENTS
+After the narrative analysis, output exactly one JSON object to summarize key decisions for downstream consumption. Do not include any text after the JSON. Do not wrap the JSON in code fences. If a field is unknown, set it to null.
+
+Schema:
+{
+  "symbol": string,
+  "analysis_date": string,  // ISO date
+  "overall": {
+    "validation_score": number,       // 0..1
+    "confidence": number,             // 0..1 (final)
+    "confidence_category": string,    // very_low|low|medium|high|very_high or similar
+    "confidence_cap_reason": string|null
+  },
+  "market_regime": {
+    "regime": string,                 // trending|consolidating|volatile|stable|mixed|unknown
+    "confidence": number|null
+  },
+  "top_patterns": [
+    {
+      "name": string,
+      "status": string,               // forming|completed|unknown
+      "age_days": number|null,
+      "reliability": string|null,     // high|medium|low|unknown
+      "highlights": [string],         // key strengths/weaknesses
+      "required_confirmations": [string]  // e.g., volume_surge_above_1.5x, close_above_resistance
+    }
+  ],
+  "discarded_patterns": [
+    { "name": string, "age_days": number|null, "reason": string }
+  ],
+  "risk": {
+    "level": string,                 // very_low|low|moderate|high|very_high
+    "key_risks": [string]
+  },
+  "decision_guidance": {
+    "position_sizing": string,       // e.g., conservative|standard|avoid
+    "entry_rules": [string],
+    "exit_rules": [string]
+  }
+}
+
+Rules:
+- Output the narrative first, then the JSON as the final content.
+- Output exactly one JSON object. No trailing commentary after the JSON.
+- Use numbers for numeric fields. Use null for unknowns.
 """
         
         return prompt
@@ -313,7 +527,15 @@ Structure your response as a professional validation analysis report with clear 
                 return f"Cross-validation analysis for {symbol} could not be completed: LLM client not initialized."
             
             # Make async call to LLM using new backend/llm system
-            response, token_usage = await self.llm_client.generate_text(prompt)
+            llm_result = await self.llm_client.generate_text(prompt)
+            
+            # Handle different return formats from LLM client
+            if isinstance(llm_result, tuple):
+                response = llm_result[0]
+                token_usage = llm_result[1] if len(llm_result) > 1 else None
+            else:
+                response = llm_result
+                token_usage = None
             
             if not response or len(response.strip()) < 50:
                 return f"Cross-validation analysis for {symbol} could not be completed due to insufficient LLM response."
@@ -334,6 +556,9 @@ Structure your response as a professional validation analysis report with clear 
             
             # Extract key sections from response (basic parsing)
             sections = self._extract_response_sections(llm_response)
+
+            # Try to extract trailing JSON summary
+            structured_json = self._extract_json_from_response(llm_response)
             
             # Build structured result
             result = {
@@ -362,10 +587,13 @@ Structure your response as a professional validation analysis report with clear 
                 
                 # Validation Context
                 'overall_validation_score': validation_data.get('validation_scores', {}).get('overall_score', 0),
-                'final_confidence_level': validation_data.get('final_confidence_assessment', {}).get('confidence_level', 'unknown')
+                'final_confidence_level': validation_data.get('final_confidence_assessment', {}).get('confidence_level', 'unknown'),
+                
+                # Structured JSON (if available)
+                'structured_output': structured_json
             }
             
-            logger.info(f"[CROSS_VALIDATION_LLM] Analysis completed for {symbol} ({len(llm_response)} chars)")
+            logger.info(f"[CROSS_VALIDATION_LLM] Analysis completed for {symbol} ({len(llm_response)} chars, structured_json={(structured_json is not None)})")
             return result
             
         except Exception as e:
@@ -419,6 +647,27 @@ Structure your response as a professional validation analysis report with clear 
             logger.error(f"[CROSS_VALIDATION_LLM] Section extraction failed: {e}")
             return {'full_content': response[:2000]}
     
+    def _extract_json_from_response(self, response: str) -> Optional[Dict[str, Any]]:
+        """Attempt to extract a trailing JSON object from the LLM response."""
+        try:
+            # Heuristic: try to parse the largest trailing JSON block
+            text = response.strip()
+            # Find last '{' and try parses from there backwards a few times
+            last = text.rfind('{')
+            attempts = 0
+            while last != -1 and attempts < 5:
+                candidate = text[last:]
+                try:
+                    obj = json.loads(candidate)
+                    return obj if isinstance(obj, dict) else None
+                except Exception:
+                    # Move to previous '{'
+                    last = text.rfind('{', 0, last)
+                    attempts += 1
+            return None
+        except Exception:
+            return None
+
     def _assess_response_quality(self, response: str) -> str:
         """Assess the quality of the LLM response"""
         try:

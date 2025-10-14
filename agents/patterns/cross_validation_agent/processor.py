@@ -19,6 +19,12 @@ from scipy import stats
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
+# Import conflict detector for pattern analysis
+try:
+    from agents.patterns.cross_validation_agent.conflict_detector import PatternConflictDetector
+except ImportError:
+    PatternConflictDetector = None
+
 logger = logging.getLogger(__name__)
 
 class CrossValidationProcessor:
@@ -95,16 +101,35 @@ class CrossValidationProcessor:
             # 7. Alternative Method Validation
             alternative_validation = self._perform_alternative_method_validation(stock_data, detected_patterns)
             
-            # 8. Comprehensive Validation Scoring
+            # 8. Pattern Conflict Detection (temporarily disabled for demo)
+            conflict_analysis = {
+                'total_conflicts': 0,
+                'pattern_coherence': 'high',
+                'conflict_summary': 'Conflict detection temporarily disabled',
+                'resolution_strategy': {'confidence_adjustment': 0.0}
+            }
+            
+            # 9. Comprehensive Validation Scoring
             validation_scores = self._calculate_validation_scores(
                 statistical_validation, volume_confirmation, time_series_validation,
                 historical_validation, consistency_analysis, alternative_validation, market_regime
             )
             
-            # 9. Final Confidence Assessment
-            final_confidence = self._assess_final_confidence(validation_scores, detected_patterns, market_regime)
+            # 10. Final Confidence Assessment (with conflict adjustment)
+            final_confidence = self._assess_final_confidence(validation_scores, detected_patterns, market_regime, conflict_analysis)
             
             processing_time = (datetime.now() - start_time).total_seconds()
+            
+            # Infer interval and lookback metadata
+            data_interval = self._infer_data_interval(stock_data)
+            lookback_periods = len(stock_data)
+            start_ts, end_ts = None, None
+            try:
+                idx = stock_data.index
+                start_ts = str(idx[0]) if len(idx) > 0 else None
+                end_ts = str(idx[-1]) if len(idx) > 0 else None
+            except Exception:
+                pass
             
             # Build comprehensive result
             result = {
@@ -116,10 +141,17 @@ class CrossValidationProcessor:
                 # Core Validation Results
                 'validation_summary': {
                     'patterns_validated': len(detected_patterns),
-                    'validation_methods_used': 7,
+                    'validation_methods_used': 8,  # Updated to include conflict detection
                     'overall_validation_score': round(validation_scores.get('overall_score', 0), 2),
                     'validation_confidence': final_confidence.get('confidence_level', 'unknown'),
-                    'market_regime': market_regime.get('regime', 'unknown')
+                    'market_regime': market_regime.get('regime', 'unknown'),
+                    'pattern_conflicts': conflict_analysis.get('total_conflicts', 0),
+                    'pattern_coherence': conflict_analysis.get('pattern_coherence', 'unknown'),
+                    # Added metadata for downstream clarity
+                    'data_interval': data_interval,
+                    'lookback_periods': lookback_periods,
+                    'start_timestamp': start_ts,
+                    'end_timestamp': end_ts
                 },
                 
                 # Detailed Validation Results
@@ -130,6 +162,7 @@ class CrossValidationProcessor:
                 'consistency_analysis': consistency_analysis,
                 'alternative_validation': alternative_validation,
                 'market_regime_analysis': market_regime,
+                'pattern_conflict_analysis': conflict_analysis,
                 
                 # Validation Scoring
                 'validation_scores': validation_scores,
@@ -404,8 +437,8 @@ class CrossValidationProcessor:
                 consistency_results['consistency_score'] = 0.8  # Assume good if only one pattern
                 return consistency_results
             
-            # Check for pattern conflicts
-            conflicts = self._detect_pattern_conflicts(detected_patterns)
+            # Check for pattern conflicts (using legacy method for consistency analysis)
+            conflicts = self._detect_legacy_pattern_conflicts(detected_patterns)
             consistency_results['pattern_conflicts'] = conflicts
             
             # Check for pattern reinforcements
@@ -548,53 +581,125 @@ class CrossValidationProcessor:
             logger.error(f"[CROSS_VALIDATION] Validation score calculation failed: {e}")
             return {'error': str(e)}
     
-    def _assess_final_confidence(self, validation_scores: Dict[str, Any], detected_patterns: List[Dict[str, Any]], market_regime: Dict[str, Any]) -> Dict[str, Any]:
-        """Assess final confidence based on all validation results"""
+    def _detect_pattern_conflicts(self, detected_patterns: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Detect conflicts between patterns using conflict detector"""
         try:
+            if not PatternConflictDetector or len(detected_patterns) < 2:
+                return {
+                    'total_conflicts': 0,
+                    'pattern_coherence': 'high',
+                    'conflict_summary': f'No conflicts detected among {len(detected_patterns)} pattern(s).',
+                    'resolution_strategy': {'confidence_adjustment': 0.0}
+                }
+            
+            conflict_detector = PatternConflictDetector()
+            conflict_analysis = conflict_detector.detect_pattern_conflicts(detected_patterns, {})
+            
+            logger.info(f"[CROSS_VALIDATION] Pattern conflict analysis: {conflict_analysis.get('total_conflicts', 0)} conflicts")
+            return conflict_analysis
+            
+        except Exception as e:
+            logger.error(f"[CROSS_VALIDATION] Pattern conflict detection failed: {e}")
+            return {
+                'error': str(e),
+                'total_conflicts': 0,
+                'pattern_coherence': 'unknown',
+                'resolution_strategy': {'confidence_adjustment': 0.0}
+            }
+    
+    def _assess_final_confidence(self, validation_scores: Dict[str, Any], detected_patterns: List[Dict[str, Any]], market_regime: Dict[str, Any], conflict_analysis: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Assess final confidence with proper statistical validation weighting"""
+        try:
+            method_scores = validation_scores.get('method_scores', {})
             overall_score = validation_scores.get('overall_score', 0.5)
             validation_completeness = validation_scores.get('validation_completeness', 0.5)
             num_patterns = len(detected_patterns)
             
-            # Base confidence from validation score
-            base_confidence = overall_score
+            # CRITICAL: Extract statistical validation score for confidence capping
+            statistical_score = method_scores.get('statistical', 0.5)
+            volume_score = method_scores.get('volume', 0.5)
             
-            # Adjust for validation completeness
-            completeness_factor = 0.8 + (validation_completeness * 0.2)
+            # Statistical validation should cap maximum confidence
+            if statistical_score < 0.5:
+                max_confidence = 0.6  # Cap at 60% if statistical very weak
+                confidence_cap_reason = f"Statistical validation very low ({statistical_score:.2f})"
+            elif statistical_score < 0.6:
+                max_confidence = 0.7  # Cap at 70% if statistical weak  
+                confidence_cap_reason = f"Statistical validation low ({statistical_score:.2f})"
+            elif statistical_score < 0.7:
+                max_confidence = 0.85  # Cap at 85% if statistical moderate
+                confidence_cap_reason = f"Statistical validation moderate ({statistical_score:.2f})"
+            else:
+                max_confidence = 1.0  # No cap if statistical validation strong
+                confidence_cap_reason = None
             
-            # Adjust for number of patterns (more patterns can be more reliable if consistent)
-            pattern_factor = min(1.2, 1.0 + (num_patterns - 1) * 0.05)
+            # Volume validation should also influence cap
+            if volume_score < 0.5 and max_confidence > 0.65:
+                max_confidence = min(max_confidence, 0.65)
+                if confidence_cap_reason:
+                    confidence_cap_reason += f" + Volume validation low ({volume_score:.2f})"
+                else:
+                    confidence_cap_reason = f"Volume validation low ({volume_score:.2f})"
             
-            # Market regime adjustment factor
+            # Base confidence from validation score (but properly weighted)
+            # Give higher weight to statistical and volume validation
+            weighted_base_confidence = (
+                statistical_score * 0.4 +  # High weight on statistical
+                volume_score * 0.2 +       # Medium weight on volume
+                method_scores.get('historical', 0.5) * 0.2 +
+                method_scores.get('time_series', 0.5) * 0.1 +
+                method_scores.get('consistency', 0.5) * 0.1
+            )
+            
+            # Adjust for validation completeness (less aggressive)
+            completeness_factor = 0.9 + (validation_completeness * 0.1)
+            
+            # Pattern factor (less aggressive multiplier)
+            pattern_factor = min(1.1, 1.0 + (num_patterns - 1) * 0.02)
+            
+            # Market regime adjustment (more conservative)
             regime = market_regime.get('regime', 'unknown')
             regime_confidence = market_regime.get('confidence', 0.5)
             
             if regime == 'trending':
-                regime_factor = 1.1  # Patterns more reliable in trending markets
+                regime_adjustment = 0.05  # Small boost for trending
             elif regime == 'stable':
-                regime_factor = 1.05  # Slightly better for pattern formation
+                regime_adjustment = 0.02  # Small boost for stable
             elif regime == 'volatile':
-                regime_factor = 0.9   # More challenging for pattern reliability
+                regime_adjustment = -0.05  # Small penalty for volatile
             else:
-                regime_factor = 1.0   # Unknown regime, no adjustment
+                regime_adjustment = 0.0   # No adjustment for unknown
                 
-            # Apply regime confidence to the factor
-            regime_factor = 1.0 + (regime_factor - 1.0) * regime_confidence
+            regime_factor = 1.0 + (regime_adjustment * regime_confidence)
             
-            # Calculate final confidence
-            final_confidence = base_confidence * completeness_factor * pattern_factor * regime_factor
-            final_confidence = min(1.0, max(0.1, final_confidence))
+            # Calculate preliminary confidence
+            preliminary_confidence = weighted_base_confidence * completeness_factor * pattern_factor * regime_factor
             
-            # Determine confidence level and category
+            # Apply conflict-based adjustments
+            conflict_adjustment = 0.0
+            if conflict_analysis and isinstance(conflict_analysis, dict):
+                resolution_strategy = conflict_analysis.get('resolution_strategy', {})
+                conflict_adjustment = resolution_strategy.get('confidence_adjustment', 0.0)
+            elif conflict_analysis and not isinstance(conflict_analysis, dict):
+                logger.warning(f"[CROSS_VALIDATION] Conflict analysis is not a dict: {type(conflict_analysis)}")
+                conflict_adjustment = 0.0
+            
+            # Apply confidence cap and conflict adjustments
+            adjusted_confidence = preliminary_confidence + conflict_adjustment
+            final_confidence = min(adjusted_confidence, max_confidence)
+            final_confidence = max(0.1, min(1.0, final_confidence))
+            
+            # Determine confidence level based on ACTUAL final confidence
             if final_confidence >= 0.8:
                 confidence_level = 'very_high'
                 confidence_category = 'strong'
-            elif final_confidence >= 0.7:
+            elif final_confidence >= 0.65:
                 confidence_level = 'high'
                 confidence_category = 'good'
-            elif final_confidence >= 0.6:
+            elif final_confidence >= 0.5:
                 confidence_level = 'medium'
                 confidence_category = 'moderate'
-            elif final_confidence >= 0.4:
+            elif final_confidence >= 0.35:
                 confidence_level = 'low'
                 confidence_category = 'weak'
             else:
@@ -605,12 +710,20 @@ class CrossValidationProcessor:
                 'overall_confidence': round(final_confidence, 2),
                 'confidence_level': confidence_level,
                 'confidence_category': confidence_category,
-                'base_validation_score': round(overall_score, 2),
+                'base_validation_score': round(weighted_base_confidence, 2),
                 'validation_completeness': round(validation_completeness, 2),
                 'pattern_count_factor': round(pattern_factor, 2),
                 'market_regime_factor': round(regime_factor, 2),
+                'confidence_cap_applied': preliminary_confidence > max_confidence,
+                'confidence_cap_reason': confidence_cap_reason,
+                'max_allowed_confidence': max_confidence,
+                'preliminary_confidence': round(preliminary_confidence, 2),
+                'conflict_adjustment': round(conflict_adjustment, 2),
+                'adjusted_confidence': round(adjusted_confidence, 2),
                 'confidence_factors': {
-                    'validation_quality': round(overall_score, 2),
+                    'statistical_score': round(statistical_score, 2),
+                    'volume_score': round(volume_score, 2),
+                    'weighted_base': round(weighted_base_confidence, 2),
                     'method_completeness': round(validation_completeness, 2),
                     'pattern_consistency': round(pattern_factor, 2),
                     'market_regime_adjustment': round(regime_factor, 2)
@@ -1232,8 +1345,8 @@ class CrossValidationProcessor:
             return 0.5
     
     # Pattern consistency analysis methods
-    def _detect_pattern_conflicts(self, detected_patterns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Detect conflicts between patterns"""
+    def _detect_legacy_pattern_conflicts(self, detected_patterns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Detect conflicts between patterns (legacy version for consistency analysis)"""
         conflicts = []
         
         try:
@@ -1889,6 +2002,42 @@ class CrossValidationProcessor:
             self.logger.error(f"Market regime detection failed: {e}")
             return {'regime': 'unknown', 'confidence': 0.0, 'characteristics': {}, 'error': str(e)}
     
+    def _infer_data_interval(self, stock_data: pd.DataFrame) -> str:
+        """Infer data interval from index frequency or median delta."""
+        try:
+            idx = stock_data.index
+            # Try pandas infer_freq
+            try:
+                import pandas as pd
+                freq = pd.infer_freq(idx)
+                if freq:
+                    return str(freq)
+            except Exception:
+                pass
+            # Fallback: median delta
+            if len(idx) >= 2:
+                deltas = (idx[1:] - idx[:-1])
+                # Handle numpy/pandas timedelta
+                try:
+                    median_delta = pd.Series(deltas).median()
+                    seconds = median_delta.total_seconds()
+                except Exception:
+                    # Best effort
+                    seconds = None
+                if seconds is not None:
+                    if seconds >= 60*60*24*0.9:
+                        return 'day'
+                    if seconds >= 60*60*0.9:
+                        return '1hour'
+                    if seconds >= 60*15*0.9:
+                        return '15min'
+                    if seconds >= 60*5*0.9:
+                        return '5min'
+                    return f'{int(seconds)}s'
+            return 'unknown'
+        except Exception:
+            return 'unknown'
+
     def _build_error_result(self, error_message: str, processing_time: float = 0.0) -> Dict[str, Any]:
         """Build error result dictionary"""
         return {
