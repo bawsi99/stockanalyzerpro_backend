@@ -3261,15 +3261,10 @@ class SectorBenchmarkingProvider:
             
             # CRITICAL FIX: Check for insufficient data before proceeding
             if len(stock_returns) == 0:
-                logging.error(f"ERROR: No valid stock returns after pct_change().dropna() for {symbol}")
-                logging.error(f"Stock data info: shape={stock_data.shape}, close_values={stock_data['close'].head(10).tolist() if not stock_data.empty else 'empty'}")
-                return {
-                    'error': 'Insufficient stock data for analysis',
-                    'sector': sector,
-                    'stock_symbol': symbol,
-                    'data_points': 0,
-                    'error_type': 'no_valid_returns'
-                }
+                logging.warning(f"WARNING: Insufficient stock data for {symbol} (only {len(stock_data)} data points). Falling back to default benchmarking.")
+                logging.info(f"Stock data info: shape={stock_data.shape}, close_values={stock_data['close'].head(10).tolist() if not stock_data.empty else 'empty'}")
+                # Return structured fallback so frontend can render gracefully with data_quality flags
+                return self._get_fallback_benchmarking(symbol, sector)
             
             # Check for minimum data requirement
             if len(stock_returns) < 2:

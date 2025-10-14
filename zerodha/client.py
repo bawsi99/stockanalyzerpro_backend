@@ -77,6 +77,16 @@ def retry_api_call(func_to_retry, max_retries=3, base_delay=1.0, backoff_factor=
         The result of the function call or None if all retries failed
     """
     last_exception = None
+
+    # Common substrings indicating transient network issues that should be retried
+    network_retry_indicators = [
+        'read timed out', 'timeout', 'connection timeout',
+        'httpsconnectionpool', 'connection pool', 'read timeout',
+        'connection aborted', 'connection reset', 'reset by peer',
+        'remote end closed connection', 'temporarily unavailable',
+        'max retries exceeded with url', 'protocolerror', 'badstatusline',
+        'gateway timeout', 'service unavailable', 'ssl: '
+    ]
     
     for attempt in range(max_retries + 1):  # +1 for initial attempt
         try:
@@ -100,30 +110,44 @@ def retry_api_call(func_to_retry, max_retries=3, base_delay=1.0, backoff_factor=
             # Don't retry on token errors, let auto_refresh_token handle it
             raise e
         except Exception as e:
-            # Check if this is a timeout error that should be retried
+            # Check if this is a transient network error (timeout/reset/etc.) that should be retried
             error_str = str(e).lower()
-            if any(timeout_indicator in error_str for timeout_indicator in [
-                'read timed out', 'timeout', 'connection timeout', 
-                'httpsconnectionpool', 'connection pool', 'read timeout'
-            ]):
+            if any(ind in error_str for ind in network_retry_indicators):
                 last_exception = e
-                
+
                 if attempt == max_retries:
-                    logger.error(f"Max retries ({max_retries}) exceeded for {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'} - timeout: {e}")
+                    logger.error(f"Max retries ({max_retries}) exceeded for {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'} - network: {e}")
                     break
-                
-                # Calculate delay with exponential backoff for timeouts
+
                 delay = base_delay * (backoff_factor ** attempt)
                 if jitter:
-                    delay = delay * (0.5 + random.random() * 0.5)  # Add 0-50% jitter
-                
-                logger.warning(f"Timeout error in {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'} (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {delay:.2f} seconds...")
+                    delay = delay * (0.5 + random.random() * 0.5)
+
+                logger.warning(f"Transient network error in {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'} (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {delay:.2f} seconds...")
                 time.sleep(delay)
                 continue
-            else:
-                # Don't retry on other exceptions (like data processing errors)
-                logger.error(f"Non-retryable error in {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'}: {e}")
-                return None
+            
+            # Special-case: certain OS-level connection resets come as OSError/ConnectionResetError without helpful strings
+            if isinstance(e, OSError):
+                # errno 104 is commonly 'Connection reset by peer' on Unix-like systems
+                try:
+                    err_no = getattr(e, 'errno', None)
+                except Exception:
+                    err_no = None
+                if err_no in (104, 110, 111):  # 104 reset, 110 timed out, 111 connection refused
+                    if attempt == max_retries:
+                        logger.error(f"Max retries ({max_retries}) exceeded for {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'} - os error: {e}")
+                        break
+                    delay = base_delay * (backoff_factor ** attempt)
+                    if jitter:
+                        delay = delay * (0.5 + random.random() * 0.5)
+                    logger.warning(f"OS-level network error in {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'} (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {delay:.2f} seconds...")
+                    time.sleep(delay)
+                    continue
+
+            # Don't retry on other exceptions (like data processing errors)
+            logger.error(f"Non-retryable error in {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'}: {e}")
+            return None
     
     # If we get here, all retries failed
     logger.error(f"All retry attempts failed for {func_to_retry.__name__ if hasattr(func_to_retry, '__name__') else 'API call'}")
