@@ -1,0 +1,242 @@
+{
+  "generated": [
+    {
+      "symbol": "RELIANCE",
+      "output": "/Users/aaryanmanawat/Aaryan/StockAnalyzer Pro/version3.0/3.0/backend/agents/patterns/cross_validation_agent/charts_mock/RELIANCE_price_volume_ms.png",
+      "market_context": {
+        "source": "market_structure_agent",
+        "timestamp": "2025-10-14T18:19:18.829469",
+        "regime": {
+          "regime": "consolidating",
+          "confidence": 0.67
+        },
+        "structure_bias": "bearish",
+        "trend": {
+          "direction": "sideways",
+          "strength": "weak",
+          "quality": "fair"
+        },
+        "bos_choch": {
+          "total_bos_events": 11,
+          "total_choch_events": 0,
+          "recent_structural_break": {
+            "type": "bearish_bos",
+            "date": "2025-09-01 00:00:00+05:30",
+            "break_price": 1340.6,
+            "previous_level": 1361.2,
+            "percentage_break": 1.51,
+            "strength": "medium"
+          }
+        },
+        "key_levels": {
+          "current_price": 1374.9,
+          "nearest_support": {
+            "level": 1374.5,
+            "distance_pct": -0.03
+          },
+          "nearest_resistance": {
+            "level": 1376.0,
+            "distance_pct": 0.08
+          },
+          "price_position_description": "mid_range"
+        },
+        "fractal": {
+          "timeframe_alignment": "conflicting",
+          "trend_consensus": "uptrend"
+        }
+      }
+    },
+    {
+      "symbol": "TCS",
+      "output": "/Users/aaryanmanawat/Aaryan/StockAnalyzer Pro/version3.0/3.0/backend/agents/patterns/cross_validation_agent/charts_mock/TCS_price_volume_ms.png",
+      "market_context": {
+        "source": "market_structure_agent",
+        "timestamp": "2025-10-14T18:19:21.997810",
+        "regime": {
+          "regime": "trending",
+          "confidence": 0.43
+        },
+        "structure_bias": "bearish",
+        "trend": {
+          "direction": "sideways",
+          "strength": "medium",
+          "quality": "fair"
+        },
+        "bos_choch": {
+          "total_bos_events": 10,
+          "total_choch_events": 0,
+          "recent_structural_break": {
+            "type": "bearish_bos",
+            "date": "2025-10-01 00:00:00+05:30",
+            "break_price": 2866.6,
+            "previous_level": 3016.0,
+            "percentage_break": 4.95,
+            "strength": "strong"
+          }
+        },
+        "key_levels": {
+          "current_price": 2960.0,
+          "nearest_support": {
+            "level": 2866.6,
+            "distance_pct": -3.16
+          },
+          "nearest_resistance": {
+            "level": 3162.0,
+            "distance_pct": 6.82
+          },
+          "price_position_description": "near_support"
+        },
+        "fractal": {
+          "timeframe_alignment": "conflicting",
+          "trend_consensus": "sideways"
+        }
+      }
+    },
+    {
+      "symbol": "INFY",
+      "output": "/Users/aaryanmanawat/Aaryan/StockAnalyzer Pro/version3.0/3.0/backend/agents/patterns/cross_validation_agent/charts_mock/INFY_price_volume_ms.png",
+      "market_context": {
+        "source": "market_structure_agent",
+        "timestamp": "2025-10-14T18:19:22.236960",
+        "regime": {
+          "regime": "trending",
+          "confidence": 0.43
+        },
+        "structure_bias": "bearish",
+        "trend": {
+          "direction": "sideways",
+          "strength": "weak",
+          "quality": "fair"
+        },
+        "bos_choch": {
+          "total_bos_events": 10,
+          "total_choch_events": 0,
+          "recent_structural_break": {
+            "type": "bearish_bos",
+            "date": "2025-08-11 00:00:00+05:30",
+            "break_price": 1414.0,
+            "previous_level": 1559.8,
+            "percentage_break": 9.35,
+            "strength": "strong"
+          }
+        },
+        "key_levels": {
+          "current_price": 1487.2,
+          "nearest_support": {
+            "level": 1428.3,
+            "distance_pct": -3.96
+          },
+          "nearest_resistance": {
+            "level": 1523.2,
+            "distance_pct": 2.42
+          },
+          "price_position_description": "mid_range"
+        },
+        "fractal": {
+          "timeframe_alignment": "conflicting",
+          "trend_consensus": "sideways"
+        }
+      }
+    },
+    {
+      "symbol": "HDFCBANK",
+      "output": "/Users/aaryanmanawat/Aaryan/StockAnalyzer Pro/version3.0/3.0/backend/agents/patterns/cross_validation_agent/charts_mock/HDFCBANK_price_volume_ms.png",
+      "market_context": {
+        "source": "market_structure_agent",
+        "timestamp": "2025-10-14T18:19:22.475330",
+        "regime": {
+          "regime": "trending",
+          "confidence": 0.43
+        },
+        "structure_bias": "bearish",
+        "trend": {
+          "direction": "uptrend",
+          "strength": "medium",
+          "quality": "good"
+        },
+        "bos_choch": {
+          "total_bos_events": 9,
+          "total_choch_events": 0,
+          "recent_structural_break": {
+            "type": "bearish_bos",
+            "date": "2025-09-03 00:00:00+05:30",
+            "break_price": 940.0,
+            "previous_level": 982.8,
+            "percentage_break": 4.35,
+            "strength": "strong"
+          }
+        },
+        "key_levels": {
+          "current_price": 977.0,
+          "nearest_support": {
+            "level": 976.5,
+            "distance_pct": -0.05
+          },
+          "nearest_resistance": {
+            "level": 979.65,
+            "distance_pct": 0.27
+          },
+          "price_position_description": "mid_range"
+        },
+        "fractal": {
+          "timeframe_alignment": "conflicting",
+          "trend_consensus": "uptrend"
+        }
+      }
+    },
+    {
+      "symbol": "ITC",
+      "output": "/Users/aaryanmanawat/Aaryan/StockAnalyzer Pro/version3.0/3.0/backend/agents/patterns/cross_validation_agent/charts_mock/ITC_price_volume_ms.png",
+      "market_context": {
+        "source": "market_structure_agent",
+        "timestamp": "2025-10-14T18:19:22.691372",
+        "regime": {
+          "regime": "mixed",
+          "confidence": 0.43
+        },
+        "structure_bias": "bearish",
+        "trend": {
+          "direction": "downtrend",
+          "strength": "medium",
+          "quality": "good"
+        },
+        "bos_choch": {
+          "total_bos_events": 11,
+          "total_choch_events": 0,
+          "recent_structural_break": {
+            "type": "bearish_bos",
+            "date": "2025-08-25 00:00:00+05:30",
+            "break_price": 396.25,
+            "previous_level": 405.55,
+            "percentage_break": 2.29,
+            "strength": "medium"
+          }
+        },
+        "key_levels": {
+          "current_price": 396.7,
+          "nearest_support": {
+            "level": 396.25,
+            "distance_pct": -0.11
+          },
+          "nearest_resistance": {
+            "level": 415.6,
+            "distance_pct": 4.76
+          },
+          "price_position_description": "near_support"
+        },
+        "fractal": {
+          "timeframe_alignment": "conflicting",
+          "trend_consensus": "downtrend"
+        }
+      }
+    }
+  ],
+  "symbols": [
+    "RELIANCE",
+    "TCS",
+    "INFY",
+    "HDFCBANK",
+    "ITC"
+  ],
+  "period_days": 365
+}
