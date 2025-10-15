@@ -380,15 +380,8 @@ class CrossValidationMultiStockTester:
                 import os
                 if os.path.exists(chart_image_path):
                     file_size = os.path.getsize(chart_image_path)
-                    logger.info(f"[CROSS_VALIDATION_TESTER] 🇫 Final chart verification: {chart_image_path} ({file_size:,} bytes)")
-                    # Copy chart to test output directory for easy access
-                    import shutil
-                    chart_copy_path = test_output_dir / f"{test_id}_chart.png"
-                    try:
-                        shutil.copy2(chart_image_path, chart_copy_path)
-                        logger.info(f"[CROSS_VALIDATION_TESTER] 📎 Chart copied to test directory: {chart_copy_path}")
-                    except Exception as copy_error:
-                        logger.warning(f"[CROSS_VALIDATION_TESTER] ⚠️ Failed to copy chart: {copy_error}")
+                    logger.info(f"[CROSS_VALIDATION_TESTER] ✅ Chart verification: {chart_image_path} ({file_size:,} bytes)")
+                    # Chart is already saved in the appropriate location by the chart generator
                 else:
                     logger.error(f"[CROSS_VALIDATION_TESTER] ❌ Final chart verification FAILED: {chart_image_path}")
             
@@ -1126,9 +1119,9 @@ async def main():
     """Main function for running cross-validation tests"""
     
     # Test configuration - using real market stocks for comprehensive testing
-    test_stocks = ["RELIANCE"]
+    test_stocks = ["INFY", "NEWGEN", "WIPRO", "HDBFS"]
     test_periods = [365]  # Different timeframes for pattern analysis
-    max_concurrent = 3           # Increase concurrency for faster testing
+    max_concurrent = 4           # Increase concurrency for faster testing
     
     # Initialize tester
     tester = CrossValidationMultiStockTester("test_results")

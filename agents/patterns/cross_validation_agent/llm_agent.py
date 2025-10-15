@@ -118,7 +118,7 @@ class CrossValidationLLMAgent:
             
         except Exception as e:
             logger.error(f"[CROSS_VALIDATION_LLM] Analysis generation failed: {e}")
-        return self._build_error_result(str(e))
+            return self._build_error_result(str(e))
     
     def _build_patterns_section(self, detected_patterns: List[Dict[str, Any]]) -> str:
         """Build the patterns section for template"""
@@ -400,7 +400,7 @@ class CrossValidationLLMAgent:
         
         return section
     
-    async def _get_llm_response(
+    def _build_validation_analysis_prompt(
         self, 
         validation_data: Dict[str, Any],
         detected_patterns: List[Dict[str, Any]],
