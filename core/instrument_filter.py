@@ -8,6 +8,7 @@ import pandas as pd
 import logging
 from typing import Dict, List, Optional, Tuple
 import re
+from .path_utils import get_zerodha_instruments_csv_path
 
 class InstrumentFilter:
     """
@@ -59,16 +60,19 @@ class InstrumentFilter:
             }
         }
     
-    def load_instruments_from_csv(self, csv_path: str = "zerodha_instruments.csv") -> pd.DataFrame:
+    def load_instruments_from_csv(self, csv_path: Optional[str] = None) -> pd.DataFrame:
         """
         Load instruments from CSV file
         
         Args:
-            csv_path: Path to the CSV file
+            csv_path: Path to the CSV file (uses default if None)
             
         Returns:
             DataFrame: Raw instruments data
         """
+        if csv_path is None:
+            csv_path = get_zerodha_instruments_csv_path()
+            
         try:
             df = pd.read_csv(csv_path)
             logging.info(f"Loaded {len(df)} instruments from {csv_path}")

@@ -31,10 +31,11 @@ try:
 except ImportError:
     pass
 
-# Shared path for Zerodha instruments CSV used by services and clients
-INSTRUMENTS_CSV_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'zerodha_instruments.csv'
-)
+# Import path resolver for consistent path handling
+from core.path_utils import get_zerodha_instruments_csv_path
+
+# Shared path for Zerodha instruments CSV used by services and clients  
+INSTRUMENTS_CSV_PATH = get_zerodha_instruments_csv_path()
 
 try:
     import msgpack

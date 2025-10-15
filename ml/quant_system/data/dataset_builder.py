@@ -10,7 +10,7 @@ This script:
 
 Usage (non-interactive example):
   python -m backend.ml.quant_system.dataset_builder \
-    --symbols_file backend/ml/quant_system/zerodha_instruments.csv \
+    --symbols_file backend/data/zerodha_instruments.csv \
     --exchange NSE \
     --num_symbols 200 \
     --from_date 2019-01-01 \
@@ -178,6 +178,7 @@ def select_universe(config: BuildConfig) -> List[str]:
     candidates: List[str] = []
     search_csvs = [
         config.symbols_file,
+        os.path.join(PROJECT_ROOT, "backend", "data", "zerodha_instruments.csv"),
         os.path.join(CURRENT_DIR, "zerodha_instruments.csv"),
         os.path.join(PROJECT_ROOT, "zerodha_instruments.csv"),
     ]
