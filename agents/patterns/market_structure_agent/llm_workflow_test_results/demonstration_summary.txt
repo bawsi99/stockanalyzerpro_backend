@@ -1,0 +1,9 @@
+Multi-Stock LLM Workflow Demonstration Summary
+==================================================
+
+Total Scenarios: 5
+Successful: 0
+Failed: 5
+Success Rate: 0.0%
+Total Time: 0.35s
+Average Workflow Time: 0.00s

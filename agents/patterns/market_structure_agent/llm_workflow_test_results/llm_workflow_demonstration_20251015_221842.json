@@ -1,0 +1,120 @@
+{
+  "demonstration_metadata": {
+    "start_time": "2025-10-15T22:18:42.187218",
+    "test_scenarios": [
+      [
+        "RELIANCE",
+        "mixed"
+      ],
+      [
+        "TCS",
+        "mixed"
+      ],
+      [
+        "INFY",
+        "mixed"
+      ],
+      [
+        "HDFCBANK",
+        "mixed"
+      ],
+      [
+        "ITC",
+        "mixed"
+      ]
+    ],
+    "total_scenarios": 5,
+    "end_time": "2025-10-15T22:18:42.533955"
+  },
+  "individual_results": [
+    {
+      "symbol": "RELIANCE",
+      "scenario": "mixed",
+      "workflow_steps": [
+        {
+          "step": 1,
+          "name": "Market Data Retrieval",
+          "duration": 0.13770699501037598,
+          "success": true,
+          "details": "Retrieved 135 data points - Source: real_market_data"
+        }
+      ],
+      "success": false,
+      "error": "The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().",
+      "total_workflow_time": 0.13773274421691895
+    },
+    {
+      "symbol": "TCS",
+      "scenario": "mixed",
+      "workflow_steps": [
+        {
+          "step": 1,
+          "name": "Market Data Retrieval",
+          "duration": 0.0466611385345459,
+          "success": true,
+          "details": "Retrieved 135 data points - Source: real_market_data"
+        }
+      ],
+      "success": false,
+      "error": "The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().",
+      "total_workflow_time": 0.046691179275512695
+    },
+    {
+      "symbol": "INFY",
+      "scenario": "mixed",
+      "workflow_steps": [
+        {
+          "step": 1,
+          "name": "Market Data Retrieval",
+          "duration": 0.0564417839050293,
+          "success": true,
+          "details": "Retrieved 135 data points - Source: real_market_data"
+        }
+      ],
+      "success": false,
+      "error": "The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().",
+      "total_workflow_time": 0.056462764739990234
+    },
+    {
+      "symbol": "HDFCBANK",
+      "scenario": "mixed",
+      "workflow_steps": [
+        {
+          "step": 1,
+          "name": "Market Data Retrieval",
+          "duration": 0.046923160552978516,
+          "success": true,
+          "details": "Retrieved 135 data points - Source: real_market_data"
+        }
+      ],
+      "success": false,
+      "error": "The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().",
+      "total_workflow_time": 0.046942949295043945
+    },
+    {
+      "symbol": "ITC",
+      "scenario": "mixed",
+      "workflow_steps": [
+        {
+          "step": 1,
+          "name": "Market Data Retrieval",
+          "duration": 0.05845212936401367,
+          "success": true,
+          "details": "Retrieved 135 data points - Source: real_market_data"
+        }
+      ],
+      "success": false,
+      "error": "The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().",
+      "total_workflow_time": 0.05847501754760742
+    }
+  ],
+  "summary_statistics": {
+    "total_demonstration_time": 0.34673500061035156,
+    "scenarios_attempted": 5,
+    "scenarios_successful": 0,
+    "scenarios_failed": 5,
+    "success_rate_percent": 0.0,
+    "average_workflow_time": 0
+  },
+  "success": false
+}
