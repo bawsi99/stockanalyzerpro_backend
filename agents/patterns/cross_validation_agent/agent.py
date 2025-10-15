@@ -24,11 +24,20 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 
 # Import agent components
 from agents.patterns.cross_validation_agent.processor import CrossValidationProcessor
-from agents.patterns.cross_validation_agent.charts import CrossValidationChartGenerator
+from agents.patterns.cross_validation_agent.pattern_chart_generator import PatternChartGenerator
 from agents.patterns.cross_validation_agent.pattern_detection import PatternDetector
 from agents.patterns.cross_validation_agent.llm_agent import CrossValidationLLMAgent
 from agents.patterns.market_structure_agent.processor import MarketStructureProcessor
-from llm import get_llm_client
+# Try importing LLM client - use try/except for robustness
+try:
+    from llm import get_llm_client
+except ImportError:
+    try:
+        from backend.llm import get_llm_client  
+    except ImportError:
+        # Fallback for testing
+        def get_llm_client(name):
+            return None
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +63,7 @@ class CrossValidationAgent:
         # Initialize sub-components
         self.pattern_detector = PatternDetector()
         self.processor = CrossValidationProcessor()
-        self.chart_generator = CrossValidationChartGenerator()
+        self.chart_generator = PatternChartGenerator()
         self.llm_client = self._initialize_llm()
         
         # Initialize enhanced LLM agent with temporal analysis capabilities
@@ -282,19 +291,30 @@ class CrossValidationAgent:
             
             # Step 2: Chart Generation (if requested)
             charts_results = None
+            chart_image_path = None
             if include_charts:
                 try:
-                    logger.info(f"[CROSS_VALIDATION_AGENT] Generating validation charts for {symbol}")
-                    charts_results = self.chart_generator.generate_cross_validation_charts(
-                        stock_data, validation_results, symbol, save_path
+                    logger.info(f"[CROSS_VALIDATION_AGENT] Generating pattern visualization chart for {symbol}")
+                    
+                    # Generate pattern chart using the new matplotlib-based generator
+                    charts_results = self.chart_generator.generate_pattern_chart(
+                        stock_data, detected_patterns, symbol, save_path
                     )
                     
+                    # Extract chart image path for LLM if available
+                    if charts_results.get('success'):
+                        chart_image_path = charts_results.get('saved_image_path')
+                        if chart_image_path:
+                            logger.info(f"[CROSS_VALIDATION_AGENT] Chart image available for LLM analysis: {chart_image_path}")
+                    
                     results['charts'] = charts_results
+                    results['chart_image_path'] = chart_image_path
                     results['components_executed'].append('charts')
                     
                 except Exception as e:
                     logger.error(f"[CROSS_VALIDATION_AGENT] Chart generation failed for {symbol}: {e}")
                     results['charts'] = {'success': False, 'error': str(e)}
+                    chart_image_path = None
             
             # Step 2.5: Build Market Structure context (lightweight)
             market_context = None
@@ -355,8 +375,11 @@ class CrossValidationAgent:
                     except Exception:
                         logger.info(f"[CROSS_VALIDATION_AGENT] Market context present: False; source=None")
 
+                    # Get chart image path if available
+                    llm_chart_image_path = results.get('chart_image_path') if include_charts else None
+                    
                     llm_results = await self._generate_llm_analysis(
-                        filtered_validation_data, filtered_patterns, symbol, market_context
+                        filtered_validation_data, filtered_patterns, symbol, market_context, llm_chart_image_path
                     )
                     
                     results['llm_analysis'] = llm_results
@@ -730,7 +753,7 @@ class CrossValidationAgent:
             self.logger.error(f"❌ Failed to initialize Cross Validation LLM Agent: {e}")
             return None
     
-    async def _generate_llm_analysis(self, validation_results: Dict[str, Any], detected_patterns: List[Dict[str, Any]], symbol: str, market_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def _generate_llm_analysis(self, validation_results: Dict[str, Any], detected_patterns: List[Dict[str, Any]], symbol: str, market_context: Optional[Dict[str, Any]] = None, chart_image_path: Optional[str] = None) -> Dict[str, Any]:
         """Generate LLM analysis for validation results using enhanced LLM agent"""
         try:
             # Use the enhanced LLM agent with temporal analysis capabilities
@@ -738,7 +761,8 @@ class CrossValidationAgent:
                 validation_data=validation_results,
                 detected_patterns=detected_patterns,
                 symbol=symbol,
-                market_context=market_context  # pass market structure context when available
+                market_context=market_context,  # pass market structure context when available
+                chart_image_path=chart_image_path  # pass chart image for multimodal analysis
             )
                 
         except Exception as e:

@@ -24,6 +24,7 @@ class PatternDetector:
     - Channel and rectangle patterns
     - Head and shoulders patterns
     - Double top/bottom detection
+    - Triple top/bottom detection
     """
     
     def __init__(self):
@@ -70,25 +71,37 @@ class PatternDetector:
             # 5. Double Top/Bottom Detection
             double_patterns = self._detect_double_patterns(stock_data)
             
-            # 6. Compile and analyze all patterns
+            # 6. Triple Top/Bottom Detection
+            triple_patterns = self._detect_triple_patterns(stock_data)
+            
+            # 7. RSI Divergence Detection
+            rsi_divergence_patterns = self._detect_rsi_divergence_patterns(stock_data)
+            
+            # 8. Price Divergence Detection
+            price_divergence_patterns = self._detect_price_divergence_patterns(stock_data)
+            
+            # 9. Compile and analyze all patterns
             all_patterns = self._compile_all_patterns(
                 triangle_patterns, flag_pennant_patterns, channel_patterns,
-                head_shoulders_patterns, double_patterns
+                head_shoulders_patterns, double_patterns, triple_patterns,
+                rsi_divergence_patterns, price_divergence_patterns
             )
             
-            # 7. Generate pattern summary
+            # 10. Generate pattern summary
             pattern_summary = self._analyze_pattern_summary(
                 triangle_patterns, flag_pennant_patterns, channel_patterns, 
-                head_shoulders_patterns, double_patterns
+                head_shoulders_patterns, double_patterns, triple_patterns,
+                rsi_divergence_patterns, price_divergence_patterns
             )
             
-            # 8. Formation stage analysis
+            # 9. Formation stage analysis
             formation_stage = self._analyze_formation_stage(stock_data, pattern_summary)
             
-            # 9. Key levels identification
+            # 12. Key levels identification
             key_levels = self._identify_pattern_levels(
                 stock_data, triangle_patterns, flag_pennant_patterns, 
-                channel_patterns, head_shoulders_patterns, double_patterns
+                channel_patterns, head_shoulders_patterns, double_patterns, triple_patterns,
+                rsi_divergence_patterns, price_divergence_patterns
             )
             
             processing_time = (datetime.now() - start_time).total_seconds()
@@ -583,6 +596,329 @@ class PatternDetector:
             logger.error(f"[PATTERN_DETECTOR] Double pattern detection failed: {e}")
             return []
     
+    def _detect_triple_patterns(self, stock_data: pd.DataFrame) -> List[Dict[str, Any]]:
+        """Detect triple top and triple bottom patterns"""
+        try:
+            patterns = []
+            
+            # Import the pattern recognition module
+            try:
+                from patterns.recognition import PatternRecognition
+            except ImportError:
+                logger.warning("[PATTERN_DETECTOR] PatternRecognition module not available")
+                return patterns
+            
+            # Detect triple tops
+            triple_tops = PatternRecognition.detect_triple_top(stock_data['close'])
+            for triple_top in triple_tops:
+                if triple_top['quality_score'] >= 20:  # Only high-quality patterns
+                    peaks = triple_top['peaks']
+                    valleys = triple_top['valleys']
+                    
+                    pattern = {
+                        'pattern_name': 'triple_top',
+                        'pattern_type': 'reversal',
+                        'completion_status': triple_top['completion_status'],
+                        'completion_percentage': min(100, max(50, triple_top['quality_score'])),  # Convert quality to completion
+                        'reliability': 'high' if triple_top['quality_score'] > 70 else 'medium' if triple_top['quality_score'] > 40 else 'low',
+                        'pattern_quality': 'strong' if triple_top['quality_score'] > 70 else 'medium' if triple_top['quality_score'] > 40 else 'weak',
+                        'start_date': peaks[0]['date'],
+                        'end_date': peaks[2]['date'],
+                        'pattern_duration_days': (pd.to_datetime(peaks[2]['date']) - pd.to_datetime(peaks[0]['date'])).days,
+                        'pattern_age_days': (stock_data.index[-1] - pd.to_datetime(peaks[2]['date'])).days,
+                        'pattern_data': {
+                            'peaks': [{
+                                'index': peak['index'],
+                                'price': peak['price'],
+                                'date': peak['date']
+                            } for peak in peaks],
+                            'valleys': valleys,
+                            'support_level': triple_top['support_level'],
+                            'target': triple_top['target'],
+                            'peak_similarity': triple_top['peak_similarity']
+                        }
+                    }
+                    patterns.append(pattern)
+            
+            # Detect triple bottoms
+            triple_bottoms = PatternRecognition.detect_triple_bottom(stock_data['close'])
+            for triple_bottom in triple_bottoms:
+                if triple_bottom['quality_score'] >= 20:  # Only high-quality patterns
+                    lows = triple_bottom['lows']
+                    peaks = triple_bottom['peaks']
+                    
+                    pattern = {
+                        'pattern_name': 'triple_bottom',
+                        'pattern_type': 'reversal',
+                        'completion_status': triple_bottom['completion_status'],
+                        'completion_percentage': min(100, max(50, triple_bottom['quality_score'])),  # Convert quality to completion
+                        'reliability': 'high' if triple_bottom['quality_score'] > 70 else 'medium' if triple_bottom['quality_score'] > 40 else 'low',
+                        'pattern_quality': 'strong' if triple_bottom['quality_score'] > 70 else 'medium' if triple_bottom['quality_score'] > 40 else 'weak',
+                        'start_date': lows[0]['date'],
+                        'end_date': lows[2]['date'],
+                        'pattern_duration_days': (pd.to_datetime(lows[2]['date']) - pd.to_datetime(lows[0]['date'])).days,
+                        'pattern_age_days': (stock_data.index[-1] - pd.to_datetime(lows[2]['date'])).days,
+                        'pattern_data': {
+                            'lows': [{
+                                'index': low['index'],
+                                'price': low['price'],
+                                'date': low['date']
+                            } for low in lows],
+                            'peaks': peaks,
+                            'resistance_level': triple_bottom['resistance_level'],
+                            'target': triple_bottom['target'],
+                            'low_similarity': triple_bottom['low_similarity']
+                        }
+                    }
+                    patterns.append(pattern)
+            
+            # Limit to most significant patterns
+            if len(patterns) > 2:
+                patterns = sorted(patterns, key=lambda x: x['completion_percentage'], reverse=True)[:2]
+            
+            return patterns
+            
+        except Exception as e:
+            logger.error(f"[PATTERN_DETECTOR] Triple pattern detection failed: {e}")
+            return []
+    
+    def _detect_rsi_divergence_patterns(self, stock_data: pd.DataFrame) -> List[Dict[str, Any]]:
+        """Detect RSI divergence patterns"""
+        try:
+            patterns = []
+            
+            # Check if we have enough data
+            if len(stock_data) < 30:
+                return patterns
+            
+            # Calculate RSI first
+            try:
+                from ml.indicators.technical_indicators import TechnicalIndicators
+            except ImportError:
+                logger.warning("[PATTERN_DETECTOR] TechnicalIndicators module not available")
+                return patterns
+            
+            rsi = TechnicalIndicators.calculate_rsi(stock_data)
+            if rsi is None or len(rsi) < 20:
+                return patterns
+            
+            # Use the existing divergence detection
+            divergence_data = TechnicalIndicators.detect_rsi_divergence(stock_data['close'], rsi)
+            
+            # Process bearish divergences
+            for div in divergence_data.get('bearish_divergence', []):
+                if div['strength'] == 'strong':
+                    price_peaks = div['price_peaks']
+                    rsi_peaks = div['rsi_peaks']
+                    
+                    # Calculate temporal information
+                    start_date = stock_data.index[price_peaks[0]]
+                    end_date = stock_data.index[price_peaks[1]]
+                    pattern_duration_days = (end_date - start_date).days if hasattr(end_date - start_date, 'days') else (price_peaks[1] - price_peaks[0])
+                    pattern_age_days = (stock_data.index[-1] - end_date).days if hasattr(stock_data.index[-1] - end_date, 'days') else (len(stock_data) - price_peaks[1] - 1)
+                    
+                    pattern = {
+                        'pattern_name': 'rsi_bearish_divergence',
+                        'pattern_type': 'reversal',
+                        'completion_status': 'completed',
+                        'completion_percentage': 85,
+                        'reliability': 'high',
+                        'pattern_quality': 'strong',
+                        'start_date': str(start_date),
+                        'end_date': str(end_date),
+                        'pattern_duration_days': pattern_duration_days,
+                        'pattern_age_days': pattern_age_days,
+                        'pattern_data': {
+                            'price_peaks': {
+                                'first': {
+                                    'index': price_peaks[0],
+                                    'price': float(stock_data['close'].iloc[price_peaks[0]])
+                                },
+                                'second': {
+                                    'index': price_peaks[1],
+                                    'price': float(stock_data['close'].iloc[price_peaks[1]])
+                                }
+                            },
+                            'rsi_peaks': {
+                                'first': {
+                                    'index': rsi_peaks[0],
+                                    'value': float(rsi.iloc[rsi_peaks[0]])
+                                },
+                                'second': {
+                                    'index': rsi_peaks[1],
+                                    'value': float(rsi.iloc[rsi_peaks[1]])
+                                }
+                            },
+                            'divergence_strength': div['strength']
+                        }
+                    }
+                    patterns.append(pattern)
+            
+            # Process bullish divergences
+            for div in divergence_data.get('bullish_divergence', []):
+                if div['strength'] == 'strong':
+                    price_lows = div['price_lows']
+                    rsi_lows = div['rsi_lows']
+                    
+                    # Calculate temporal information
+                    start_date = stock_data.index[price_lows[0]]
+                    end_date = stock_data.index[price_lows[1]]
+                    pattern_duration_days = (end_date - start_date).days if hasattr(end_date - start_date, 'days') else (price_lows[1] - price_lows[0])
+                    pattern_age_days = (stock_data.index[-1] - end_date).days if hasattr(stock_data.index[-1] - end_date, 'days') else (len(stock_data) - price_lows[1] - 1)
+                    
+                    pattern = {
+                        'pattern_name': 'rsi_bullish_divergence',
+                        'pattern_type': 'reversal',
+                        'completion_status': 'completed',
+                        'completion_percentage': 85,
+                        'reliability': 'high',
+                        'pattern_quality': 'strong',
+                        'start_date': str(start_date),
+                        'end_date': str(end_date),
+                        'pattern_duration_days': pattern_duration_days,
+                        'pattern_age_days': pattern_age_days,
+                        'pattern_data': {
+                            'price_lows': {
+                                'first': {
+                                    'index': price_lows[0],
+                                    'price': float(stock_data['close'].iloc[price_lows[0]])
+                                },
+                                'second': {
+                                    'index': price_lows[1],
+                                    'price': float(stock_data['close'].iloc[price_lows[1]])
+                                }
+                            },
+                            'rsi_lows': {
+                                'first': {
+                                    'index': rsi_lows[0],
+                                    'value': float(rsi.iloc[rsi_lows[0]])
+                                },
+                                'second': {
+                                    'index': rsi_lows[1],
+                                    'value': float(rsi.iloc[rsi_lows[1]])
+                                }
+                            },
+                            'divergence_strength': div['strength']
+                        }
+                    }
+                    patterns.append(pattern)
+            
+            return patterns
+            
+        except Exception as e:
+            logger.error(f"[PATTERN_DETECTOR] RSI divergence detection failed: {e}")
+            return []
+    
+    def _detect_price_divergence_patterns(self, stock_data: pd.DataFrame) -> List[Dict[str, Any]]:
+        """Detect price divergence patterns using multiple oscillators"""
+        try:
+            patterns = []
+            
+            # Check if we have enough data
+            if len(stock_data) < 30:
+                return patterns
+            
+            try:
+                from ml.indicators.technical_indicators import TechnicalIndicators
+            except ImportError:
+                logger.warning("[PATTERN_DETECTOR] TechnicalIndicators module not available")
+                return patterns
+            
+            # Calculate multiple oscillators for divergence analysis
+            macd, macd_signal = TechnicalIndicators.calculate_macd(stock_data['close'])
+            stoch_k, stoch_d = TechnicalIndicators.calculate_stochastic_oscillator(stock_data)
+            
+            if macd is None or len(macd) < 20:
+                return patterns
+            
+            # Use the general divergence detection from PatternRecognition
+            try:
+                from patterns.recognition import PatternRecognition
+                
+                # MACD divergences
+                macd_divs = PatternRecognition.detect_divergence(stock_data['close'], macd)
+                
+                for div_data in macd_divs:
+                    start_idx, end_idx, div_type = div_data
+                    
+                    # Calculate temporal information
+                    start_date = stock_data.index[start_idx]
+                    end_date = stock_data.index[end_idx]
+                    pattern_duration_days = (end_date - start_date).days if hasattr(end_date - start_date, 'days') else (end_idx - start_idx)
+                    pattern_age_days = (stock_data.index[-1] - end_date).days if hasattr(stock_data.index[-1] - end_date, 'days') else (len(stock_data) - end_idx - 1)
+                    
+                    pattern = {
+                        'pattern_name': f'macd_{div_type}_divergence',
+                        'pattern_type': 'reversal',
+                        'completion_status': 'completed',
+                        'completion_percentage': 80,
+                        'reliability': 'medium',
+                        'pattern_quality': 'medium',
+                        'start_date': str(start_date),
+                        'end_date': str(end_date),
+                        'pattern_duration_days': pattern_duration_days,
+                        'pattern_age_days': pattern_age_days,
+                        'pattern_data': {
+                            'divergence_type': div_type,
+                            'start_price': float(stock_data['close'].iloc[start_idx]),
+                            'end_price': float(stock_data['close'].iloc[end_idx]),
+                            'start_macd': float(macd.iloc[start_idx]),
+                            'end_macd': float(macd.iloc[end_idx]),
+                            'price_change': float((stock_data['close'].iloc[end_idx] - stock_data['close'].iloc[start_idx]) / stock_data['close'].iloc[start_idx] * 100),
+                            'macd_change': float((macd.iloc[end_idx] - macd.iloc[start_idx]) / abs(macd.iloc[start_idx]) * 100) if macd.iloc[start_idx] != 0 else 0
+                        }
+                    }
+                    patterns.append(pattern)
+                
+                # Stochastic divergences (if available)
+                if stoch_k is not None and len(stoch_k) >= 20:
+                    stoch_divs = PatternRecognition.detect_divergence(stock_data['close'], stoch_k)
+                    
+                    for div_data in stoch_divs:
+                        start_idx, end_idx, div_type = div_data
+                        
+                        # Calculate temporal information
+                        start_date = stock_data.index[start_idx]
+                        end_date = stock_data.index[end_idx]
+                        pattern_duration_days = (end_date - start_date).days if hasattr(end_date - start_date, 'days') else (end_idx - start_idx)
+                        pattern_age_days = (stock_data.index[-1] - end_date).days if hasattr(stock_data.index[-1] - end_date, 'days') else (len(stock_data) - end_idx - 1)
+                        
+                        pattern = {
+                            'pattern_name': f'stochastic_{div_type}_divergence',
+                            'pattern_type': 'reversal',
+                            'completion_status': 'completed',
+                            'completion_percentage': 75,
+                            'reliability': 'medium',
+                            'pattern_quality': 'medium',
+                            'start_date': str(start_date),
+                            'end_date': str(end_date),
+                            'pattern_duration_days': pattern_duration_days,
+                            'pattern_age_days': pattern_age_days,
+                            'pattern_data': {
+                                'divergence_type': div_type,
+                                'start_price': float(stock_data['close'].iloc[start_idx]),
+                                'end_price': float(stock_data['close'].iloc[end_idx]),
+                                'start_stoch': float(stoch_k.iloc[start_idx]),
+                                'end_stoch': float(stoch_k.iloc[end_idx]),
+                                'price_change': float((stock_data['close'].iloc[end_idx] - stock_data['close'].iloc[start_idx]) / stock_data['close'].iloc[start_idx] * 100),
+                                'stoch_change': float((stoch_k.iloc[end_idx] - stoch_k.iloc[start_idx]) / stoch_k.iloc[start_idx] * 100) if stoch_k.iloc[start_idx] != 0 else 0
+                            }
+                        }
+                        patterns.append(pattern)
+                
+            except ImportError:
+                logger.warning("[PATTERN_DETECTOR] PatternRecognition module not available")
+            
+            # Limit to most significant patterns
+            if len(patterns) > 3:
+                patterns = sorted(patterns, key=lambda x: x['completion_percentage'], reverse=True)[:3]
+            
+            return patterns
+            
+        except Exception as e:
+            logger.error(f"[PATTERN_DETECTOR] Price divergence detection failed: {e}")
+            return []
+    
     def _calculate_trend_line(self, values: np.ndarray) -> Optional[List[float]]:
         """Calculate trend line for a series of values"""
         try:
@@ -816,8 +1152,24 @@ class PatternDetector:
                 confluence = 'none'
             
             # Determine bias
-            bullish_patterns = [p for p in all_patterns if 'bullish' in p['pattern_name'] or 'ascending' in p['pattern_name'] or 'inverse' in p['pattern_name']]
-            bearish_patterns = [p for p in all_patterns if 'bearish' in p['pattern_name'] or 'descending' in p['pattern_name'] or ('head_and_shoulders' in p['pattern_name'] and 'inverse' not in p['pattern_name'])]
+            bullish_patterns = [p for p in all_patterns if (
+                'bullish' in p['pattern_name'] or 
+                'ascending' in p['pattern_name'] or 
+                'inverse' in p['pattern_name'] or
+                'rsi_bullish_divergence' in p['pattern_name'] or
+                'macd_bullish_divergence' in p['pattern_name'] or
+                'stochastic_bullish_divergence' in p['pattern_name'] or
+                'triple_bottom' in p['pattern_name']
+            )]
+            bearish_patterns = [p for p in all_patterns if (
+                'bearish' in p['pattern_name'] or 
+                'descending' in p['pattern_name'] or 
+                ('head_and_shoulders' in p['pattern_name'] and 'inverse' not in p['pattern_name']) or
+                'rsi_bearish_divergence' in p['pattern_name'] or
+                'macd_bearish_divergence' in p['pattern_name'] or
+                'stochastic_bearish_divergence' in p['pattern_name'] or
+                'triple_top' in p['pattern_name']
+            )]
             
             if len(bullish_patterns) > len(bearish_patterns):
                 bias = 'bullish'
@@ -890,6 +1242,17 @@ class PatternDetector:
                         breakout_levels.append(pattern_data['neckline_level'])
                     if 'apex_price' in pattern_data:
                         breakout_levels.append(pattern_data['apex_price'])
+                    
+                    # Handle divergence patterns
+                    if 'divergence' in pattern['pattern_name']:
+                        if 'price_peaks' in pattern_data:
+                            # Bearish divergence creates resistance at recent peak
+                            if pattern_data.get('price_peaks', {}).get('second'):
+                                resistance_levels.append(pattern_data['price_peaks']['second']['price'])
+                        if 'price_lows' in pattern_data:
+                            # Bullish divergence creates support at recent low
+                            if pattern_data.get('price_lows', {}).get('second'):
+                                support_levels.append(pattern_data['price_lows']['second']['price'])
             
             # Find nearest levels
             nearest_resistance = None

@@ -105,12 +105,14 @@ class CrossValidationMultiStockTester:
         
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Test configuration
+        # Test configuration - Production pipeline settings
         self.test_config = {
-            'include_charts': False,
-            'include_llm_analysis': True,
-            'save_individual_results': False,
-            'save_charts': False
+            'include_charts': True,  # Enable charts for multimodal LLM analysis
+            'include_llm_analysis': True,  # Full production LLM integration
+            'save_individual_results': True,  # Save each test result
+            'save_prompts_responses': True,  # Save LLM prompts and responses
+            'debug_chart_generation': True,  # Enhanced chart generation debugging
+            'verify_image_generation': True  # Verify images are properly generated
         }
         
         # Results storage
@@ -245,23 +247,66 @@ class CrossValidationMultiStockTester:
             # Prepare save path for this test
             test_output_dir = self.output_dir / test_id
             test_output_dir.mkdir(exist_ok=True)
-            save_path = str(test_output_dir / f"{test_id}_charts.html")
+            save_path = str(test_output_dir / f"{test_id}_pattern_chart")
             
-            # Run complete analysis (pattern detection + validation)
+            # Run complete analysis (pattern detection + validation) with production pipeline
+            logger.info(f"[CROSS_VALIDATION_TESTER] 🚀 Starting PRODUCTION pipeline for {symbol}")
+            logger.info(f"[CROSS_VALIDATION_TESTER] 📊 Charts enabled: {self.test_config['include_charts']}")
+            logger.info(f"[CROSS_VALIDATION_TESTER] 🤖 LLM analysis enabled: {self.test_config['include_llm_analysis']}")
+            logger.info(f"[CROSS_VALIDATION_TESTER] 💾 Chart save path: {save_path}")
+            
             analysis_start = time.time()
             analysis_results = await self.agent.analyze_and_validate_patterns(
                 stock_data=stock_data,
                 symbol=symbol,
                 include_charts=self.test_config['include_charts'],
                 include_llm_analysis=self.test_config['include_llm_analysis'],
-                save_path=save_path if self.test_config['save_charts'] else None
+                save_path=save_path  # Production pipeline saves all outputs
             )
             analysis_time = time.time() - analysis_start
+            
+            # Debug logging for chart generation
+            if self.test_config['debug_chart_generation']:
+                chart_results = analysis_results.get('charts', {})
+                logger.info(f"[CROSS_VALIDATION_TESTER] 📈 Chart generation results: {chart_results}")
+                
+                chart_image_path = analysis_results.get('chart_image_path')
+                if chart_image_path:
+                    logger.info(f"[CROSS_VALIDATION_TESTER] 🖼️ Chart image path: {chart_image_path}")
+                    
+                    # Verify image file exists and get details
+                    if self.test_config['verify_image_generation']:
+                        import os
+                        if os.path.exists(chart_image_path):
+                            file_size = os.path.getsize(chart_image_path)
+                            logger.info(f"[CROSS_VALIDATION_TESTER] ✅ Chart image verified: {file_size:,} bytes")
+                        else:
+                            logger.error(f"[CROSS_VALIDATION_TESTER] ❌ Chart image NOT found: {chart_image_path}")
+                else:
+                    logger.warning(f"[CROSS_VALIDATION_TESTER] ⚠️ No chart image path in results")
             
             # Extract validation results from the complete analysis
             validation_results = analysis_results.get('cross_validation', {})
             pattern_detection_results = analysis_results.get('pattern_detection', {})
             detected_patterns = pattern_detection_results.get('detected_patterns', [])
+            llm_analysis = analysis_results.get('llm_analysis', {})
+            
+            # Debug logging for LLM analysis
+            logger.info(f"[CROSS_VALIDATION_TESTER] 🤖 LLM analysis success: {llm_analysis.get('success', False)}")
+            if llm_analysis.get('success'):
+                token_usage = llm_analysis.get('token_usage', {})
+                if token_usage:
+                    input_tokens = token_usage.get('input_tokens', 0)
+                    output_tokens = token_usage.get('output_tokens', 0)
+                    logger.info(f"[CROSS_VALIDATION_TESTER] 🎯 Token usage - Input: {input_tokens:,}, Output: {output_tokens:,}")
+                
+                analysis_content = llm_analysis.get('analysis', '')
+                if analysis_content:
+                    analysis_length = len(str(analysis_content))
+                    logger.info(f"[CROSS_VALIDATION_TESTER] 📝 LLM response length: {analysis_length:,} characters")
+            else:
+                llm_error = llm_analysis.get('error', 'Unknown error')
+                logger.error(f"[CROSS_VALIDATION_TESTER] ❌ LLM analysis failed: {llm_error}")
             
             # Build test result
             test_result = {
@@ -294,10 +339,13 @@ class CrossValidationMultiStockTester:
                 'consistency_analysis': validation_results.get('consistency_analysis', {}),
                 'alternative_validation': validation_results.get('alternative_validation', {}),
                 
-                # Component status
+                # Component status with enhanced debugging
                 'charts_generated': validation_results.get('charts_generated', 0),
-                'llm_analysis_success': validation_results.get('llm_analysis', {}).get('success', False),
-                'components_executed': validation_results.get('analysis_summary', {}).get('components_list', []),
+                'chart_image_path': analysis_results.get('chart_image_path'),
+                'chart_generation_success': analysis_results.get('charts', {}).get('success', False),
+                'llm_analysis_success': llm_analysis.get('success', False),
+                'llm_token_usage': llm_analysis.get('token_usage', {}),
+                'components_executed': analysis_results.get('components_executed', []),
                 
                 # AI insights (if available)
                 'ai_insights_available': bool(validation_results.get('validation_insights')),
@@ -314,19 +362,47 @@ class CrossValidationMultiStockTester:
             # Save individual test result if configured
             if self.test_config['save_individual_results']:
                 await self._save_individual_validation_result(test_result, test_output_dir)
+                logger.info(f"[CROSS_VALIDATION_TESTER] 💾 Individual result saved to: {test_output_dir}")
             
-            # Save prompt and response if LLM analysis was performed
-            full_analysis = test_result.get('full_analysis_results', {})
-            llm_analysis = full_analysis.get('llm_analysis', {})
-            if llm_analysis.get('success', False):
-                await self._save_prompt_response(test_result, test_output_dir)
+            # Save prompt and response if enabled and LLM analysis was performed
+            if self.test_config['save_prompts_responses']:
+                full_analysis = test_result.get('full_analysis_results', {})
+                llm_analysis = full_analysis.get('llm_analysis', {})
+                if llm_analysis.get('success', False):
+                    await self._save_prompt_response(test_result, test_output_dir)
+                    logger.info(f"[CROSS_VALIDATION_TESTER] 📜 Prompt and response saved to: {test_output_dir / 'prompts_responses'}")
+                else:
+                    logger.warning(f"[CROSS_VALIDATION_TESTER] ⚠️ No LLM analysis to save for {test_id}")
             
-            logger.info(f"[CROSS_VALIDATION_TESTER] Completed {test_id} - "
+            # Additional chart verification and logging
+            chart_image_path = test_result.get('chart_image_path')
+            if chart_image_path and self.test_config['verify_image_generation']:
+                import os
+                if os.path.exists(chart_image_path):
+                    file_size = os.path.getsize(chart_image_path)
+                    logger.info(f"[CROSS_VALIDATION_TESTER] 🇫 Final chart verification: {chart_image_path} ({file_size:,} bytes)")
+                    # Copy chart to test output directory for easy access
+                    import shutil
+                    chart_copy_path = test_output_dir / f"{test_id}_chart.png"
+                    try:
+                        shutil.copy2(chart_image_path, chart_copy_path)
+                        logger.info(f"[CROSS_VALIDATION_TESTER] 📎 Chart copied to test directory: {chart_copy_path}")
+                    except Exception as copy_error:
+                        logger.warning(f"[CROSS_VALIDATION_TESTER] ⚠️ Failed to copy chart: {copy_error}")
+                else:
+                    logger.error(f"[CROSS_VALIDATION_TESTER] ❌ Final chart verification FAILED: {chart_image_path}")
+            
+            # Comprehensive test completion logging
+            logger.info(f"[CROSS_VALIDATION_TESTER] ✅ Completed {test_id} - "
                        f"Success: {test_result['validation_success']}, "
-                       f"Patterns Validated: {test_result['patterns_validated']}, "
+                       f"Patterns: {test_result['patterns_validated']}, "
                        f"Methods: {test_result['validation_methods_used']}, "
-                       f"Data Source: {test_result['data_source']}, "
+                       f"Data: {test_result['data_source']}, "
                        f"Time: {test_result['test_duration']:.2f}s")
+            
+            logger.info(f"[CROSS_VALIDATION_TESTER] 📊 Chart Success: {test_result.get('chart_generation_success', False)}, "
+                       f"LLM Success: {test_result.get('llm_analysis_success', False)}, "
+                       f"Components: {len(test_result.get('components_executed', []))}")
             
             return test_result
             
@@ -660,11 +736,13 @@ class CrossValidationMultiStockTester:
             logger.error(f"[CROSS_VALIDATION_TESTER] Failed to save individual validation result: {e}")
     
     async def _save_prompt_response(self, test_result: Dict[str, Any], test_output_dir: Path):
-        """Save LLM prompt and response for debugging and analysis."""
+        """Save LLM prompt and response for debugging and analysis with comprehensive chart information."""
         try:
             # Create prompts_responses directory
             prompts_dir = test_output_dir / "prompts_responses"
             prompts_dir.mkdir(exist_ok=True)
+            
+            logger.info(f"[CROSS_VALIDATION_TESTER] 📜 Saving prompt and response for multimodal analysis...")
             
             symbol = test_result['symbol']
             test_id = test_result['test_id']
@@ -709,10 +787,44 @@ class CrossValidationMultiStockTester:
                     cross_validation_results, detected_patterns, symbol, market_context_for_prompt
                 )
                 
-                # Save prompt
+                # Save prompt with metadata header
+                chart_image_path = full_analysis_results.get('chart_image_path')
+                chart_metadata = ""
+                if chart_image_path:
+                    import os
+                    if os.path.exists(chart_image_path):
+                        file_size = os.path.getsize(chart_image_path)
+                        chart_metadata = f"""
+# CHART GENERATION METADATA
+# Chart Image Path: {chart_image_path}
+# Chart File Size: {file_size:,} bytes
+# Chart Generation Success: {full_analysis_results.get('charts', {}).get('success', False)}
+# Patterns Visualized: {len(detected_patterns)}
+# Generated for Multimodal LLM Analysis: Yes
+
+"""
+                    else:
+                        chart_metadata = f"""
+# CHART GENERATION METADATA
+# Chart Image Path: {chart_image_path} (FILE NOT FOUND)
+# Chart Generation Success: False
+# Error: Chart file does not exist
+
+"""
+                else:
+                    chart_metadata = """
+# CHART GENERATION METADATA
+# Chart Generation: Disabled or Failed
+# No chart image available for this analysis
+
+"""
+                
                 prompt_file = prompts_dir / f"{test_id}_prompt.txt"
                 with open(prompt_file, 'w', encoding='utf-8') as f:
+                    f.write(chart_metadata)
                     f.write(prompt)
+                
+                logger.info(f"[CROSS_VALIDATION_TESTER] 📝 Prompt saved with chart metadata: {prompt_file}")
                 
                 # Save LLM response if available
                 if llm_analysis.get('success', False):
@@ -737,12 +849,30 @@ class CrossValidationMultiStockTester:
                     with open(insights_file, 'w', encoding='utf-8') as f:
                         json.dump(validation_insights, f, indent=2, default=str)
                 
+                # Save chart image information if available
+                chart_info = {
+                    'chart_image_path': chart_image_path,
+                    'chart_generation_success': full_analysis_results.get('charts', {}).get('success', False),
+                    'patterns_visualized': len(detected_patterns),
+                    'chart_exists': os.path.exists(chart_image_path) if chart_image_path else False,
+                    'chart_file_size_bytes': os.path.getsize(chart_image_path) if chart_image_path and os.path.exists(chart_image_path) else 0,
+                    'multimodal_analysis_enabled': True
+                }
+                
+                chart_info_file = prompts_dir / f"{test_id}_chart_info.json"
+                with open(chart_info_file, 'w', encoding='utf-8') as f:
+                    json.dump(chart_info, f, indent=2, default=str)
+                
+                logger.info(f"[CROSS_VALIDATION_TESTER] 🖼️ Chart info saved: {chart_info_file}")
+                
                 # Save token usage information if available
                 token_usage = llm_analysis.get('token_usage')
                 if token_usage:
                     usage_file = prompts_dir / f"{test_id}_token_usage.json"
                     with open(usage_file, 'w', encoding='utf-8') as f:
                         json.dump(token_usage, f, indent=2, default=str)
+                    
+                    logger.info(f"[CROSS_VALIDATION_TESTER] 🎯 Token usage saved: {usage_file}")
                         
                 logger.debug(f"[CROSS_VALIDATION_TESTER] Saved prompts and responses to {prompts_dir}")
                         
