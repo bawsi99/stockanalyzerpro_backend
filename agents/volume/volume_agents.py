@@ -509,17 +509,52 @@ class VolumeAgentsOrchestrator:
                 chart_image = None
                 try:
                     if agent_name == 'support_resistance':
-                        # Support resistance chart generation is handled internally by the agent
-                        # This is just a placeholder - the agent handles its own chart generation
-                        chart_image = None
+                        # Generate support/resistance chart for LLM analysis
+                        from agents.volume.support_resistance.charts import SupportResistanceCharts
+                        from agents.volume.support_resistance.processor import SupportResistanceProcessor
+                        
+                        # First get the technical analysis for chart generation
+                        processor = SupportResistanceProcessor()
+                        analysis_results = processor.process_support_resistance_data(stock_data)
+                        
+                        if 'error' not in analysis_results:
+                            # Generate chart using the chart generator
+                            chart_generator = SupportResistanceCharts()
+                            fig = chart_generator.create_quick_levels_chart(
+                                stock_data, analysis_results, symbol
+                            )
+                            
+                            # Convert chart to bytes
+                            import io
+                            import matplotlib.pyplot as plt
+                            buf = io.BytesIO()
+                            fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+                            buf.seek(0)
+                            chart_image = buf.getvalue()
+                            buf.close()
+                            plt.close(fig)
+                            
                     elif agent_name == 'volume_confirmation':
-                        # Placeholder for volume_confirmation chart generation if needed
-                        pass
+                        # Generate volume confirmation chart for LLM analysis
+                        from agents.volume.volume_confirmation.charts import VolumeConfirmationChartGenerator
+                        from agents.volume.volume_confirmation.processor import VolumeConfirmationProcessor
+                        
+                        # First get the technical analysis for chart generation
+                        processor = VolumeConfirmationProcessor()
+                        analysis_data = processor.process_volume_confirmation_data(stock_data)
+                        
+                        if 'error' not in analysis_data:
+                            # Generate chart using the chart generator
+                            chart_generator = VolumeConfirmationChartGenerator()
+                            chart_image = chart_generator.generate_volume_confirmation_chart(
+                                stock_data, analysis_data, symbol
+                            )
                     
                     print(f"[DISTRIBUTED_AGENT] {agent_name} chart generation completed for {symbol} - has_image={chart_image is not None}")
                 except Exception as chart_error:
                     logger.warning(f"Chart generation failed for distributed agent {agent_name}: {chart_error}")
                     print(f"[DISTRIBUTED_AGENT] {agent_name} chart generation failed for {symbol}: {chart_error}")
+                    chart_image = None
                 
                 llm_agent_result = await self.llm_agents[agent_name].analyze_with_llm(
                     stock_data=stock_data, 

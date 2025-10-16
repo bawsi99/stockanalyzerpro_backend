@@ -71,10 +71,131 @@ from services.database_service import make_json_serializable # Importing the ser
 
 # Lightweight in-process cache to pass prefetched data between endpoints within the same service
 # Keyed by correlation_id; values contain {'stock_data': pd.DataFrame, 'indicators': Dict[str, Any], 'created_at': datetime}
-# OPTIMIZATION: Used by volume agents AND sector agents to avoid redundant data fetching
+# OPTIMIZATION: Used by volume agents, sector agents, AND pattern agents to avoid redundant data fetching
 # - Volume agents: Reuse stock_data and indicators from enhanced_analyze
 # - Sector agents: Reuse stock_data from enhanced_analyze (saves 200-500ms per request)
+# - Pattern agents: Reuse stock_data and indicators from enhanced_analyze (saves 300-600ms per request)
 VOLUME_PREFETCH_CACHE: dict[str, dict] = {}
+
+# Cache cleanup mechanism - shared by all agent types
+CACHE_MAX_AGE_MINUTES = 30  # Pattern analysis can take time, so extend cache lifetime
+CACHE_MAX_SIZE = 200  # Support more concurrent analyses
+
+def cleanup_prefetch_cache():
+    """Clean up expired cache entries to prevent memory bloat."""
+    try:
+        current_time = datetime.now()
+        expired_keys = [
+            key for key, value in VOLUME_PREFETCH_CACHE.items()
+            if isinstance(value, dict) and 
+               value.get('created_at') and 
+               (current_time - value['created_at']).total_seconds() > (CACHE_MAX_AGE_MINUTES * 60)
+        ]
+        
+        for key in expired_keys:
+            del VOLUME_PREFETCH_CACHE[key]
+        
+        # Limit cache size
+        if len(VOLUME_PREFETCH_CACHE) > CACHE_MAX_SIZE:
+            # Remove oldest entries
+            sorted_items = sorted(
+                VOLUME_PREFETCH_CACHE.items(),
+                key=lambda x: x[1].get('created_at', datetime.min) if isinstance(x[1], dict) else datetime.min
+            )
+            keys_to_remove = [item[0] for item in sorted_items[:len(VOLUME_PREFETCH_CACHE) - CACHE_MAX_SIZE]]
+            for key in keys_to_remove:
+                del VOLUME_PREFETCH_CACHE[key]
+                
+        if expired_keys or len(VOLUME_PREFETCH_CACHE) > CACHE_MAX_SIZE:
+            print(f"[CACHE_CLEANUP] Removed {len(expired_keys)} expired entries, cache size: {len(VOLUME_PREFETCH_CACHE)}")
+            
+    except Exception as e:
+        print(f"[CACHE_CLEANUP] Error during cleanup: {e}")
+        
+def _extract_pattern_insights_for_decision(pattern_results: dict) -> str:
+    """
+    Extract pattern insights in a format suitable for the final decision agent.
+    
+    This function converts the structured pattern analysis results into a narrative
+    format that the final decision agent can use for its decision making process.
+    """
+    try:
+        if not pattern_results or not isinstance(pattern_results, dict):
+            return ""
+            
+        if not pattern_results.get('success', False):
+            return f"Pattern analysis failed: {pattern_results.get('error', 'Unknown error')}"
+            
+        insights = []
+        
+        # Overall confidence and summary
+        overall_confidence = pattern_results.get('overall_confidence', 0.0)
+        insights.append(f"Pattern Analysis Confidence: {overall_confidence:.1%}")
+        
+        # Consensus signals
+        consensus_signals = pattern_results.get('consensus_signals', {})
+        if consensus_signals:
+            signal_direction = consensus_signals.get('signal_direction', 'neutral')
+            signal_strength = consensus_signals.get('signal_strength', 'weak')
+            insights.append(f"Consensus Signal: {signal_direction.upper()} ({signal_strength} strength)")
+            
+            # Detected patterns
+            detected_patterns = consensus_signals.get('detected_patterns', [])
+            if detected_patterns:
+                patterns_text = ", ".join(detected_patterns[:5])  # Limit to top 5 patterns
+                insights.append(f"Key Patterns Detected: {patterns_text}")
+        
+        # Market structure analysis highlights
+        ms_analysis = pattern_results.get('market_structure_analysis', {})
+        if ms_analysis and ms_analysis.get('success', False):
+            ms_confidence = ms_analysis.get('confidence_score', 0.0)
+            insights.append(f"Market Structure Confidence: {ms_confidence:.1%}")
+            
+            # Add key market structure insights
+            ms_technical = ms_analysis.get('technical_analysis', {})
+            if ms_technical:
+                bos_events = ms_technical.get('bos_events', [])
+                if bos_events:
+                    recent_bos = bos_events[-1] if bos_events else {}
+                    if recent_bos:
+                        insights.append(f"Recent Break of Structure: {recent_bos.get('direction', 'unknown')} at {recent_bos.get('price', 'N/A')}")
+        
+        # Cross-validation analysis highlights
+        cv_analysis = pattern_results.get('cross_validation_analysis', {})
+        if cv_analysis and cv_analysis.get('success', False):
+            # Pattern detection results
+            pattern_detection = cv_analysis.get('pattern_detection', {})
+            if pattern_detection:
+                detected_count = len(pattern_detection.get('detected_patterns', []))
+                if detected_count > 0:
+                    insights.append(f"Cross-Validation: {detected_count} patterns confirmed")
+        
+        # Pattern conflicts (important for decision making)
+        pattern_conflicts = pattern_results.get('pattern_conflicts', [])
+        if pattern_conflicts:
+            conflict_count = len(pattern_conflicts)
+            insights.append(f"Pattern Conflicts Detected: {conflict_count} (requires careful consideration)")
+        
+        # Unified analysis summary
+        unified_analysis = pattern_results.get('unified_analysis', {})
+        if unified_analysis:
+            recommendation = unified_analysis.get('recommendation', '')
+            if recommendation:
+                insights.append(f"Pattern Recommendation: {recommendation}")
+            
+            risk_level = unified_analysis.get('risk_assessment', '')
+            if risk_level:
+                insights.append(f"Pattern-based Risk: {risk_level}")
+        
+        # Join all insights into a coherent narrative
+        if insights:
+            return "\n".join([f"• {insight}" for insight in insights])
+        else:
+            return "Pattern analysis completed but no significant insights generated."
+            
+    except Exception as e:
+        print(f"[PATTERN_INSIGHTS_EXTRACTION] Error: {e}")
+        return f"Error extracting pattern insights: {str(e)}"
 
 # Try to import optional dependencies
 try:
@@ -862,6 +983,28 @@ class RiskAnalysisRequest(BaseModel):
     return_prompt: Optional[bool] = Field(default=False, description="Return enhanced prompt where applicable")
     timeframes: Optional[List[str]] = Field(default=["short", "medium", "long"], description="Risk analysis timeframes")
 
+# --- Market Structure Agent API Models ---
+class MarketStructureRequest(BaseModel):
+    symbol: str = Field(..., description="Stock symbol")
+    exchange: str = Field(default="NSE", description="Stock exchange")
+    interval: str = Field(default="day", description="Data interval (internal mapping)")
+    period: int = Field(default=365, description="Analysis period in days")
+    correlation_id: Optional[str] = Field(default=None, description="Optional correlation ID for tracing")
+    return_prompt: Optional[bool] = Field(default=False, description="Return enhanced prompt where applicable")
+    context: Optional[str] = Field(default="", description="Additional context for market structure analysis")
+    include_charts: Optional[bool] = Field(default=True, description="Whether to generate charts")
+    include_llm_analysis: Optional[bool] = Field(default=True, description="Whether to include LLM analysis")
+
+# --- Pattern Analysis Agent API Models ---
+class PatternAnalysisRequest(BaseModel):
+    symbol: str = Field(..., description="Stock symbol")
+    exchange: str = Field(default="NSE", description="Stock exchange")
+    interval: str = Field(default="day", description="Data interval (internal mapping)")
+    period: int = Field(default=365, description="Analysis period in days")
+    correlation_id: Optional[str] = Field(default=None, description="Optional correlation ID for tracing")
+    return_prompt: Optional[bool] = Field(default=False, description="Return enhanced prompt where applicable")
+    context: Optional[str] = Field(default="", description="Additional context for pattern analysis")
+
 # --- REST API Endpoints ---
 
 @app.get("/health")
@@ -1068,6 +1211,9 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 'created_at': datetime.now()
             }
             print(f"[PREFETCH_DEBUG] ✅ Successfully stored in cache with correlation_id: {correlation_id}")
+            
+            # Cleanup expired cache entries to manage memory
+            cleanup_prefetch_cache()
         except Exception as cache_e:
             print(f"[VOLUME_PREFETCH_CACHE] Failed to store prefetched data: {cache_e}")
 
@@ -1349,13 +1495,52 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
 
         indicator_task = asyncio.create_task(_with_logging("indicator_summary", _indicator_summary(), timeout=120.0))
 
+        # Pattern analysis agent via service endpoint (loopback)
+        patterns_agents_url = os.getenv("ANALYSIS_SERVICE_URL", "http://localhost:8002") + "/agents/patterns/analyze-all"
+        async def _patterns():
+            try:
+                print(f"[PATTERN_DEBUG] Starting pattern analysis for {request.stock}...")
+                
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    resp = await client.post(
+                        patterns_agents_url,
+                        json={
+                            "symbol": request.stock,
+                            "exchange": request.exchange,
+                            "interval": request.interval,
+                            "period": request.period,
+                            "correlation_id": correlation_id,
+                            "return_prompt": False,  # Don't return prompt in parallel execution
+                            "context": f"Enhanced pattern analysis for {request.stock}"
+                        }
+                    )
+                    resp.raise_for_status()
+                    result = resp.json()
+                    
+                    print(f"[PATTERN_DEBUG] Pattern analysis completed for {request.stock}. Success: {result.get('success')}")
+                    
+                    if result.get('success'):
+                        print(f"✅ [PATTERN_AGENT] Analysis completed for {request.stock}")
+                        print(f"   Confidence: {result.get('pattern_summary', {}).get('overall_confidence', 0):.2%}")
+                        print(f"   Patterns Detected: {result.get('pattern_summary', {}).get('patterns_detected', 0)}")
+                        return result
+                    else:
+                        print(f"⚠️ [PATTERN_AGENT] Analysis failed: {result.get('error', 'Unknown error')}")
+                        return {}
+                        
+            except Exception as e:
+                print(f"[PATTERN] Error calling pattern analysis endpoint: {e}")
+                return {}
+
+        patterns_task = asyncio.create_task(_with_logging("patterns", _patterns(), timeout=200.0))
+
         # Await all independent tasks with return_exceptions=True to avoid cancellation
         parallel_t0 = time.monotonic()
-        results = await asyncio.gather(volume_task, mtf_task, advanced_task, sector_task, indicator_task, risk_task, return_exceptions=True)
+        results = await asyncio.gather(volume_task, mtf_task, advanced_task, sector_task, indicator_task, risk_task, patterns_task, return_exceptions=True)
         parallel_dt = time.monotonic() - parallel_t0
         print(f"[PARALLEL] Independent tasks completed in {parallel_dt:.2f}s")
         # One-line summary for quick glance
-        names = ["volume_agents", "mtf", "advanced", "sector", "indicator_summary", "risk"]
+        names = ["volume_agents", "mtf", "advanced", "sector", "indicator_summary", "risk", "patterns"]
         summary = ", ".join(
             f"{n}={durations.get(n, float('nan')):.2f}s/{'OK' if statuses.get(n) else 'ERR'}" for n in names
         )
@@ -1367,6 +1552,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         sector_context = results[3]
         indicator_summary_result = results[4]
         risk_context = results[5]
+        patterns_context = results[6]
 
         # Normalize exceptions to empty fallbacks
         if isinstance(volume_agents_result, Exception):
@@ -1407,6 +1593,19 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                     print(f"[PARALLEL] risk bullets_for_decision length: {bullets_len}")
             else:
                 print(f"[PARALLEL] risk result is empty or not dict")
+        if isinstance(patterns_context, Exception):
+            print(f"[PARALLEL] patterns failed: {type(patterns_context).__name__}: {patterns_context!r}")
+            patterns_context = {}
+        else:
+            # DEBUG: Log what we actually got from patterns task
+            print(f"[PARALLEL] patterns result type: {type(patterns_context)}, has_data: {bool(patterns_context)}")
+            if isinstance(patterns_context, dict) and patterns_context:
+                print(f"[PARALLEL] patterns result keys: {list(patterns_context.keys())}")
+                if 'pattern_insights_for_decision' in patterns_context:
+                    insights_len = len(patterns_context['pattern_insights_for_decision']) if patterns_context['pattern_insights_for_decision'] else 0
+                    print(f"[PARALLEL] pattern insights_for_decision length: {insights_len}")
+            else:
+                print(f"[PARALLEL] patterns result is empty or not dict")
 
         # Normalize contexts
         if not isinstance(mtf_context, dict):
@@ -1419,6 +1618,8 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             volume_agents_result = {}
         if not isinstance(risk_context, dict):
             risk_context = {}
+        if not isinstance(patterns_context, dict):
+            patterns_context = {}
 
         indicator_summary_md, indicator_json, indicator_json_blob = ("", {}, "")
         if isinstance(indicator_summary_result, tuple):
@@ -1485,6 +1686,15 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         except Exception as e:
             print(f"[MTF_INTEGRATION] Error preparing MTF payload for final decision: {e}")
             mtf_payload = None
+
+        # Extract pattern insights for final decision agent
+        pattern_insights = None
+        try:
+            if patterns_context and isinstance(patterns_context, dict):
+                pattern_insights = patterns_context.get('pattern_insights_for_decision') or None
+        except Exception as e:
+            print(f"[PATTERN_INTEGRATION] Error extracting pattern insights: {e}")
+            pattern_insights = None
 
         # Final decision with START/END logging
         fd_t0 = time.monotonic()
@@ -1622,6 +1832,25 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         else:
             print(f"  (Empty or None)")
         
+        # Debug: Pattern Insights (NEW - PATTERN ANALYSIS LLM AGENT)
+        print(f"\n[FD_INPUT] Pattern Insights (type: {type(pattern_insights)}, has_data: {bool(pattern_insights)}):")
+        if pattern_insights:
+            if isinstance(pattern_insights, str):
+                # Show first few lines of pattern insights
+                lines = pattern_insights.split('\n')[:5]  # First 5 lines
+                print(f"  Content (first 5 lines):")
+                for i, line in enumerate(lines, 1):
+                    print(f"    {i}. {line}")
+                total_lines = len(pattern_insights.split('\n'))
+                if total_lines > 5:
+                    remaining_lines = total_lines - 5
+                    print(f"    ... ({remaining_lines} more lines)")
+                print(f"  Total length: {len(pattern_insights)} characters")
+            else:
+                print(f"  {str(pattern_insights)[:200]}..." if len(str(pattern_insights)) > 200 else f"  {pattern_insights}")
+        else:
+            print(f"  (Empty or None)")
+        
         print(f"\n[FD_INPUT] Knowledge Context: (Empty string)")
         print(f"{'='*80}\n")
 
@@ -1633,6 +1862,7 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
                 sector_bullets=sector_bullets,
                 advanced_digest=advanced_analysis or {},
                 risk_bullets=risk_bullets,  # NEW: Pass enhanced multi-timeframe risk bullets
+                pattern_insights=pattern_insights,  # NEW: Pass pattern analysis LLM insights
                 chart_insights=chart_insights_md,
                 knowledge_context="",
                 volume_analysis=volume_agents_result or {}
@@ -3800,6 +4030,488 @@ async def agents_risk_analyze_all(req: RiskAnalysisRequest):
                 "success": False,
                 "error": error_msg,
                 "agent": "risk_analysis",
+                "symbol": req.symbol,
+                "processing_time": total_time,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+# ===== MARKET STRUCTURE AGENT ENDPOINT =====
+
+@app.post("/agents/market-structure/analyze")
+async def agents_market_structure_analyze(req: MarketStructureRequest):
+    """
+    Standalone Market Structure Analysis Agent endpoint.
+    
+    Provides comprehensive market structure analysis including:
+    - Swing points detection and analysis
+    - BOS (Break of Structure) and CHOCH (Change of Character) events
+    - Trend structure analysis
+    - Support and resistance levels from structure
+    - Fractal analysis
+    - LLM-enhanced structural insights
+    - Multi-modal chart analysis
+    
+    This is the primary endpoint for market structure analysis, similar to
+    the cross-validation agent pattern.
+    """
+    start_time = time.monotonic()
+    print(f"[MARKET_STRUCTURE_AGENT] Starting standalone analysis for {req.symbol}")
+    
+    try:
+        # Attempt to reuse prefetched data if provided via correlation_id
+        stock_data = None
+        if req.correlation_id:
+            try:
+                cached = VOLUME_PREFETCH_CACHE.get(req.correlation_id, None)
+                if cached and isinstance(cached, dict):
+                    stock_data = cached.get('stock_data')
+                    print(f"[MARKET_STRUCTURE_AGENT] Using prefetched data for correlation_id={req.correlation_id}")
+            except Exception as cache_e:
+                print(f"[MARKET_STRUCTURE_AGENT] Error retrieving prefetched data: {cache_e}")
+        
+        # Retrieve stock data only if not provided
+        if stock_data is None:
+            try:
+                orchestrator = StockAnalysisOrchestrator()
+                stock_data = await orchestrator.retrieve_stock_data(
+                    symbol=req.symbol,
+                    exchange=req.exchange,
+                    interval=req.interval,
+                    period=req.period
+                )
+                print(f"[MARKET_STRUCTURE_AGENT] Retrieved {len(stock_data)} days of data for {req.symbol}")
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+        
+        # Run market structure agent with configurable options
+        from agents.patterns.market_structure_agent.agent import MarketStructureAgent
+        agent = MarketStructureAgent()
+        
+        # Use analyze_complete for full analysis
+        result_data = await agent.analyze_complete(
+            stock_data=stock_data, 
+            symbol=req.symbol, 
+            context=req.context or ""
+        )
+        
+        # Build comprehensive response
+        total_time = time.monotonic() - start_time
+        
+        # Extract key insights for summary
+        key_insights = agent.get_key_insights(result_data) if result_data.get('success') else []
+        
+        comprehensive_response = {
+            "success": result_data.get('success', False),
+            "agent": "market_structure_analysis",
+            "symbol": req.symbol,
+            "exchange": req.exchange,
+            "timestamp": datetime.now().isoformat(),
+            "processing_time": total_time,
+            "confidence_score": result_data.get('confidence_score', 0.0),
+            
+            # Technical Analysis Results
+            "technical_analysis": result_data.get('technical_analysis', {}),
+            
+            # LLM Analysis Results
+            "llm_analysis": {
+                "success": result_data.get('has_llm_analysis', False),
+                "analysis": result_data.get('llm_analysis'),
+                "enhanced_insights": bool(result_data.get('llm_analysis'))
+            },
+            
+            # Chart Information
+            "chart_info": {
+                "has_chart": result_data.get('chart_image') is not None,
+                "chart_generated": bool(result_data.get('chart_image')),
+                "chart_size_bytes": len(result_data.get('chart_image', b'')) if result_data.get('chart_image') else 0
+            },
+            
+            # Key Insights Summary
+            "key_insights": key_insights,
+            "insights_count": len(key_insights),
+            
+            # Agent Information
+            "agent_info": result_data.get('agent_info', {}),
+            
+            # For final decision agent integration (if needed)
+            "market_structure_insights_for_decision": {
+                "structural_bias": result_data.get('technical_analysis', {}).get('bos_choch_analysis', {}).get('structural_bias', 'unknown'),
+                "trend_direction": result_data.get('technical_analysis', {}).get('trend_analysis', {}).get('trend_direction', 'unknown'),
+                "trend_strength": result_data.get('technical_analysis', {}).get('trend_analysis', {}).get('trend_strength', 'unknown'),
+                "structure_quality": result_data.get('technical_analysis', {}).get('structure_quality', {}),
+                "key_levels_count": len(result_data.get('technical_analysis', {}).get('key_levels', {}).get('support_levels', [])) + len(result_data.get('technical_analysis', {}).get('key_levels', {}).get('resistance_levels', [])),
+                "confidence_score": result_data.get('confidence_score', 0.0)
+            },
+            
+            # Error handling
+            "error": result_data.get('error') if not result_data.get('success') else None,
+            
+            # Optional: Return prompt if requested
+            "prompt_details": {
+                "returned": req.return_prompt and result_data.get('has_llm_analysis', False),
+                "note": "LLM prompts available in technical analysis results"
+            } if req.return_prompt else None,
+            
+            # Metadata
+            "request_metadata": {
+                "context": req.context,
+                "correlation_id": req.correlation_id,
+                "used_prefetched_data": bool(req.correlation_id and cached),
+                "include_charts": req.include_charts,
+                "include_llm_analysis": req.include_llm_analysis
+            }
+        }
+        
+        # Handle errors
+        if not result_data.get('success', False):
+            comprehensive_response['error'] = result_data.get('error', 'Market structure analysis failed')
+        
+        # Ensure JSON serializable
+        serializable_response = make_json_serializable(comprehensive_response)
+        
+        success_status = "✅" if result_data.get('success', False) else "❌"
+        print(f"[MARKET_STRUCTURE_AGENT] {success_status} Standalone analysis completed for {req.symbol} in {total_time:.2f}s")
+        print(f"[MARKET_STRUCTURE_AGENT] - Confidence: {result_data.get('confidence_score', 0)}")
+        print(f"[MARKET_STRUCTURE_AGENT] - LLM Analysis: {result_data.get('has_llm_analysis', False)}")
+        print(f"[MARKET_STRUCTURE_AGENT] - Chart Generated: {bool(result_data.get('chart_image'))}")
+        
+        return JSONResponse(content=serializable_response, status_code=200)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        total_time = time.monotonic() - start_time
+        error_msg = f"Market structure analysis failed for {req.symbol}: {str(e)}"
+        print(f"[MARKET_STRUCTURE_AGENT] ❌ {error_msg} (after {total_time:.2f}s)")
+        import traceback
+        traceback.print_exc()
+        
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": error_msg,
+                "agent": "market_structure_analysis",
+                "symbol": req.symbol,
+                "processing_time": total_time,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+# ===== PATTERN ANALYSIS AGENT ENDPOINTS =====
+
+# ===== PATTERN ANALYSIS AGENT ENDPOINTS =====
+
+@app.post("/agents/patterns/market-structure")
+async def agents_patterns_market_structure(req: PatternAnalysisRequest):
+    """
+    Market Structure Analysis Agent endpoint.
+    
+    Analyzes market structure including:
+    - Swing points detection and analysis
+    - BOS (Break of Structure) and CHOCH (Change of Character) events
+    - Trend structure analysis
+    - Support and resistance levels from structure
+    - Fractal analysis
+    """
+    start_time = time.monotonic()
+    print(f"[MARKET_STRUCTURE_AGENT] Starting analysis for {req.symbol}")
+    
+    try:
+        # Attempt to reuse prefetched data if provided via correlation_id
+        stock_data = None
+        if req.correlation_id:
+            try:
+                cached = VOLUME_PREFETCH_CACHE.get(req.correlation_id, None)
+                if cached and isinstance(cached, dict):
+                    stock_data = cached.get('stock_data')
+                    print(f"[MARKET_STRUCTURE_AGENT] Using prefetched data for correlation_id={req.correlation_id}")
+            except Exception as cache_e:
+                print(f"[MARKET_STRUCTURE_AGENT] Error retrieving prefetched data: {cache_e}")
+        
+        # Retrieve stock data only if not provided
+        if stock_data is None:
+            try:
+                orchestrator = StockAnalysisOrchestrator()
+                stock_data = await orchestrator.retrieve_stock_data(
+                    symbol=req.symbol,
+                    exchange=req.exchange,
+                    interval=req.interval,
+                    period=req.period
+                )
+                print(f"[MARKET_STRUCTURE_AGENT] Retrieved {len(stock_data)} days of data for {req.symbol}")
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+        
+        # Run market structure agent
+        from agents.patterns.market_structure_agent.agent import MarketStructureAgent
+        agent = MarketStructureAgent()
+        result_data = await agent.analyze_complete(stock_data, req.symbol, req.context)
+        
+        # Build response
+        total_time = time.monotonic() - start_time
+        response = {
+            "success": result_data.get('success', False),
+            "agent": "market_structure",
+            "symbol": req.symbol,
+            "exchange": req.exchange,
+            "timestamp": datetime.now().isoformat(),
+            "processing_time": total_time,
+            "confidence_score": result_data.get('confidence_score', 0.0),
+            "technical_analysis": result_data.get('technical_analysis', {}),
+            "llm_analysis": result_data.get('llm_analysis', {}),
+            "has_chart": result_data.get('chart_image') is not None,
+            "error": result_data.get('error') if not result_data.get('success') else None,
+            "metadata": {
+                "context": req.context,
+                "correlation_id": req.correlation_id,
+                "used_prefetched_data": bool(req.correlation_id and stock_data)
+            }
+        }
+        
+        print(f"✅ [MARKET_STRUCTURE_AGENT] Analysis completed for {req.symbol} in {total_time:.2f}s")
+        return JSONResponse(content=make_json_serializable(response), status_code=200)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        total_time = time.monotonic() - start_time
+        print(f"❌ [MARKET_STRUCTURE_AGENT] Analysis failed for {req.symbol}: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "agent": "market_structure",
+                "symbol": req.symbol,
+                "processing_time": total_time,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+@app.post("/agents/patterns/cross-validation")
+async def agents_patterns_cross_validation(req: PatternAnalysisRequest):
+    """
+    Cross-Validation Pattern Analysis Agent endpoint.
+    
+    Performs:
+    - Pattern detection (triangles, flags, channels, head & shoulders, double patterns)
+    - Multi-method pattern validation
+    - Confidence assessment
+    - LLM-powered validation insights
+    """
+    start_time = time.monotonic()
+    print(f"[CROSS_VALIDATION_AGENT] Starting analysis for {req.symbol}")
+    
+    try:
+        # Attempt to reuse prefetched data if provided via correlation_id
+        stock_data = None
+        if req.correlation_id:
+            try:
+                cached = VOLUME_PREFETCH_CACHE.get(req.correlation_id, None)
+                if cached and isinstance(cached, dict):
+                    stock_data = cached.get('stock_data')
+                    print(f"[CROSS_VALIDATION_AGENT] Using prefetched data for correlation_id={req.correlation_id}")
+            except Exception as cache_e:
+                print(f"[CROSS_VALIDATION_AGENT] Error retrieving prefetched data: {cache_e}")
+        
+        # Retrieve stock data only if not provided
+        if stock_data is None:
+            try:
+                orchestrator = StockAnalysisOrchestrator()
+                stock_data = await orchestrator.retrieve_stock_data(
+                    symbol=req.symbol,
+                    exchange=req.exchange,
+                    interval=req.interval,
+                    period=req.period
+                )
+                print(f"[CROSS_VALIDATION_AGENT] Retrieved {len(stock_data)} days of data for {req.symbol}")
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+        
+        # Run cross-validation agent (includes pattern detection)
+        from agents.patterns.cross_validation_agent.agent import CrossValidationAgent
+        agent = CrossValidationAgent()
+        result_data = await agent.analyze_and_validate_patterns(
+            stock_data=stock_data,
+            symbol=req.symbol,
+            include_charts=True,
+            include_llm_analysis=True
+        )
+        
+        # Build response
+        total_time = time.monotonic() - start_time
+        response = {
+            "success": result_data.get('success', False),
+            "agent": "cross_validation",
+            "symbol": req.symbol,
+            "exchange": req.exchange,
+            "timestamp": datetime.now().isoformat(),
+            "processing_time": total_time,
+            "pattern_detection": result_data.get('pattern_detection', {}),
+            "cross_validation": result_data.get('cross_validation', {}),
+            "llm_analysis": result_data.get('llm_analysis', {}),
+            "components_executed": result_data.get('components_executed', []),
+            "error": result_data.get('error') if not result_data.get('success') else None,
+            "metadata": {
+                "context": req.context,
+                "correlation_id": req.correlation_id,
+                "used_prefetched_data": bool(req.correlation_id and stock_data)
+            }
+        }
+        
+        print(f"✅ [CROSS_VALIDATION_AGENT] Analysis completed for {req.symbol} in {total_time:.2f}s")
+        return JSONResponse(content=make_json_serializable(response), status_code=200)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        total_time = time.monotonic() - start_time
+        print(f"❌ [CROSS_VALIDATION_AGENT] Analysis failed for {req.symbol}: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": str(e),
+                "agent": "cross_validation",
+                "symbol": req.symbol,
+                "processing_time": total_time,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+@app.post("/agents/patterns/analyze-all")
+async def agents_patterns_analyze_all(req: PatternAnalysisRequest):
+    """
+    Comprehensive Pattern Analysis endpoint - runs all pattern agents.
+    
+    This endpoint runs both pattern agents concurrently:
+    - Market Structure Agent: swing points, BOS/CHOCH, trend structure
+    - Cross-Validation Agent: pattern detection and validation
+    
+    Provides aggregated results with consensus signals and conflict detection.
+    """
+    start_time = time.monotonic()
+    print(f"[PATTERN_AGENTS] Starting comprehensive pattern analysis for {req.symbol}")
+    
+    try:
+        # Attempt to reuse prefetched data if provided via correlation_id
+        stock_data = None
+        indicators = None
+        if req.correlation_id:
+            try:
+                cached = VOLUME_PREFETCH_CACHE.get(req.correlation_id, None)
+                if cached and isinstance(cached, dict):
+                    stock_data = cached.get('stock_data')
+                    indicators = cached.get('indicators')
+                    print(f"[PATTERN_AGENTS] Using prefetched data for correlation_id={req.correlation_id}")
+            except Exception as cache_e:
+                print(f"[PATTERN_AGENTS] Error retrieving prefetched data: {cache_e}")
+        
+        # Retrieve stock data only if not provided
+        if stock_data is None:
+            try:
+                orchestrator = StockAnalysisOrchestrator()
+                stock_data = await orchestrator.retrieve_stock_data(
+                    symbol=req.symbol,
+                    exchange=req.exchange,
+                    interval=req.interval,
+                    period=req.period
+                )
+                print(f"[PATTERN_AGENTS] Retrieved {len(stock_data)} days of data for {req.symbol}")
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+        
+        # Calculate indicators only if not provided
+        if indicators is None:
+            try:
+                indicators = TechnicalIndicators.calculate_all_indicators_optimized(stock_data, req.symbol)
+                print(f"[PATTERN_AGENTS] Calculated {len(indicators)} indicators for {req.symbol}")
+            except Exception as ind_e:
+                indicators = {}
+                print(f"[PATTERN_AGENTS] Warning: indicator calculation failed: {ind_e}")
+        
+        # Run comprehensive pattern analysis using the integration manager
+        from agents.patterns.pattern_agents import PatternAgentIntegrationManager
+        manager = PatternAgentIntegrationManager()
+        
+        pattern_results = await manager.get_comprehensive_pattern_analysis(
+            stock_data=stock_data,
+            symbol=req.symbol,
+            context=req.context,
+            include_charts=True,
+            include_llm_analysis=True
+        )
+        
+        # Build comprehensive response
+        total_time = time.monotonic() - start_time
+        
+        comprehensive_response = {
+            "success": pattern_results.get('success', False),
+            "agent": "pattern_analysis_all",
+            "symbol": req.symbol,
+            "exchange": req.exchange,
+            "timestamp": datetime.now().isoformat(),
+            "processing_time": total_time,
+            "overall_confidence": pattern_results.get('overall_confidence', 0.0),
+            
+            # Individual agent results
+            "market_structure_analysis": pattern_results.get('market_structure_analysis', {}),
+            "cross_validation_analysis": pattern_results.get('cross_validation_analysis', {}),
+            
+            # Aggregated insights
+            "consensus_signals": pattern_results.get('consensus_signals', {}),
+            "pattern_conflicts": pattern_results.get('pattern_conflicts', []),
+            "unified_analysis": pattern_results.get('unified_analysis', {}),
+            "agents_summary": pattern_results.get('agents_summary', {}),
+            
+        # For final decision agent integration
+        "pattern_insights_for_decision": _extract_pattern_insights_for_decision(pattern_results),
+            
+            # Metadata
+            "request_metadata": {
+                "context": req.context,
+                "correlation_id": req.correlation_id,
+                "used_prefetched_data": bool(req.correlation_id and cached)
+            },
+            
+            # Optional: Return prompt details if requested
+            "prompt_details": {
+                "returned": req.return_prompt,
+                "note": "Individual agent prompts available in agent-specific results"
+            } if req.return_prompt else None
+        }
+        
+        # Handle errors
+        if not pattern_results.get('success', False):
+            comprehensive_response['error'] = pattern_results.get('error', 'Pattern analysis failed')
+        
+        # Ensure JSON serializable
+        serializable_response = make_json_serializable(comprehensive_response)
+        
+        success_status = "✅" if pattern_results.get('success', False) else "❌"
+        print(f"[PATTERN_AGENTS] {success_status} Comprehensive analysis completed for {req.symbol} in {total_time:.2f}s")
+        print(f"[PATTERN_AGENTS] - Overall Confidence: {pattern_results.get('overall_confidence', 0):.2%}")
+        print(f"[PATTERN_AGENTS] - Agents Success: {pattern_results.get('agents_summary', {}).get('success_rate', 0):.1%}")
+        
+        return JSONResponse(content=serializable_response, status_code=200)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        total_time = time.monotonic() - start_time
+        error_msg = f"Comprehensive pattern analysis failed for {req.symbol}: {str(e)}"
+        print(f"[PATTERN_AGENTS] ❌ {error_msg} (after {total_time:.2f}s)")
+        import traceback
+        traceback.print_exc()
+        
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": error_msg,
+                "agent": "pattern_analysis_all",
                 "symbol": req.symbol,
                 "processing_time": total_time,
                 "timestamp": datetime.now().isoformat()

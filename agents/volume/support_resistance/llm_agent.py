@@ -55,6 +55,21 @@ class SupportResistanceLLMAgent:
             Dict containing technical analysis and LLM insights
         """
         try:
+            # Input validation
+            if stock_data is None or stock_data.empty:
+                return {
+                    'success': False,
+                    'error': 'No stock data provided',
+                    'symbol': symbol or 'UNKNOWN',
+                    'timestamp': datetime.now().isoformat(),
+                    'technical_analysis': {},
+                    'llm_analysis': None,
+                    'has_llm_analysis': False
+                }
+            
+            if not symbol:
+                symbol = 'UNKNOWN'
+            
             # Step 1: Perform technical analysis using processor
             technical_analysis = self.processor.process_support_resistance_data(stock_data)
             
@@ -94,6 +109,7 @@ class SupportResistanceLLMAgent:
                 except Exception as llm_error:
                     logger.warning(f"LLM analysis failed for {symbol}: {llm_error}")
                     llm_analysis = None
+                    # Ensure we still return a valid response structure even on LLM failure
             
             # Step 3: Combine technical and LLM analysis
             return {
@@ -115,7 +131,14 @@ class SupportResistanceLLMAgent:
                 'success': False,
                 'error': str(e),
                 'symbol': symbol,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'technical_analysis': {},
+                'llm_analysis': None,
+                'has_llm_analysis': False,
+                'agent_info': {
+                    'agent_name': self.agent_name,
+                    'llm_provider': self.llm_client.get_provider_info() if self.llm_client else None
+                }
             }
     
     def _build_comprehensive_prompt(self, 

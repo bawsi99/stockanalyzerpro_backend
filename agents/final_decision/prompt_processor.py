@@ -96,6 +96,7 @@ class FinalDecisionPromptProcessor:
         mtf_context: Optional[Dict[str, Any]],
         sector_bullets: Optional[str],
         risk_bullets: Optional[str],
+        pattern_insights: Optional[str] = None,
         advanced_digest: Optional[Dict[str, Any]] = None,
         volume_analysis: Optional[Dict[str, Any]] = None,
     ) -> str:
@@ -130,11 +131,13 @@ class FinalDecisionPromptProcessor:
             except Exception:
                 pass
 
-        # Add Sector and Risk synthesis sections for human-readable context
+        # Add Sector, Risk, and Pattern synthesis sections for human-readable context
         if sector_bullets and sector_bullets.strip():
             parts.append("SECTOR CONTEXT\n" + sector_bullets.strip())
         if risk_bullets and risk_bullets.strip():
             parts.append("RISK CONTEXT\n" + risk_bullets.strip())
+        if pattern_insights and pattern_insights.strip():
+            parts.append("PATTERN ANALYSIS CONTEXT\n" + pattern_insights.strip())
 
         return "\n\n".join([p for p in parts if p])
     

@@ -119,7 +119,7 @@ class SupportResistanceAgent:
                         chart_image=chart_image,
                         context=context
                     )
-                    if llm_result.get('success'):
+                    if llm_result and llm_result.get('success'):
                         llm_analysis = llm_result.get('llm_analysis')
                 except Exception as llm_error:
                     logger.warning(f"LLM analysis failed for {symbol}: {llm_error}")

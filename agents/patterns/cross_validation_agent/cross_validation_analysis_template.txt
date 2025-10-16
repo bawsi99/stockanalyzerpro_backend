@@ -1,0 +1,149 @@
+# Cross-Validation Analysis Report for {symbol}
+
+## CHART ANALYSIS CONTEXT
+You are provided with a comprehensive chart visualization showing:
+- Price action with candlesticks and moving averages
+- Volume analysis in dedicated pane
+- RSI analysis (if RSI divergences detected) with divergence overlays
+- All detected pattern overlays (geometric patterns, divergences, triple patterns)
+- Key support/resistance levels and market structure
+
+Please analyze this chart in conjunction with the numerical validation data below to provide comprehensive insights.
+
+## ANALYSIS CONTEXT
+You are an expert quantitative analyst specializing in pattern validation and risk assessment. Analyze the cross-validation results for detected chart patterns and provide comprehensive insights for trading decisions.
+
+**Analysis Date**: {current_date}
+
+## STOCK INFORMATION
+- **Symbol**: {symbol}
+- **Patterns Validated**: {patterns_validated}
+- **Validation Methods Used**: {methods_used}
+- **Overall Validation Score**: {overall_score:.2f}
+- **Final Confidence Level**: {confidence_level} ({final_conf_score:.1%})
+
+## DETECTED PATTERNS SUMMARY
+Total patterns originally detected: {total_patterns}
+
+### Original Pattern Detection:
+{patterns_section}
+
+## VALIDATION METHODS ANALYSIS
+
+### Method Scores:
+{method_scores_section}
+
+### Detailed Validation Results:
+
+{validation_results_section}
+
+## VALIDATION QUALITY ASSESSMENT
+- **Validation Completeness**: {completeness:.1%}
+- **Validation Quality**: {validation_quality}
+- **Methods Successfully Applied**: {methods_applied} out of {methods_total}
+
+## CONFIDENCE ASSESSMENT DETAILS
+- **Base Validation Score**: {base_validation_score:.2f}
+- **Method Completeness Factor**: {method_completeness_factor:.2f}
+- **Pattern Count Factor**: {pattern_count_factor:.2f}
+- **Final Confidence**: {final_confidence:.1%}
+- **Confidence Category**: {confidence_category}
+
+{confidence_diagnostics_section}
+
+{market_structure_section}
+
+{pattern_specific_section}
+
+## ANALYSIS REQUIREMENTS
+
+Please provide a comprehensive cross-validation analysis covering:
+
+### 1. VALIDATION RELIABILITY ASSESSMENT
+- Overall validation quality and completeness evaluation
+- Strengths and weaknesses of the validation process
+- Reliability of individual validation methods
+- Data quality impact on validation results
+
+### 2. PATTERN CONFIDENCE EVALUATION
+- Individual pattern validation assessment
+- Confidence level interpretation and implications
+- Pattern-specific reliability recommendations
+- Validation method agreement analysis
+
+### 3. RISK ASSESSMENT AND WARNINGS
+- Validation-based risk evaluation
+- Pattern failure probability assessment
+- Conflicting validation signals analysis
+- Data quality and methodology limitations
+
+### 4. TRADING DECISION FRAMEWORK
+- Validation-informed trading recommendations
+- Position sizing based on validation confidence
+- Entry and exit criteria considering validation results
+- Risk management protocols for different confidence levels
+
+### 5. TEMPORAL ANALYSIS AND PATTERN TIMING
+- Pattern formation timeline and duration analysis
+- Pattern age and recency assessment for trading relevance
+- Temporal clustering or pattern overlap analysis
+- Formation period quality and market conditions context
+- Pattern maturity and potential expiration considerations
+
+### 6. VALIDATION INSIGHTS AND RECOMMENDATIONS
+- Key findings from cross-validation analysis
+- Most reliable patterns and validation methods
+- Areas requiring additional confirmation
+- Recommendations for improving validation confidence
+- Time-sensitive trading opportunities or warnings
+
+## OUTPUT FORMAT
+Structure your response as a professional validation analysis report with clear sections and actionable insights. Focus on practical applications while maintaining rigorous analytical standards.
+
+**Important**: Base your analysis strictly on the provided cross-validation data. Pay special attention to pattern timing and relevance. Highlight both strengths and limitations of the validation process.
+
+## JSON OUTPUT REQUIREMENTS
+After the narrative analysis, output exactly one JSON object to summarize key decisions for downstream consumption. Do not include any text after the JSON. Do not wrap the JSON in code fences. If a field is unknown, set it to null.
+
+Schema:
+{{
+  "symbol": string,
+  "analysis_date": string,  // ISO date
+  "overall": {{
+    "validation_score": number,       // 0..1
+    "confidence": number,             // 0..1 (final)
+    "confidence_category": string,    // very_low|low|medium|high|very_high or similar
+    "confidence_cap_reason": string|null
+  }},
+  "market_regime": {{
+    "regime": string,                 // trending|consolidating|volatile|stable|mixed|unknown
+    "confidence": number|null
+  }},
+  "top_patterns": [
+    {{
+      "name": string,
+      "status": string,               // forming|completed|unknown
+      "age_days": number|null,
+      "reliability": string|null,     // high|medium|low|unknown
+      "highlights": [string],         // key strengths/weaknesses
+      "required_confirmations": [string]  // e.g., volume_surge_above_1.5x, close_above_resistance
+    }}
+  ],
+  "discarded_patterns": [
+    {{ "name": string, "age_days": number|null, "reason": string }}
+  ],
+  "risk": {{
+    "level": string,                 // very_low|low|moderate|high|very_high
+    "key_risks": [string]
+  }},
+  "decision_guidance": {{
+    "position_sizing": string,       // e.g., conservative|standard|avoid
+    "entry_rules": [string],
+    "exit_rules": [string]
+  }}
+}}
+
+Rules:
+- Output the narrative first, then the JSON as the final content.
+- Output exactly one JSON object. No trailing commentary after the JSON.
+- Use numbers for numeric fields. Use null for unknowns.

@@ -66,6 +66,7 @@ class FinalDecisionProcessor:
         mtf_context: Optional[Dict[str, Any]],
         sector_bullets: Optional[str],
         risk_bullets: Optional[str],
+        pattern_insights: Optional[str] = None,
         advanced_digest: Optional[Dict[str, Any]] = None,
         volume_analysis: Optional[Dict[str, Any]] = None,
     ) -> str:
@@ -78,6 +79,7 @@ class FinalDecisionProcessor:
             mtf_context=mtf_context,
             sector_bullets=sector_bullets,
             risk_bullets=risk_bullets,
+            pattern_insights=pattern_insights,
             advanced_digest=advanced_digest,
             volume_analysis=volume_analysis
         )
@@ -90,13 +92,14 @@ class FinalDecisionProcessor:
         sector_bullets: Optional[str] = None,
         advanced_digest: Optional[Dict[str, Any]] = None,
         risk_bullets: Optional[str] = None,
+        pattern_insights: Optional[str] = None,
         chart_insights: str = "",
         knowledge_context: str = "",
         volume_analysis: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         try:
             # Build knowledge context with injected blocks
-            kc = self._inject_context_blocks(knowledge_context, mtf_context, sector_bullets, risk_bullets, advanced_digest, volume_analysis)
+            kc = self._inject_context_blocks(knowledge_context, mtf_context, sector_bullets, risk_bullets, pattern_insights, advanced_digest, volume_analysis)
 
             # Add existing trading strategy to indicator JSON (for consistency rule) only when dict input is provided
             if isinstance(ind_json, dict):
