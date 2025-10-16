@@ -31,8 +31,6 @@ sys.path.insert(0, backend_path)  # Add backend path for direct imports
 
 try:
     from backend.llm import get_llm_client
-    from backend.gemini.prompt_manager import PromptManager
-    from backend.gemini.context_engineer import ContextEngineer, AnalysisType
     from backend.zerodha.client import ZerodhaDataClient
 except ImportError as e:
     print(f"❌ Import Error: {e}")
@@ -80,10 +78,11 @@ class SupportResistanceMultiStockTester:
             print(f"❌ Cannot initialize Support/Resistance agent: {e}")
             sys.exit(1)
         
-        # Initialize other components
-        self.prompt_manager = PromptManager()
-        self.context_engineer = ContextEngineer()
+        # Initialize chart maker
         self.chart_maker = SupportResistanceCharts()
+        
+        # Load prompt template
+        self.prompt_template = self._load_prompt_template()
         
         # Initialize LLM client with new system
         self.llm_client = None
@@ -107,6 +106,16 @@ class SupportResistanceMultiStockTester:
         ]
         
         self.results = []
+    
+    def _load_prompt_template(self) -> str:
+        """Load the volume support resistance prompt template"""
+        template_path = os.path.join(os.path.dirname(__file__), "volume_support_resistance.txt")
+        try:
+            with open(template_path, 'r') as f:
+                return f.read()
+        except FileNotFoundError:
+            print(f"⚠️ Prompt template not found at {template_path}")
+            return "Analyze the support/resistance data provided:\n\n{context}\n\nProvide trading recommendations."
     
     async def run_multi_stock_tests(self):
         """Run tests across all configured stocks"""
@@ -336,11 +345,8 @@ class SupportResistanceMultiStockTester:
                 context += "Please analyze these charts along with the numerical data provided.\n"
             
             # Format the final prompt
-            prompt = self.prompt_manager.format_prompt(
-                "volume_support_resistance",
-                context=context
-            )
-            prompt += self.prompt_manager.SOLVING_LINE
+            prompt = self.prompt_template.replace("{context}", context)
+            prompt += "\n\nLet me solve this by analyzing the data systematically.."
             
             # Add chart analysis instruction to prompt
             if chart_paths:
