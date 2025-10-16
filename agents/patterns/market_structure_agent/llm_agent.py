@@ -282,7 +282,8 @@ Please analyze this market structure data to identify key structural elements an
                 response = await self.llm_client.generate(
                     prompt=prompt,
                     images=[chart_image],
-                    enable_code_execution=False  # Market structure doesn't need code execution
+                    enable_code_execution=True,  # Match working agents pattern
+                    timeout=90
                 )
                 
                 print(f"[MARKET_STRUCTURE_LLM] Analysis completed for {symbol}")

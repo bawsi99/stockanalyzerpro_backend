@@ -8,6 +8,9 @@ Focuses on pattern visualization with clean, simple charts rather than complex i
 
 import pandas as pd
 import numpy as np
+# Force non-interactive backend for headless chart generation
+import matplotlib
+matplotlib.use('Agg')  # Use Anti-Grain Geometry backend (no GUI)
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Rectangle, FancyBboxPatch
@@ -67,14 +70,20 @@ class PatternChartGenerator:
         """
         try:
             logger.info(f"[PATTERN_CHART] Generating chart for {symbol} with {len(detected_patterns)} patterns")
+            logger.info(f"[PATTERN_CHART] Stock data shape: {stock_data.shape if stock_data is not None else 'None'}")
+            logger.info(f"[PATTERN_CHART] Stock data columns: {list(stock_data.columns) if stock_data is not None else 'None'}")
+            logger.info(f"[PATTERN_CHART] Save path provided: {save_path}")
             
             if stock_data is None or stock_data.empty:
                 return self._build_error_result("No stock data provided")
             
             # Prepare data
+            logger.info(f"[PATTERN_CHART] Preparing data...")
             df = stock_data.copy()
+            logger.info(f"[PATTERN_CHART] Data copied, computing SMAs...")
             df['sma20'] = df['close'].rolling(20).mean()
             df['sma50'] = df['close'].rolling(50).mean()
+            logger.info(f"[PATTERN_CHART] SMAs computed successfully")
             
             # Always include RSI for comprehensive analysis (valuable for pattern context)
             has_rsi_pane = True
@@ -84,19 +93,27 @@ class PatternChartGenerator:
             rsi_data = self._calculate_rsi(df['close'])
             
             # Always use 3-pane layout (Price, Volume, RSI)
+            logger.info(f"[PATTERN_CHART] Creating 3-pane matplotlib figure...")
             fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(16, 12), 
                                                gridspec_kw={'height_ratios': [3, 1, 1]})
             axes = [ax1, ax2, ax3]
+            logger.info(f"[PATTERN_CHART] Figure created successfully")
             
             # Plot price pane
+            logger.info(f"[PATTERN_CHART] Plotting price pane...")
             self._plot_price_pane(ax1, df, symbol, detected_patterns)
+            logger.info(f"[PATTERN_CHART] Price pane completed")
             
             # Plot volume pane  
+            logger.info(f"[PATTERN_CHART] Plotting volume pane...")
             self._plot_volume_pane(axes[1], df)
+            logger.info(f"[PATTERN_CHART] Volume pane completed")
             
             # Plot RSI pane (always included)
             if rsi_data is not None and len(axes) > 2:
+                logger.info(f"[PATTERN_CHART] Plotting RSI pane...")
                 self._plot_rsi_pane(axes[2], df, rsi_data, detected_patterns)
+                logger.info(f"[PATTERN_CHART] RSI pane completed")
             
             # Add pattern overlays
             if detected_patterns:
@@ -106,15 +123,23 @@ class PatternChartGenerator:
                     logger.warning(f"Failed to add pattern overlays: {e}")
             
             # Styling and layout
+            logger.info(f"[PATTERN_CHART] Applying layout adjustments...")
             plt.tight_layout()
             plt.subplots_adjust(hspace=0.1)
+            logger.info(f"[PATTERN_CHART] Layout completed")
             
             # Save chart
             saved_path = None
             if save_path:
+                logger.info(f"[PATTERN_CHART] Attempting to save chart...")
                 saved_path = self._save_chart(fig, symbol, save_path)
+                logger.info(f"[PATTERN_CHART] Save attempt completed, path: {saved_path}")
+            else:
+                logger.info(f"[PATTERN_CHART] No save path provided, skipping save")
             
+            logger.info(f"[PATTERN_CHART] Closing matplotlib figure...")
             plt.close(fig)  # Free memory
+            logger.info(f"[PATTERN_CHART] Figure closed successfully")
             
             return {
                 'success': True,
@@ -400,6 +425,96 @@ class PatternChartGenerator:
             return f'{x/1e3:.1f}K'
         else:
             return f'{int(x)}'
+    
+    def generate_pattern_chart_bytes(
+        self,
+        stock_data: pd.DataFrame,
+        detected_patterns: List[Dict[str, Any]],
+        symbol: str = "STOCK"
+    ) -> Optional[bytes]:
+        """
+        Generate a pattern visualization chart and return as bytes (like market structure agent).
+        
+        Args:
+            stock_data: DataFrame with OHLCV data
+            detected_patterns: List of detected patterns to overlay
+            symbol: Stock symbol for chart title
+            
+        Returns:
+            Chart image as bytes or None if failed
+        """
+        try:
+            logger.info(f"[PATTERN_CHART] Generating chart bytes for {symbol} with {len(detected_patterns)} patterns")
+            
+            if stock_data is None or stock_data.empty:
+                logger.error(f"[PATTERN_CHART] No stock data provided")
+                return None
+            
+            # Prepare data
+            logger.info(f"[PATTERN_CHART] Preparing data...")
+            df = stock_data.copy()
+            df['sma20'] = df['close'].rolling(20).mean()
+            df['sma50'] = df['close'].rolling(50).mean()
+            logger.info(f"[PATTERN_CHART] SMAs computed successfully")
+            
+            # Calculate RSI
+            rsi_data = self._calculate_rsi(df['close'])
+            
+            # Create 3-pane layout (Price, Volume, RSI)
+            logger.info(f"[PATTERN_CHART] Creating 3-pane matplotlib figure...")
+            fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(16, 12), 
+                                               gridspec_kw={'height_ratios': [3, 1, 1]})
+            axes = [ax1, ax2, ax3]
+            logger.info(f"[PATTERN_CHART] Figure created successfully")
+            
+            # Plot price pane
+            logger.info(f"[PATTERN_CHART] Plotting price pane...")
+            self._plot_price_pane(ax1, df, symbol, detected_patterns)
+            logger.info(f"[PATTERN_CHART] Price pane completed")
+            
+            # Plot volume pane  
+            logger.info(f"[PATTERN_CHART] Plotting volume pane...")
+            self._plot_volume_pane(axes[1], df)
+            logger.info(f"[PATTERN_CHART] Volume pane completed")
+            
+            # Plot RSI pane
+            if rsi_data is not None and len(axes) > 2:
+                logger.info(f"[PATTERN_CHART] Plotting RSI pane...")
+                self._plot_rsi_pane(axes[2], df, rsi_data, detected_patterns)
+                logger.info(f"[PATTERN_CHART] RSI pane completed")
+            
+            # Add pattern overlays
+            if detected_patterns:
+                try:
+                    self._add_pattern_overlays(axes, df, detected_patterns, rsi_data)
+                except Exception as e:
+                    logger.warning(f"Failed to add pattern overlays: {e}")
+            
+            # Styling and layout
+            logger.info(f"[PATTERN_CHART] Applying layout adjustments...")
+            plt.tight_layout()
+            plt.subplots_adjust(hspace=0.1)
+            logger.info(f"[PATTERN_CHART] Layout completed")
+            
+            # Convert to bytes
+            logger.info(f"[PATTERN_CHART] Converting chart to bytes...")
+            import io
+            img_buffer = io.BytesIO()
+            fig.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight', 
+                       facecolor='white', edgecolor='none')
+            img_buffer.seek(0)
+            chart_bytes = img_buffer.getvalue()
+            img_buffer.close()
+            
+            logger.info(f"[PATTERN_CHART] Closing matplotlib figure...")
+            plt.close(fig)  # Free memory
+            logger.info(f"[PATTERN_CHART] Chart generated successfully: {len(chart_bytes)} bytes")
+            
+            return chart_bytes
+            
+        except Exception as e:
+            logger.error(f"[PATTERN_CHART] Chart bytes generation failed: {e}")
+            return None
     
     def _build_error_result(self, error_message: str) -> Dict[str, Any]:
         """Build error result"""

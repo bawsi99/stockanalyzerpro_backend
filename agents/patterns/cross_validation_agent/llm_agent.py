@@ -82,7 +82,7 @@ class CrossValidationLLMAgent:
         detected_patterns: List[Dict[str, Any]],
         symbol: str = "STOCK",
         market_context: Optional[Dict[str, Any]] = None,
-        chart_image_path: Optional[str] = None
+        chart_image_bytes: Optional[bytes] = None
     ) -> Dict[str, Any]:
         """
         Generate comprehensive LLM analysis for cross-validation results.
@@ -109,7 +109,7 @@ class CrossValidationLLMAgent:
             )
             
             # Get LLM response (with chart image if available)
-            llm_response = await self._get_llm_response(analysis_prompt, symbol, chart_image_path)
+            llm_response = await self._get_llm_response(analysis_prompt, symbol, chart_image_bytes)
             
             # Parse and structure the response
             structured_response = self._parse_llm_response(llm_response, validation_data, symbol)
@@ -942,36 +942,34 @@ Rules:
         
         return prompt
     
-    async def _get_llm_response(self, prompt: str, symbol: str, chart_image_path: Optional[str] = None) -> str:
+    async def _get_llm_response(self, prompt: str, symbol: str, chart_image_bytes: Optional[bytes] = None) -> str:
         """Get response from LLM with error handling"""
         try:
             if not self.llm_client:
                 return f"Cross-validation analysis for {symbol} could not be completed: LLM client not initialized."
             
-            # Prepare chart image if provided
+            # Prepare chart image if provided - use bytes directly like market structure agent
             chart_images = None
-            if chart_image_path and os.path.exists(chart_image_path):
-                try:
-                    from PIL import Image
-                    chart_image = Image.open(chart_image_path)
-                    chart_images = [chart_image]
-                    logger.info(f"[CROSS_VALIDATION_LLM] Loading chart image for multimodal analysis: {chart_image_path}")
-                    
-                    # Chart context is now included in the template - no need to modify prompt here
-                    logger.info(f"[CROSS_VALIDATION_LLM] Chart image loaded - context included in template")
-                    
-                except Exception as e:
-                    logger.warning(f"[CROSS_VALIDATION_LLM] Failed to load chart image {chart_image_path}: {e}")
-                    chart_images = None
+            if chart_image_bytes:
+                chart_images = [chart_image_bytes]
+                logger.info(f"[CROSS_VALIDATION_LLM] Chart image provided: {len(chart_image_bytes)} bytes")
+            else:
+                logger.info(f"[CROSS_VALIDATION_LLM] No chart image bytes provided")
             
-            # Make async call to LLM using new backend/llm system
+            # Make async call to LLM using new backend/llm system - FIXED to match working agents
             if chart_images:
-                llm_result = await self.llm_client.generate_with_images(
+                llm_result = await self.llm_client.generate(
                     prompt=prompt,
-                    images=chart_images
+                    images=chart_images,
+                    enable_code_execution=True,
+                    timeout=90
                 )
             else:
-                llm_result = await self.llm_client.generate_text(prompt)
+                llm_result = await self.llm_client.generate_text(
+                    prompt=prompt,
+                    enable_code_execution=True,
+                    timeout=90
+                )
             
             # Handle different return formats from LLM client
             if isinstance(llm_result, tuple):

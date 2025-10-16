@@ -103,7 +103,7 @@ agents:
   # Support Resistance Agent (Volume)
   support_resistance_agent:
     provider: "gemini"
-    model: "gemini-2.5-flash"  # Fast for volume-based support/resistance analysis
+    model: "gemini-2.5-pro"  # Fast for volume-based support/resistance analysis
     enable_code_execution: true  # Needs code execution for level calculations
     max_retries: 3
     timeout: 90 # Support/resistance analysis
