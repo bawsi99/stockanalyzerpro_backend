@@ -1,0 +1,6 @@
+Market Structure Test Summary
+Total: 1
+Successful: 1
+Charts Saved: 1
+LLM Success: 1
+Avg Confidence: 100.00

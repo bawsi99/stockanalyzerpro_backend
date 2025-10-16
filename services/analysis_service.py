@@ -983,6 +983,18 @@ class RiskAnalysisRequest(BaseModel):
     return_prompt: Optional[bool] = Field(default=False, description="Return enhanced prompt where applicable")
     timeframes: Optional[List[str]] = Field(default=["short", "medium", "long"], description="Risk analysis timeframes")
 
+# --- Market Structure Agent API Models ---
+class MarketStructureRequest(BaseModel):
+    symbol: str = Field(..., description="Stock symbol")
+    exchange: str = Field(default="NSE", description="Stock exchange")
+    interval: str = Field(default="day", description="Data interval (internal mapping)")
+    period: int = Field(default=365, description="Analysis period in days")
+    correlation_id: Optional[str] = Field(default=None, description="Optional correlation ID for tracing")
+    return_prompt: Optional[bool] = Field(default=False, description="Return enhanced prompt where applicable")
+    context: Optional[str] = Field(default="", description="Additional context for market structure analysis")
+    include_charts: Optional[bool] = Field(default=True, description="Whether to generate charts")
+    include_llm_analysis: Optional[bool] = Field(default=True, description="Whether to include LLM analysis")
+
 # --- Pattern Analysis Agent API Models ---
 class PatternAnalysisRequest(BaseModel):
     symbol: str = Field(..., description="Stock symbol")
@@ -4018,6 +4030,169 @@ async def agents_risk_analyze_all(req: RiskAnalysisRequest):
                 "success": False,
                 "error": error_msg,
                 "agent": "risk_analysis",
+                "symbol": req.symbol,
+                "processing_time": total_time,
+                "timestamp": datetime.now().isoformat()
+            },
+            status_code=500
+        )
+
+# ===== MARKET STRUCTURE AGENT ENDPOINT =====
+
+@app.post("/agents/market-structure/analyze")
+async def agents_market_structure_analyze(req: MarketStructureRequest):
+    """
+    Standalone Market Structure Analysis Agent endpoint.
+    
+    Provides comprehensive market structure analysis including:
+    - Swing points detection and analysis
+    - BOS (Break of Structure) and CHOCH (Change of Character) events
+    - Trend structure analysis
+    - Support and resistance levels from structure
+    - Fractal analysis
+    - LLM-enhanced structural insights
+    - Multi-modal chart analysis
+    
+    This is the primary endpoint for market structure analysis, similar to
+    the cross-validation agent pattern.
+    """
+    start_time = time.monotonic()
+    print(f"[MARKET_STRUCTURE_AGENT] Starting standalone analysis for {req.symbol}")
+    
+    try:
+        # Attempt to reuse prefetched data if provided via correlation_id
+        stock_data = None
+        if req.correlation_id:
+            try:
+                cached = VOLUME_PREFETCH_CACHE.get(req.correlation_id, None)
+                if cached and isinstance(cached, dict):
+                    stock_data = cached.get('stock_data')
+                    print(f"[MARKET_STRUCTURE_AGENT] Using prefetched data for correlation_id={req.correlation_id}")
+            except Exception as cache_e:
+                print(f"[MARKET_STRUCTURE_AGENT] Error retrieving prefetched data: {cache_e}")
+        
+        # Retrieve stock data only if not provided
+        if stock_data is None:
+            try:
+                orchestrator = StockAnalysisOrchestrator()
+                stock_data = await orchestrator.retrieve_stock_data(
+                    symbol=req.symbol,
+                    exchange=req.exchange,
+                    interval=req.interval,
+                    period=req.period
+                )
+                print(f"[MARKET_STRUCTURE_AGENT] Retrieved {len(stock_data)} days of data for {req.symbol}")
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Data retrieval failed: {str(e)}")
+        
+        # Run market structure agent with configurable options
+        from agents.patterns.market_structure_agent.agent import MarketStructureAgent
+        agent = MarketStructureAgent()
+        
+        # Use analyze_complete for full analysis
+        result_data = await agent.analyze_complete(
+            stock_data=stock_data, 
+            symbol=req.symbol, 
+            context=req.context or ""
+        )
+        
+        # Build comprehensive response
+        total_time = time.monotonic() - start_time
+        
+        # Extract key insights for summary
+        key_insights = agent.get_key_insights(result_data) if result_data.get('success') else []
+        
+        comprehensive_response = {
+            "success": result_data.get('success', False),
+            "agent": "market_structure_analysis",
+            "symbol": req.symbol,
+            "exchange": req.exchange,
+            "timestamp": datetime.now().isoformat(),
+            "processing_time": total_time,
+            "confidence_score": result_data.get('confidence_score', 0.0),
+            
+            # Technical Analysis Results
+            "technical_analysis": result_data.get('technical_analysis', {}),
+            
+            # LLM Analysis Results
+            "llm_analysis": {
+                "success": result_data.get('has_llm_analysis', False),
+                "analysis": result_data.get('llm_analysis'),
+                "enhanced_insights": bool(result_data.get('llm_analysis'))
+            },
+            
+            # Chart Information
+            "chart_info": {
+                "has_chart": result_data.get('chart_image') is not None,
+                "chart_generated": bool(result_data.get('chart_image')),
+                "chart_size_bytes": len(result_data.get('chart_image', b'')) if result_data.get('chart_image') else 0
+            },
+            
+            # Key Insights Summary
+            "key_insights": key_insights,
+            "insights_count": len(key_insights),
+            
+            # Agent Information
+            "agent_info": result_data.get('agent_info', {}),
+            
+            # For final decision agent integration (if needed)
+            "market_structure_insights_for_decision": {
+                "structural_bias": result_data.get('technical_analysis', {}).get('bos_choch_analysis', {}).get('structural_bias', 'unknown'),
+                "trend_direction": result_data.get('technical_analysis', {}).get('trend_analysis', {}).get('trend_direction', 'unknown'),
+                "trend_strength": result_data.get('technical_analysis', {}).get('trend_analysis', {}).get('trend_strength', 'unknown'),
+                "structure_quality": result_data.get('technical_analysis', {}).get('structure_quality', {}),
+                "key_levels_count": len(result_data.get('technical_analysis', {}).get('key_levels', {}).get('support_levels', [])) + len(result_data.get('technical_analysis', {}).get('key_levels', {}).get('resistance_levels', [])),
+                "confidence_score": result_data.get('confidence_score', 0.0)
+            },
+            
+            # Error handling
+            "error": result_data.get('error') if not result_data.get('success') else None,
+            
+            # Optional: Return prompt if requested
+            "prompt_details": {
+                "returned": req.return_prompt and result_data.get('has_llm_analysis', False),
+                "note": "LLM prompts available in technical analysis results"
+            } if req.return_prompt else None,
+            
+            # Metadata
+            "request_metadata": {
+                "context": req.context,
+                "correlation_id": req.correlation_id,
+                "used_prefetched_data": bool(req.correlation_id and cached),
+                "include_charts": req.include_charts,
+                "include_llm_analysis": req.include_llm_analysis
+            }
+        }
+        
+        # Handle errors
+        if not result_data.get('success', False):
+            comprehensive_response['error'] = result_data.get('error', 'Market structure analysis failed')
+        
+        # Ensure JSON serializable
+        serializable_response = make_json_serializable(comprehensive_response)
+        
+        success_status = "✅" if result_data.get('success', False) else "❌"
+        print(f"[MARKET_STRUCTURE_AGENT] {success_status} Standalone analysis completed for {req.symbol} in {total_time:.2f}s")
+        print(f"[MARKET_STRUCTURE_AGENT] - Confidence: {result_data.get('confidence_score', 0)}")
+        print(f"[MARKET_STRUCTURE_AGENT] - LLM Analysis: {result_data.get('has_llm_analysis', False)}")
+        print(f"[MARKET_STRUCTURE_AGENT] - Chart Generated: {bool(result_data.get('chart_image'))}")
+        
+        return JSONResponse(content=serializable_response, status_code=200)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        total_time = time.monotonic() - start_time
+        error_msg = f"Market structure analysis failed for {req.symbol}: {str(e)}"
+        print(f"[MARKET_STRUCTURE_AGENT] ❌ {error_msg} (after {total_time:.2f}s)")
+        import traceback
+        traceback.print_exc()
+        
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": error_msg,
+                "agent": "market_structure_analysis",
                 "symbol": req.symbol,
                 "processing_time": total_time,
                 "timestamp": datetime.now().isoformat()

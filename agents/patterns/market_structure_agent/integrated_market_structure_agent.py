@@ -32,12 +32,16 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))))
 sys.path.append(parent_dir)
 
-# Import resilient chart generator
+# Import resilient chart generator (alias to match current class name)
 try:
-    from agents.patterns.market_structure_agent.resilient_chart_generator import ResilientChartGenerator
+    from agents.patterns.market_structure_agent.resilient_chart_generator import (
+        ResilientMarketStructureCharts as ResilientChartGenerator,
+    )
 except ImportError:
-    # Fallback import
-    from resilient_chart_generator import ResilientChartGenerator
+    # Fallback import when absolute import path isn't available
+    from resilient_chart_generator import (
+        ResilientMarketStructureCharts as ResilientChartGenerator,
+    )
 
 # Import LLM client
 try:

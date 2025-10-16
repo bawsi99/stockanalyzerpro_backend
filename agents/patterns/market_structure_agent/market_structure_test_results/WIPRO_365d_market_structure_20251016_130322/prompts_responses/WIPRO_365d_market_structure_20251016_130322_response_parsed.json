@@ -1,0 +1,31 @@
+{
+  "swing_points": {
+    "total_swing_points": 32,
+    "swing_quality": "strong",
+    "recent_swing_highs": 3,
+    "recent_swing_lows": 3,
+    "swing_density": "optimal"
+  },
+  "structural_breaks": {
+    "bos_events": 12,
+    "choch_events": 0,
+    "recent_break_type": "bearish_bos",
+    "structural_bias": "bearish",
+    "break_strength": "medium"
+  },
+  "trend_structure": {
+    "trend_direction": "downtrend",
+    "trend_strength": "medium",
+    "higher_highs_lows": "mixed",
+    "structure_integrity": "weakening"
+  },
+  "key_levels": {
+    "nearest_resistance": 257.17,
+    "nearest_support": 251.65,
+    "current_position": "mid_range",
+    "level_count": 32
+  },
+  "current_state": "trending_down",
+  "confidence_score": 100,
+  "key_insight": "WIPRO is in a medium strength downtrend with a bearish structural bias, reinforced by a recent bearish BOS. Despite excellent market structure quality, internal trend consistency is low, indicating potential choppiness within the downtrend."
+}

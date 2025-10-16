@@ -50,39 +50,61 @@ class MarketStructureLLMAgent:
     
     def _get_fallback_prompt_template(self) -> str:
         """Fallback prompt template if file loading fails"""
-        return """You are a Market Structure Analysis Specialist. Analyze market structure, swing points, and structural breaks.
+        return """You are a Market Structure Analysis Specialist. Your sole purpose is to analyze and report on market structure patterns and structural breaks.
 
-## Task:
-Analyze the market structure data and provide insights on swing points, BOS/CHOCH events, trend structure, and trading implications.
+## Your Specific Task:
+Analyze market structure data to identify swing points, structural breaks, and provide a concise structural assessment report.
 
-## Output Format:
-Provide a JSON response with structural analysis, swing point analysis, trend assessment, and trading implications."""
+## Required Output Format:
+Output ONLY a valid JSON object. NO PROSE, NO EXPLANATIONS OUTSIDE THE JSON.
+
+## Analysis Context:
+{context}
+"""
     
-    def build_analysis_prompt(self, analysis_data: Dict[str, Any], symbol: str) -> str:
+    def build_analysis_prompt(self, analysis_data: Dict[str, Any], symbol: str, chart_metadata: Optional[Dict[str, Any]] = None) -> str:
         """
-        Build the complete analysis prompt with all context directly in the agent.
-        
-        This replaces the backend/gemini PromptManager and template system by building
-        the full prompt programmatically within the agent itself.
+        Build the complete analysis prompt with context and chart legend.
         
         Args:
             analysis_data: Processed data from MarketStructureProcessor
             symbol: Stock symbol being analyzed
-            
-        Returns:
-            Complete prompt string ready for LLM
+            chart_metadata: Optional chart info (size_kb, path, generated)
         """
-        # Build analysis context from the processor data
         context = self._build_analysis_context(analysis_data, symbol)
-        
-        # Combine template with context
-        full_prompt = f"""{self.prompt_template}
 
-## Analysis Context:
-{context}
+        # Chart metadata block (optional)
+        chart_meta_block = ""
+        if chart_metadata:
+            chart_meta_block = (
+                "## Chart Metadata\n"
+                f"- Symbol: {symbol}\n"
+                f"- File Size: {chart_metadata.get('size_kb', 0)} KB\n"
+                f"- Generated: {chart_metadata.get('generation_timestamp', datetime.now().isoformat())}\n\n"
+            )
 
-Please analyze this comprehensive market structure data to provide detailed insights about structural elements, trend quality, and trading implications for {symbol}."""
-        
+        # Legend / How to read the chart
+        legend_block = (
+            "## Chart Legend / How to Read\n"
+            "- Price: blue line with high/low shading\n"
+            "- Swing High: red ▲ (label 'SH' for strong)\n"
+            "- Swing Low: green ▼ (label 'SL' for strong)\n"
+            "- BOS (Break of Structure): green 'BOS ↑' (bullish), red 'BOS ↓' (bearish)\n"
+            "- CHoCH (Change of Character): annotated 'CHoCH' in trend color\n"
+            "- Support Levels: green horizontal lines (weak : / medium -- / strong —)\n"
+            "- Resistance Levels: red horizontal lines (weak : / medium -- / strong —)\n"
+            "- Volume: bars (20D MA in blue) in the bottom subplot\n\n"
+        )
+
+        # Inject context into template if placeholder exists; else append at end
+        template = self.prompt_template or ""
+        if "{context}" in template:
+            body = template.replace("{context}", context)
+        else:
+            body = f"{template}\n\n## Analysis Context:\n{context}"
+
+        # Prepend chart info and legend so the LLM sees it first
+        full_prompt = f"{chart_meta_block}{legend_block}{body}".strip()
         return full_prompt
     
     def _build_analysis_context(self, analysis_data: Dict[str, Any], symbol: str) -> str:
@@ -220,67 +242,71 @@ Error processing context: {str(e)}
 Please analyze this market structure data to identify key structural elements and provide trading insights."""
     
     async def analyze_market_structure(
-        self, 
-        chart_image: bytes,
-        analysis_data: Dict[str, Any], 
-        symbol: str
-    ) -> Optional[str]:
-        """
-        Main analysis method using backend/llm system.
-        
-        This replaces the old GeminiClient.analyze_agent_specific() method
-        by calling backend/llm directly with the complete prompt built internally.
-        
-        Args:
-            chart_image: Chart image bytes from MarketStructureCharts
-            analysis_data: Processed data from MarketStructureProcessor
-            symbol: Stock symbol being analyzed
+            self, 
+            chart_image: bytes,
+            analysis_data: Dict[str, Any], 
+            symbol: str
+        ) -> Optional[str]:
+            """
+            Main analysis method using backend/llm system.
             
-        Returns:
-            LLM analysis response as JSON string, or error response
-        """
-        if not self.llm_client:
-            error_msg = "LLM client not initialized"
-            print(f"[MARKET_STRUCTURE_LLM] {error_msg}")
-            return f'{{"error": "{error_msg}", "agent": "market_structure", "status": "failed"}}'
-        
-        try:
-            # Build the complete prompt internally (no template system needed)
-            prompt = self.build_analysis_prompt(analysis_data, symbol)
+            This replaces the old GeminiClient.analyze_agent_specific() method
+            by calling backend/llm directly with the complete prompt built internally.
             
-            print(f"[MARKET_STRUCTURE_LLM] Sending analysis request for {symbol}")
-            print(f"[MARKET_STRUCTURE_LLM] Prompt length: {len(prompt)} characters")
-            print(f"[MARKET_STRUCTURE_LLM] Chart image size: {len(chart_image)} bytes")
-            
-            # Call backend/llm with image and prompt
-            response = await self.llm_client.generate(
-                prompt=prompt,
-                images=[chart_image],
-                enable_code_execution=False  # Market structure doesn't need code execution
-            )
-            
-            print(f"[MARKET_STRUCTURE_LLM] Analysis completed for {symbol}")
-            print(f"[MARKET_STRUCTURE_LLM] Response length: {len(response) if response else 0} characters")
-            
-            # Validate response is not empty
-            if not response or not response.strip():
-                error_msg = "Empty response from LLM"
+            Args:
+                chart_image: Chart image bytes from MarketStructureCharts
+                analysis_data: Processed data from MarketStructureProcessor
+                symbol: Stock symbol being analyzed
+                
+            Returns:
+                LLM analysis response as JSON string, or error response
+            """
+            if not self.llm_client:
+                error_msg = "LLM client not initialized"
                 print(f"[MARKET_STRUCTURE_LLM] {error_msg}")
                 return f'{{"error": "{error_msg}", "agent": "market_structure", "status": "failed"}}'
             
-            return response
-            
-        except asyncio.TimeoutError:
-            error_msg = f"LLM request timed out for {symbol}"
-            print(f"[MARKET_STRUCTURE_LLM] {error_msg}")
-            return f'{{"error": "{error_msg}", "agent": "market_structure", "status": "timeout"}}'
-            
-        except Exception as e:
-            error_msg = f"Market structure LLM analysis failed for {symbol}: {str(e)}"
-            print(f"[MARKET_STRUCTURE_LLM] {error_msg}")
-            import traceback
-            print(f"[MARKET_STRUCTURE_LLM] Traceback: {traceback.format_exc()}")
-            return f'{{"error": "{error_msg}", "agent": "market_structure", "status": "failed"}}'
+            try:
+                # Build the complete prompt with chart metadata
+                chart_metadata = {
+                    "size_kb": round(len(chart_image) / 1024, 1) if chart_image else 0,
+                    "generation_timestamp": datetime.now().isoformat(),
+                }
+                prompt = self.build_analysis_prompt(analysis_data, symbol, chart_metadata=chart_metadata)
+                
+                print(f"[MARKET_STRUCTURE_LLM] Sending analysis request for {symbol}")
+                print(f"[MARKET_STRUCTURE_LLM] Prompt length: {len(prompt)} characters")
+                print(f"[MARKET_STRUCTURE_LLM] Chart image size: {len(chart_image)} bytes")
+                
+                # Call backend/llm with image and prompt
+                response = await self.llm_client.generate(
+                    prompt=prompt,
+                    images=[chart_image],
+                    enable_code_execution=False  # Market structure doesn't need code execution
+                )
+                
+                print(f"[MARKET_STRUCTURE_LLM] Analysis completed for {symbol}")
+                print(f"[MARKET_STRUCTURE_LLM] Response length: {len(response) if response else 0} characters")
+                
+                # Validate response is not empty
+                if not response or not response.strip():
+                    error_msg = "Empty response from LLM"
+                    print(f"[MARKET_STRUCTURE_LLM] {error_msg}")
+                    return f'{{"error": "{error_msg}", "agent": "market_structure", "status": "failed"}}'
+                
+                return response
+                
+            except asyncio.TimeoutError:
+                error_msg = f"LLM request timed out for {symbol}"
+                print(f"[MARKET_STRUCTURE_LLM] {error_msg}")
+                return f'{{"error": "{error_msg}", "agent": "market_structure", "status": "timeout"}}'
+                
+            except Exception as e:
+                error_msg = f"Market structure LLM analysis failed for {symbol}: {str(e)}"
+                print(f"[MARKET_STRUCTURE_LLM] {error_msg}")
+                import traceback
+                print(f"[MARKET_STRUCTURE_LLM] Traceback: {traceback.format_exc()}")
+                return f'{{"error": "{error_msg}", "agent": "market_structure", "status": "failed"}}'
     
     def get_client_info(self) -> str:
         """Get information about the LLM client being used"""
