@@ -88,6 +88,7 @@ Output ONLY a valid JSON object with the following schema. NO PROSE, NO NARRATIV
 
 **CRITICAL REQUIREMENTS:**
 - Output ONLY the JSON object above
+- For long_term.fair_value_range, output numeric floats [low, high] (no strings). If unknown, copy from EXISTING TRADING STRATEGY long_term.fair_value_range.
 - NO text before or after the JSON
 - NO markdown formatting
 - NO explanations outside the JSON structure

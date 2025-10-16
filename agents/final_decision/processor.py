@@ -111,7 +111,22 @@ class FinalDecisionProcessor:
                 except Exception:
                     pass
             else:
-                enhanced_ind_json = ind_json  # pass through raw JSON blob string
+                # Try to parse JSON string to inject existing trading strategy for consistency
+                try:
+                    parsed = json.loads(ind_json)
+                    if isinstance(parsed, dict):
+                        try:
+                            existing_strategy = self.prompt_processor.extract_existing_trading_strategy(parsed)
+                        except Exception:
+                            existing_strategy = {}
+                        if existing_strategy:
+                            parsed["existing_trading_strategy"] = existing_strategy
+                        # Pass back as a compact JSON string for context inclusion
+                        enhanced_ind_json = json.dumps(parsed)
+                    else:
+                        enhanced_ind_json = ind_json  # keep original if not dict
+                except Exception:
+                    enhanced_ind_json = ind_json  # pass through raw JSON blob string
 
             # Build comprehensive context for final decision
             context = self.prompt_processor.build_comprehensive_context(enhanced_ind_json, chart_insights or "", kc)

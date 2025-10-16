@@ -21,7 +21,7 @@ def update_orchestrator_initialization():
     
     # CHANGE 1: Update backend/llm clients initialization (around line 189)
     try:
-        from backend.llm import get_llm_client
+from llm import get_llm_client
         self.llm_clients = {
             'volume_anomaly': get_llm_client("volume_anomaly_agent"),            # NEW - MIGRATED
             'institutional_activity': get_llm_client("institutional_activity_agent")  # Existing
@@ -196,7 +196,7 @@ def validate_migration_readiness():
         print("✅ VolumeAnomalyLLMAgent - Ready")
         
         # Check backend/llm system
-        from backend.llm import get_llm_client
+        from llm import get_llm_client
         client = get_llm_client("volume_anomaly_agent")
         checks["backend/llm system"] = True
         print("✅ backend/llm system - Ready")

@@ -25,7 +25,7 @@ try:
     from llm import get_llm_client
 except ImportError:
     try:
-        from backend.llm import get_llm_client  
+from llm import get_llm_client
     except ImportError:
         # Fallback for testing without LLM
         def get_llm_client(name):

@@ -976,31 +976,58 @@ class FrontendResponseBuilder:
     
     @staticmethod
     def _build_decision_story(ai_analysis: dict, trend: str, confidence: float, short_term: dict, medium_term: dict, long_term: dict) -> dict:
-        """Build a comprehensive decision story explaining the analysis chain."""
+        """Build a comprehensive decision story explaining the analysis chain.
+        Also sanitize long_term.fair_value_range and fallback to computed trading_strategy values when needed.
+        """
         try:
             # Extract key risks and must-watch levels
             risks = ai_analysis.get('risks', [])
             must_watch_levels = ai_analysis.get('must_watch_levels', [])
-            
+
+            # Helper to coerce a fair value range into two floats
+            def _coerce_fair_range(val) -> list:
+                try:
+                    if isinstance(val, (list, tuple)) and len(val) >= 2:
+                        low = float(val[0]) if val[0] is not None else None
+                        high = float(val[1]) if val[1] is not None else None
+                        if low is not None and high is not None:
+                            return [float(low), float(high)]
+                except Exception:
+                    pass
+                return []
+
             # Build the narrative story
             story_parts = []
-            
+
             # Opening statement
             confidence_desc = "high" if confidence >= 80 else "moderate" if confidence >= 60 else "low"
             story_parts.append(f"Our analysis indicates a {trend.lower()} trend with {confidence_desc} confidence ({confidence:.0f}%).")
-            
+
             # Short-term analysis
             if short_term and short_term.get('rationale'):
                 story_parts.append(f"In the short term: {short_term.get('rationale')}")
-            
-            # Medium-term analysis  
+
+            # Medium-term analysis
             if medium_term and medium_term.get('rationale'):
                 story_parts.append(f"For the medium term: {medium_term.get('rationale')}")
-                
+
             # Long-term analysis
             if long_term and long_term.get('rationale'):
                 story_parts.append(f"Looking at the long term: {long_term.get('rationale')}")
-            
+
+            # Determine fair_value_range with sanitization and fallback
+            fv_primary = _coerce_fair_range(long_term.get('fair_value_range')) if isinstance(long_term, dict) else []
+            if not fv_primary:
+                # Fallback to computed trading_strategy if available
+                try:
+                    ts_long = (ai_analysis or {}).get('trading_strategy', {}).get('long_term', {})
+                    fv_fallback = _coerce_fair_range(ts_long.get('fair_value_range'))
+                except Exception:
+                    fv_fallback = []
+            else:
+                fv_fallback = []
+            fair_value_range = fv_primary or fv_fallback or []
+
             # Risk considerations
             if risks:
                 risk_list = risks[:3] if len(risks) > 3 else risks  # Limit to top 3 risks
@@ -1008,15 +1035,15 @@ class FrontendResponseBuilder:
                     story_parts.append(f"Key risk to monitor: {risk_list[0]}")
                 else:
                     story_parts.append(f"Key risks to monitor include: {', '.join(risk_list[:-1])} and {risk_list[-1]}")
-            
+
             # Must-watch levels
             if must_watch_levels:
                 level_list = must_watch_levels[:2] if len(must_watch_levels) > 2 else must_watch_levels
                 story_parts.append(f"Critical levels to watch: {', '.join(map(str, level_list))}")
-            
+
             # Join all parts into a coherent narrative
             narrative = " ".join(story_parts)
-            
+
             return {
                 "narrative": narrative,
                 "decision_chain": {
@@ -1042,7 +1069,7 @@ class FrontendResponseBuilder:
                             "horizon": long_term.get('horizon_days', 'N/A'),
                             "rationale": long_term.get('rationale', 'No long-term analysis available'),
                             "technical_rating": long_term.get('technical_rating', 'Unknown'),
-                            "fair_value_range": long_term.get('fair_value_range', [])
+                            "fair_value_range": fair_value_range
                         }
                     },
                     "risk_assessment": {
