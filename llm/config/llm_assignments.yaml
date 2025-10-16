@@ -27,7 +27,7 @@ agents:
     model: "gemini-2.5-pro"  # Fast for frequent indicator analysis
     enable_code_execution: true  # Needs code execution for calculations
     max_retries: 3
-    timeout: 90
+    timeout: 120
     
   # Sector Analysis Agent
   sector_agent:
@@ -51,7 +51,7 @@ agents:
     model: "gemini-2.5-pro"  # Best quality for final decisions
     enable_code_execution: true  # Needs synthesis calculations
     max_retries: 3
-    timeout: 90
+    timeout: 120
     api_key_strategy: "round_robin"  # Use rotating keys for critical agent
     
   # Multi-Timeframe Analysis Agent
@@ -68,7 +68,7 @@ agents:
     model: "gemini-2.5-pro"  # Fast for institutional volume analysis
     enable_code_execution: true  # Needs code execution for volume calculations
     max_retries: 3
-    timeout: 90  # Institutional analysis standardized to 90s
+    timeout: 120 # Institutional analysis standardized to 90s
     api_key_strategy: "agent_specific"  # Dedicated key for consistent tracking
     api_key_index: 0  # Always use GEMINI_API_KEY1
     

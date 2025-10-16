@@ -667,6 +667,123 @@ def get_agent_timing_breakdown() -> Dict[str, float]:
     return agent_timings
 
 
+def get_agent_details_table() -> Dict[str, Any]:
+    """Build a per-agent details table including image usage and size.
+
+    Returns a dict with 'rows' (list of row dicts) and 'totals'.
+    """
+    counter = get_token_counter()
+    rows = []
+    totals = {
+        'input_tokens': 0,
+        'output_tokens': 0,
+        'total_tokens': 0,
+        'total_time_s': 0.0
+    }
+    # Aggregate per agent
+    with counter._lock:
+        # Map: agent -> aggregation
+        agg: Dict[str, Dict[str, Any]] = {}
+        for u in counter._usage_data:
+            a = u.agent_name
+            if a not in agg:
+                agg[a] = {
+                    'input': 0,
+                    'output': 0,
+                    'total': 0,
+                    'time_ms': 0.0,
+                    'models': {},  # model -> total tokens
+                    'image_used': False,
+                    'image_sizes': []  # list of (w,h)
+                }
+            ag = agg[a]
+            ag['input'] += u.input_tokens
+            ag['output'] += u.output_tokens
+            ag['total'] += u.total_tokens
+            ag['time_ms'] += (u.duration_ms or 0.0)
+            # model usage
+            ag['models'][u.model] = ag['models'].get(u.model, 0) + u.total_tokens
+            # image metrics
+            cm = u.call_metadata or {}
+            if cm.get('with_images'):
+                ag['image_used'] = True
+                for m in (cm.get('image_metrics') or []):
+                    w, h = m.get('width'), m.get('height')
+                    if isinstance(w, int) and isinstance(h, int) and w > 0 and h > 0:
+                        ag['image_sizes'].append((w, h))
+        
+        # Build rows
+        for agent, ag in agg.items():
+            # choose model by max tokens
+            model = '-'
+            if ag['models']:
+                model = max(ag['models'].items(), key=lambda kv: kv[1])[0]
+            # choose image size: most common
+            img_size_str = '-'
+            img_tokens = '-'
+            if ag['image_used'] and ag['image_sizes']:
+                from collections import Counter
+                import math
+                common = Counter(ag['image_sizes']).most_common(1)
+                if common:
+                    w, h = common[0][0]
+                    img_size_str = f"{w}x{h}"
+                    # Gemini 2.0 image token rule
+                    if isinstance(w, int) and isinstance(h, int) and w > 0 and h > 0:
+                        if w <= 384 and h <= 384:
+                            img_tokens = 258
+                        else:
+                            tiles = math.ceil(w/768) * math.ceil(h/768)
+                            img_tokens = tiles * 258
+            row = {
+                'agent': agent,
+                'model': model,
+                'input': ag['input'],
+                'output': ag['output'],
+                'total': ag['total'],
+                'time_s': round(ag['time_ms'] / 1000.0, 2),
+                'image_included': 'yes' if ag['image_used'] else 'no',
+                'image_size': img_size_str,
+                'image_tokens': img_tokens
+            }
+            rows.append(row)
+            totals['input_tokens'] += ag['input']
+            totals['output_tokens'] += ag['output']
+            totals['total_tokens'] += ag['total']
+            totals['total_time_s'] += ag['time_ms'] / 1000.0
+    # Sort rows by total tokens desc
+    rows.sort(key=lambda r: r['total'], reverse=True)
+    return {'rows': rows, 'totals': totals}
+
+
+def print_agent_details_table():
+    """Print a formatted agent details table with image columns."""
+    data = get_agent_details_table()
+    rows = data['rows']
+    totals = data['totals']
+    # Header
+    print("\n🤖 AGENT DETAILS:")
+    print("=" * 100)
+    header = (
+        f"{'Agent':<25} | {'Model':<10} | {'Input':>8} | {'Output':>8} | {'Total':>8} | {'Time':>8} | {'Image?':>7} | {'Img Size':>10} | {'Img Tokens':>11}"
+    )
+    print(header)
+    print("-" * len(header))
+    for r in rows:
+        img_tokens_disp = (str(r['image_tokens']) if isinstance(r['image_tokens'], int) else '-')
+        print(
+            f"{r['agent']:<25} | "
+            f"{(r['model'].split(':')[-1].split('-')[-1].upper() if r['model']!='-' else '-'): <10} | "
+            f"{r['input']:>8,} | {r['output']:>8,} | {r['total']:>8,} | "
+            f"{r['time_s']:>7.2f}s | {r['image_included']:>7} | {r['image_size']:>10} | {img_tokens_disp:>11}"
+        )
+    print("-" * len(header))
+    print(
+        f"{'TOTAL':<25} | {'':<10} | {totals['input_tokens']:>8,} | {totals['output_tokens']:>8,} | "
+        f"{totals['total_tokens']:>8,} | {totals['total_time_s']:>7.2f}s | {'':>7} | {'':>10} | {'':>11}"
+    )
+
+
 def compare_model_efficiency(model1: str, model2: str) -> Dict[str, Any]:
     """Compare efficiency between two models."""
     counter = get_token_counter()

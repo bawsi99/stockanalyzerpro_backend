@@ -187,11 +187,14 @@ class GeminiProvider(BaseLLMProvider):
             """Inner function to make the actual API request."""
             # Build contents with prompt and images
             contents = [prompt]
+            image_metrics: List[Dict[str, Any]] = []
             
-            # Convert images to the format Gemini expects
-            for image in images:
-                image_part = await self._process_image(image)
-                contents.append(image_part)
+            # Convert images to the format Gemini expects and collect metrics
+            for idx, image in enumerate(images):
+                part, metrics = await self._process_image_part_and_metrics(image)
+                metrics['index'] = idx
+                image_metrics.append(metrics)
+                contents.append(part)
             
             # Build the request configuration
             if enable_code_execution:
@@ -209,10 +212,10 @@ class GeminiProvider(BaseLLMProvider):
                 config=config
             )
             
-            return response
+            return response, image_metrics
         
         # Execute with retry logic
-        response = await self._retry_with_backoff(_make_request, max_retries)
+        response, image_metrics = await self._retry_with_backoff(_make_request, max_retries)
         
         # Track token usage if enabled
         token_usage = None
@@ -225,7 +228,11 @@ class GeminiProvider(BaseLLMProvider):
                 model=self.model,
                 duration_ms=duration_ms,
                 success=True,
-                call_metadata={'with_images': True, 'image_count': len(images)}
+                call_metadata={
+                    'with_images': True,
+                    'image_count': len(images),
+                    'image_metrics': image_metrics
+                }
             )
         
         # Extract text from response
@@ -235,27 +242,52 @@ class GeminiProvider(BaseLLMProvider):
     
     async def _process_image(self, image: Any) -> types.Part:
         """
-        Process an image into the format Gemini expects.
-        
-        Args:
-            image: PIL Image, bytes, or other image format
-            
-        Returns:
-            Gemini Part object for the image
+        Backward-compatible: return only the Part. Prefer _process_image_part_and_metrics.
         """
-        if hasattr(image, 'save'):  # PIL Image
-            # Convert PIL Image to bytes
-            img_byte_arr = io.BytesIO()
-            image.save(img_byte_arr, format='PNG')
-            img_bytes = img_byte_arr.getvalue()
-            return types.Part.from_bytes(data=img_bytes, mime_type="image/png")
-        
-        elif isinstance(image, bytes):
-            # Already bytes
-            return types.Part.from_bytes(data=image, mime_type="image/png")
-        
-        else:
-            raise ValueError(f"Unsupported image type: {type(image)}")
+        part, _ = await self._process_image_part_and_metrics(image)
+        return part
+
+    async def _process_image_part_and_metrics(self, image: Any) -> Tuple[types.Part, Dict[str, Any]]:
+        """
+        Process image and capture metrics (width, height, bytes).
+        """
+        mime = "image/png"
+        width = height = None
+        size_bytes = None
+        mode = None
+        try:
+            if hasattr(image, 'save'):
+                # PIL Image
+                try:
+                    width, height = getattr(image, 'size', (None, None))
+                    mode = getattr(image, 'mode', None)
+                except Exception:
+                    pass
+                buf = io.BytesIO()
+                image.save(buf, format='PNG')
+                img_bytes = buf.getvalue()
+                size_bytes = len(img_bytes)
+                part = types.Part.from_bytes(data=img_bytes, mime_type=mime)
+                return part, {'mime': mime, 'bytes': size_bytes, 'width': width, 'height': height, 'pil_mode': mode}
+            elif isinstance(image, bytes):
+                size_bytes = len(image)
+                # Try to detect dimensions
+                try:
+                    from PIL import Image
+                    pil = Image.open(io.BytesIO(image))
+                    width, height = pil.size
+                    mode = pil.mode
+                except Exception:
+                    pass
+                part = types.Part.from_bytes(data=image, mime_type=mime)
+                return part, {'mime': mime, 'bytes': size_bytes, 'width': width, 'height': height, 'pil_mode': mode}
+            else:
+                raise ValueError(f"Unsupported image type: {type(image)}")
+        except Exception as e:
+            # Fallback minimal
+            raw = image if isinstance(image, bytes) else b""
+            part = types.Part.from_bytes(data=raw, mime_type=mime)
+            return part, {'mime': mime, 'bytes': len(raw), 'width': width, 'height': height, 'error': str(e)}
     
     def extract_text(self, response: Any) -> str:
         """

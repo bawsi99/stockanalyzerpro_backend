@@ -451,6 +451,22 @@ async def get_model_analytics():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/analytics/tokens/agent-table")
+async def get_agent_details_table_api():
+    """Get per-agent table with image inclusion and size info."""
+    try:
+        from llm.token_counter import get_agent_details_table
+        table = get_agent_details_table()
+        return {
+            "success": True,
+            "table": table,
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error(f"/analytics/tokens/agent-table failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/analytics/tokens/compare")
 async def compare_models(models: Dict[str, List[str]]):
     """Compare efficiency between two models."""
@@ -1982,82 +1998,59 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
             print(f"\n🤖 AGENT DETAILS:")
             print(f"{'='*100}")
             
-            # Table header
-            print(f"{'Agent':25} | {'Model':17} | {'Input':>8} | {'Output':>8} | {'Total':>8} | {'Time':>8}")
-            print(f"{'-'*25} | {'-'*17} | {'-'*8} | {'-'*8} | {'-'*8} | {'-'*8}")
+            # New table with image columns sourced from token_counter
+            try:
+                from llm.token_counter import get_agent_details_table
+                table = get_agent_details_table()
+                rows = table.get('rows', [])
+                totals_row = table.get('totals', {})
+                # Header
+                print(f"{'Agent':25} | {'Model':10} | {'Input':>8} | {'Output':>8} | {'Total':>8} | {'Time':>8} | {'Image?':>7} | {'Img Size':>10} | {'Img Tokens':>11}")
+                print(f"{'-'*25} | {'-'*10} | {'-'*8} | {'-'*8} | {'-'*8} | {'-'*8} | {'-'*7} | {'-'*10} | {'-'*11}")
+                # Rows
+                for r in rows:
+                    model_display = r['model'].replace('gemini-2.5-', '').upper() if r['model'] != '-' else '-'
+                    img_tokens_disp = (str(r['image_tokens']) if isinstance(r['image_tokens'], int) else '-')
+                    print(
+                        f"{r['agent'][:25]:25} | {model_display:10} | "
+                        f"{r['input']:>8,} | {r['output']:>8,} | {r['total']:>8,} | "
+                        f"{r['time_s']:>7.2f}s | {r['image_included']:>7} | {r['image_size']:>10} | {img_tokens_disp:>11}"
+                    )
+                # Footer
+                print(f"{'-'*25} | {'-'*10} | {'-'*8} | {'-'*8} | {'-'*8} | {'-'*8} | {'-'*7} | {'-'*10} | {'-'*11}")
+                print(
+                    f"{'TOTAL':25} | {'':10} | {totals_row.get('input_tokens',0):>8,} | "
+                    f"{totals_row.get('output_tokens',0):>8,} | {totals_row.get('total_tokens',0):>8,} | "
+                    f"{totals_row.get('total_time_s',0.0):>7.2f}s | {'':>7} | {'':>10} | {'':>11}"
+                )
+            except Exception as _e:
+                print(f"[ANALYTICS] Failed to print enhanced agent table: {_e}")
             
-            # Get timing information for each agent
-            agent_timings = get_agent_timing_breakdown()
-            
-            # Sort by model (flash first, then pro) for cleaner display
-            all_entries = []
-            for agent, models in agent_model_combos.items():
-                for model, usage in models.items():
-                    total_time_s = agent_timings.get(agent, 0.0)
-                    all_entries.append((agent, model, usage, total_time_s))
-            
-            # Sort: flash models first, then pro models, then by agent name
-            all_entries.sort(key=lambda x: ("pro" in x[1], x[0]))
-            
-            # Table rows
-            total_input = 0
-            total_output = 0
-            total_tokens_sum = 0
-            total_time_sum = 0.0
-            
-            for agent, model, usage, total_time_s in all_entries:
-                total_input += usage['input_tokens']
-                total_output += usage['output_tokens']
-                total_tokens_sum += usage['total_tokens']
-                total_time_sum += total_time_s
-                
-                # Truncate long agent names
-                agent_display = agent[:24] if len(agent) > 24 else agent
-                model_display = model.replace('gemini-2.5-', '').upper()  # Show FLASH/PRO for brevity
-                
-                print(f"{agent_display:25} | {model_display:17} | {usage['input_tokens']:>8,} | {usage['output_tokens']:>8,} | {usage['total_tokens']:>8,} | {total_time_s:>7.2f}s")
-            
-            # Table footer with totals
-            print(f"{'-'*25} | {'-'*17} | {'-'*8} | {'-'*8} | {'-'*8} | {'-'*8}")
-            print(f"{'TOTAL':25} | {'':17} | {total_input:>8,} | {total_output:>8,} | {total_tokens_sum:>8,} | {total_time_sum:>7.2f}s")
-            
-            # Add per-model breakdown
+            # Add per-model breakdown (unchanged)
             print(f"\n📱 MODEL BREAKDOWN:")
             print(f"{'='*70}")
             print(f"{'Model':20} | {'Input':>12} | {'Output':>12} | {'Total':>12} | {'Calls':>6}")
             print(f"{'-'*20} | {'-'*12} | {'-'*12} | {'-'*12} | {'-'*6}")
             
-            # Calculate per-model totals
-            model_stats = {}
-            for agent, model, usage, total_time_s in all_entries:
-                if model not in model_stats:
-                    model_stats[model] = {
-                        'input_tokens': 0,
-                        'output_tokens': 0, 
-                        'total_tokens': 0,
-                        'calls': 0
-                    }
-                model_stats[model]['input_tokens'] += usage['input_tokens']
-                model_stats[model]['output_tokens'] += usage['output_tokens']
-                model_stats[model]['total_tokens'] += usage['total_tokens']
-                model_stats[model]['calls'] += usage['calls']
-            
-            # Sort models (flash first, then pro)
-            sorted_models = sorted(model_stats.items(), key=lambda x: "pro" in x[0])
-            
+            # Use model_usage summary from token_counter for breakdown
             model_total_input = 0
             model_total_output = 0
             model_total_tokens = 0
             model_total_calls = 0
             
+            # Sort models (FLASH before PRO) based on name
+            sorted_models = sorted(model_usage.items(), key=lambda x: ('pro' in x[0], x[0]))
             for model, stats in sorted_models:
                 model_display = model.replace('gemini-2.5-', '').upper()
-                model_total_input += stats['input_tokens']
-                model_total_output += stats['output_tokens']
-                model_total_tokens += stats['total_tokens']
-                model_total_calls += stats['calls']
-                
-                print(f"{model_display:20} | {stats['input_tokens']:>12,} | {stats['output_tokens']:>12,} | {stats['total_tokens']:>12,} | {stats['calls']:>6}")
+                inp = stats.get('input_tokens', 0)
+                out = stats.get('output_tokens', 0)
+                tot = stats.get('total_tokens', 0)
+                calls = stats.get('calls', 0)
+                model_total_input += inp
+                model_total_output += out
+                model_total_tokens += tot
+                model_total_calls += calls
+                print(f"{model_display:20} | {inp:>12,} | {out:>12,} | {tot:>12,} | {calls:>6}")
             
             # Model breakdown footer
             print(f"{'-'*20} | {'-'*12} | {'-'*12} | {'-'*12} | {'-'*6}")
@@ -3829,6 +3822,13 @@ async def agents_volume_analyze_all(req: VolumeAgentRequest):
         # Pass None to enable distributed API keys (each agent gets its own key)
         integ = VolumeAgentIntegrationManager(None)
         result = await integ.get_comprehensive_volume_analysis(stock_data, req.symbol, indicators)
+
+        # Print agent details table (with image info) to service logs
+        try:
+            from llm.token_counter import print_agent_details_table
+            print_agent_details_table()
+        except Exception as _e:
+            print(f"[ANALYTICS] Failed to print agent details table: {_e}")
 
         # Ensure JSON serializable
         serializable = make_json_serializable(result)

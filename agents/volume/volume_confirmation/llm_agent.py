@@ -284,6 +284,15 @@ Let me solve this by .."""
             # Format prompt (replaces prompt manager)
             formatted_prompt = self._format_prompt(context)
             
+            # Log chart dimensions
+            try:
+                from PIL import Image
+                import io as _io
+                _w, _h = Image.open(_io.BytesIO(chart_image)).size
+                print(f"[VOLUME_CONFIRMATION_LLM] Chart image dimensions: {_w}x{_h}px")
+            except Exception:
+                print(f"[VOLUME_CONFIRMATION_LLM] Chart image dimensions: unknown")
+            
             # Make LLM call (replaces GeminiClient.analyze_volume_agent_specific)
             response = await self.llm_client.generate(
                 prompt=formatted_prompt,
