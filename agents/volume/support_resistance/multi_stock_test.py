@@ -5,6 +5,8 @@ Multi-Stock Support/Resistance Prompt Testing Framework
 Tests the volume_support_resistance prompt across multiple stocks from different sectors
 to validate consistency and quality of support/resistance analysis.
 
+Migrated to use backend/llm system instead of direct gemini client.
+
 Usage: python multi_stock_test.py
 """
 
@@ -28,10 +30,10 @@ sys.path.insert(0, root_path)  # Add root path for 'backend' imports
 sys.path.insert(0, backend_path)  # Add backend path for direct imports
 
 try:
-    from gemini.gemini_client import GeminiClient
-    from gemini.prompt_manager import PromptManager
-    from gemini.context_engineer import ContextEngineer, AnalysisType
-    from zerodha.client import ZerodhaDataClient
+    from backend.llm import get_llm_client
+    from backend.gemini.prompt_manager import PromptManager
+    from backend.gemini.context_engineer import ContextEngineer, AnalysisType
+    from backend.zerodha.client import ZerodhaDataClient
 except ImportError as e:
     print(f"❌ Import Error: {e}")
     print("Make sure you're running this from the correct directory")
@@ -83,17 +85,14 @@ class SupportResistanceMultiStockTester:
         self.context_engineer = ContextEngineer()
         self.chart_maker = SupportResistanceCharts()
         
-        # Initialize Gemini client if API key is available
-        self.gemini_client = None
+        # Initialize LLM client with new system
+        self.llm_client = None
         try:
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if api_key:
-                self.gemini_client = GeminiClient(api_key=api_key)
-                print("✅ Gemini API client initialized")
-            else:
-                print("⚠️  GEMINI_API_KEY not found - will show prompts only")
+            self.llm_client = get_llm_client("volume_agent")  # Use volume agent for support/resistance analysis
+            print("✅ LLM client initialized (volume_agent)")
         except Exception as e:
-            print(f"⚠️  Could not initialize Gemini client: {e}")
+            print(f"⚠️  Could not initialize LLM client: {e}")
+            print("⚠️  Will show prompts only")
         
         # Define test stocks focusing on those with strong support/resistance patterns
         self.test_stocks = [
@@ -394,9 +393,9 @@ class SupportResistanceMultiStockTester:
             
             # Make API call if available
             llm_response = ""
-            if self.gemini_client:
+            if self.llm_client:
                 try:
-                    print(f"🚀 Making API call for {stock_config.symbol}...")
+                    print(f"🚀 Making LLM API call for {stock_config.symbol}...")
                     
                     # If charts are available, send them with the prompt
                     if chart_paths:
@@ -415,18 +414,22 @@ class SupportResistanceMultiStockTester:
                                     print(f"   ⚠️ Failed to load {chart_type} chart: {img_error}")
                         
                         if image_objects:
-                            # Call LLM with images and code execution
-                            response = await self.gemini_client.core.call_llm_with_images(
-                                prompt, image_objects, enable_code_execution=True
+                            # Call LLM with images
+                            response = await self.llm_client.generate_with_images(
+                                prompt=prompt,
+                                images=image_objects
                             )
-                            # For consistency with code execution format, we'll format as tuple
-                            code_results = []
-                            execution_results = []
                         else:
                             print("⚠️ No valid chart files found, proceeding without images")
-                            response, code_results, execution_results = await self.gemini_client.core.call_llm_with_code_execution(prompt)
+                            response = await self.llm_client.generate(
+                                prompt=prompt,
+                                enable_code_execution=True
+                            )
                     else:
-                        response, code_results, execution_results = await self.gemini_client.core.call_llm_with_code_execution(prompt)
+                        response = await self.llm_client.generate(
+                            prompt=prompt,
+                            enable_code_execution=True
+                        )
                     
                     llm_response = response
                     
@@ -441,10 +444,6 @@ class SupportResistanceMultiStockTester:
                         f.write(f"Sector: {stock_config.sector}\n")
                         f.write(f"Response Time: {datetime.now().isoformat()}\n")
                         f.write(f"Response Length: {len(response) if response else 0} characters\n")
-                        if code_results:
-                            f.write(f"Mathematical Calculations: {len(code_results)} code snippets executed\n")
-                        if execution_results:
-                            f.write(f"Calculation Results: {len(execution_results)} computational outputs\n")
                         
                         # Add chart information to response file
                         if chart_paths:
@@ -460,7 +459,7 @@ class SupportResistanceMultiStockTester:
                         f.write("\n")
                     
                 except Exception as e:
-                    print(f"❌ API call failed for {stock_config.symbol}: {e}")
+                    print(f"❌ LLM API call failed for {stock_config.symbol}: {e}")
                     llm_response = f"API_ERROR: {str(e)}"
             
             execution_time = time.time() - start_time

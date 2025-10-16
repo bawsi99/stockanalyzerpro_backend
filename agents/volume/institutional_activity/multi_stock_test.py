@@ -5,7 +5,15 @@ Multi-Stock Institutional Activity Testing Framework
 Tests the institutional_activity_analysis prompt across multiple stocks from different sectors
 to validate consistency and quality of volume-based institutional analysis.
 
+NOTE: Updated to use the new backend/llm system instead of backend/gemini.
+Uses 'volume_agent' configuration from llm_assignments.yaml for LLM requests.
+
 Usage: python multi_stock_institutional_test.py
+
+Requirements:
+- GEMINI_API_KEY environment variable set
+- Redis running for caching
+- Zerodha credentials configured
 """
 
 import os
@@ -32,9 +40,7 @@ sys.path.insert(0, backend_path)
 sys.path.insert(0, agent_path)
 
 try:
-    from backend.gemini.gemini_client import GeminiClient
-    from backend.gemini.prompt_manager import PromptManager
-    from backend.gemini.context_engineer import ContextEngineer, AnalysisType
+    from backend.llm import get_llm_client
     from backend.zerodha.client import ZerodhaDataClient
     # Import institutional activity components (updated after file move)
     from backend.agents.volume.institutional_activity.processor import InstitutionalActivityProcessor
@@ -182,20 +188,15 @@ class MultiStockInstitutionalTester:
             print(f"⚠️  Chart generator initialization failed: {e}")
             self.chart_generator = None
         
-        self.prompt_manager = PromptManager()
-        self.context_engineer = ContextEngineer()
-        
-        # Initialize Gemini client if API key is available
-        self.gemini_client = None
+        # Initialize LLM client using new backend/llm system
+        self.llm_client = None
         try:
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if api_key:
-                self.gemini_client = GeminiClient(api_key=api_key)
-                print("✅ Gemini API client initialized")
-            else:
-                print("⚠️  GEMINI_API_KEY not found - will show prompts only")
+            # Use volume_agent configuration for institutional analysis
+            self.llm_client = get_llm_client("volume_agent")
+            print("✅ LLM client initialized (volume_agent)")
         except Exception as e:
-            print(f"⚠️  Could not initialize Gemini client: {e}")
+            print(f"⚠️  Could not initialize LLM client: {e}")
+            print("⚠️  Will show prompts only")
         
         # Define test stocks with focus on volume patterns
         self.test_stocks = [
@@ -365,12 +366,24 @@ class MultiStockInstitutionalTester:
             # Prepare context for institutional activity analysis
             context = self._prepare_institutional_context(stock_config, analysis_data)
             
-            # Format the institutional activity analysis prompt
-            prompt = self.prompt_manager.format_prompt(
-                "institutional_activity_analysis",
-                context=context
-            )
-            prompt += self.prompt_manager.SOLVING_LINE
+            # Create institutional activity analysis prompt directly
+            prompt = f"""
+            INSTITUTIONAL ACTIVITY ANALYSIS REQUEST
+            
+            {context}
+            
+            Please provide a comprehensive analysis of institutional activity patterns for this stock.
+            
+            Focus on:
+            1. Institutional Activity Level (low/medium/high)
+            2. Primary Activity Type (accumulation/distribution/mixed)
+            3. Smart Money Timing patterns
+            4. Volume-based institutional signals
+            5. Key support/resistance levels based on institutional activity
+            6. Confidence score and reasoning
+            
+            Provide your analysis in a structured format with specific insights and actionable intelligence.
+            """
             
             # Save prompt details
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -433,7 +446,7 @@ class MultiStockInstitutionalTester:
             
             # Make API call if available
             llm_response = ""
-            if self.gemini_client:
+            if self.llm_client:
                 try:
                     print(f"🚀 Making institutional analysis API call for {stock_config.symbol}...")
                     
@@ -448,14 +461,18 @@ class MultiStockInstitutionalTester:
                         # Enhanced prompt with chart instruction
                         enhanced_prompt = prompt + "\n\nIMAGE ANALYSIS INSTRUCTION:\nThe attached chart shows comprehensive institutional activity analysis including:\n1. Volume Profile with Point of Control (POC)\n2. Large Block Detection with institutional thresholds\n3. Accumulation/Distribution Analysis\n4. Smart Money Timing Analysis\n5. Analysis Summary and Key Metrics\n\nPlease analyze both the numerical data provided above AND the visual patterns in the chart to provide more comprehensive insights."
                         
-                        response = await self.gemini_client.core.call_llm_with_image(
-                            enhanced_prompt, chart_image, enable_code_execution=True
+                        response = await self.llm_client.generate_with_images(
+                            prompt=enhanced_prompt,
+                            images=[chart_image]
                         )
                         llm_response = response
                         print(f"✅ LLM call with chart completed for {stock_config.symbol}")
                     else:
-                        # Fallback to text-only analysis
-                        response, code_results, execution_results = await self.gemini_client.core.call_llm_with_code_execution(prompt)
+                        # Fallback to text-only analysis with code execution
+                        response = await self.llm_client.generate(
+                            prompt=prompt,
+                            enable_code_execution=True
+                        )
                         llm_response = response
                         print(f"✅ LLM call (text-only) completed for {stock_config.symbol}")
                     
@@ -469,7 +486,7 @@ class MultiStockInstitutionalTester:
                         f.write(f"Company: {stock_config.name}\n")
                         f.write(f"Sector: {stock_config.sector}\n")
                         f.write(f"Response Time: {datetime.now().isoformat()}\n")
-                        f.write(f"Response Length: {len(response) if response else 0} characters\n")
+                        f.write(f"Response Length: {len(llm_response) if llm_response else 0} characters\n")
                         f.write(f"Chart Generated: {'Yes' if chart_bytes else 'No'}\n")
                         if chart_path:
                             f.write(f"Chart Path: {chart_path}\n")
@@ -477,7 +494,7 @@ class MultiStockInstitutionalTester:
                         
                         f.write("COMPLETE LLM RESPONSE:\n")
                         f.write("-" * 40 + "\n")
-                        f.write(response or "No response received")
+                        f.write(llm_response or "No response received")
                         f.write("\n")
                     
                 except Exception as e:

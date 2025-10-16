@@ -27,9 +27,7 @@ sys.path.append(project_root)
 sys.path.append(os.path.join(project_root, 'backend'))
 
 try:
-    from backend.gemini.gemini_client import GeminiClient
-    from backend.gemini.prompt_manager import PromptManager
-    from backend.gemini.context_engineer import ContextEngineer, AnalysisType
+    from backend.llm import get_llm_client
     from backend.zerodha.client import ZerodhaDataClient
     # Import volume momentum processor and chart generator from local package
     from backend.agents.volume.volume_momentum.processor import VolumeTrendMomentumProcessor
@@ -64,20 +62,16 @@ class VolumeMomentumMultiStockTester:
         # Initialize other components
         self.volume_momentum_processor = VolumeTrendMomentumProcessor()
         self.chart_generator = VolumeTrendMomentumChartGenerator()
-        self.prompt_manager = PromptManager()
-        self.context_engineer = ContextEngineer()
         
-        # Initialize Gemini client if API key is available
-        self.gemini_client = None
+        # Initialize LLM client using the new backend/llm system
+        self.llm_client = None
         try:
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if api_key:
-                self.gemini_client = GeminiClient(api_key=api_key)
-                print("✅ Gemini API client initialized")
-            else:
-                print("⚠️  GEMINI_API_KEY not found - will show prompts only")
+            # Use volume_agent configuration for volume momentum analysis
+            self.llm_client = get_llm_client("volume_agent")
+            print("✅ LLM client initialized using volume_agent configuration")
         except Exception as e:
-            print(f"⚠️  Could not initialize Gemini client: {e}")
+            print(f"⚠️  Could not initialize LLM client: {e}")
+            print("Will show prompts only without LLM responses")
         
         # Define test stocks from different sectors
         self.test_stocks = [
@@ -293,11 +287,35 @@ class VolumeMomentumMultiStockTester:
             # Create context for the volume momentum prompt
             context = self._create_volume_momentum_context(volume_momentum_analysis, stock_config)
             
-            # Format the final prompt
-            prompt = self.prompt_manager.format_prompt(
-                "volume_trend_momentum",
-                context=context
-            )
+            # Create the volume momentum analysis prompt
+            prompt = f"""Analyze the volume momentum patterns for {stock_config.symbol}:
+
+{context}
+
+Please provide a comprehensive volume momentum analysis including:
+1. Volume trend direction and strength
+2. Momentum phase assessment
+3. Volume momentum patterns
+4. Future trend implications
+5. Confidence score (0-100)
+
+Format your response as a JSON object with the structure:
+{{
+    "volume_trend_direction": "bullish/bearish/neutral",
+    "trend_strength": "strong/moderate/weak",
+    "momentum_analysis": {{
+        "current_phase": "accumulation/distribution/consolidation",
+        "momentum_strength": "high/medium/low"
+    }},
+    "volume_momentum_phases": ["phase1", "phase2", "phase3"],
+    "future_implications": {{
+        "trend_continuation_probability": 0.75,
+        "key_levels": ["level1", "level2"]
+    }},
+    "confidence_score": 85
+}}
+
+Provide detailed explanations for each component."""
             
             # Save prompt details
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -339,11 +357,15 @@ class VolumeMomentumMultiStockTester:
             # Make API call if available
             llm_response = ""
             parsed_response = {}
-            if self.gemini_client:
+            if self.llm_client:
                 try:
-                    print(f"🚀 Making API call for {stock_config.symbol}...")
-                    response, code_results, execution_results = await self.gemini_client.core.call_llm_with_code_execution(prompt)
-                    llm_response = response
+                    print(f"🚀 Making LLM API call for {stock_config.symbol}...")
+                    # Use the new LLM client with code execution enabled for calculations
+                    llm_response = await self.llm_client.generate(
+                        prompt=prompt,
+                        enable_code_execution=True,
+                        timeout=90  # 90 seconds for volume analysis
+                    )
                     
                     # Try to parse JSON response
                     try:
@@ -366,12 +388,9 @@ class VolumeMomentumMultiStockTester:
                         f.write(f"Company: {stock_config.name}\n")
                         f.write(f"Sector: {stock_config.sector}\n")
                         f.write(f"Response Time: {datetime.now().isoformat()}\n")
-                        f.write(f"Response Length: {len(response) if response else 0} characters\n")
+                        f.write(f"Response Length: {len(llm_response) if llm_response else 0} characters\n")
                         f.write(f"JSON Parsed Successfully: {bool(parsed_response)}\n")
-                        if code_results:
-                            f.write(f"Mathematical Calculations: {len(code_results)} code snippets executed\n")
-                        if execution_results:
-                            f.write(f"Calculation Results: {len(execution_results)} computational outputs\n")
+                        f.write(f"LLM Provider: {self.llm_client.get_provider_info() if self.llm_client else 'None'}\n")
                         f.write("\n")
                         
                         # Parsed JSON response (if available)
@@ -384,7 +403,7 @@ class VolumeMomentumMultiStockTester:
                         # Full response
                         f.write("COMPLETE LLM RESPONSE:\n")
                         f.write("-" * 40 + "\n")
-                        f.write(response or "No response received")
+                        f.write(llm_response or "No response received")
                         f.write("\n")
                     
                 except Exception as e:

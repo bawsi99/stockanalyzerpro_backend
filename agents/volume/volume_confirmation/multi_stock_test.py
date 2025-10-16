@@ -41,8 +41,7 @@ except ImportError as e:
 
 # Import backend components
 try:
-    from backend.gemini.gemini_client import GeminiClient
-    from backend.gemini.prompt_manager import PromptManager
+    from backend.llm import get_llm_client
     from backend.zerodha.client import ZerodhaDataClient
     HAS_BACKEND = True
     print("✅ Backend components loaded")
@@ -137,21 +136,14 @@ class MultiStockVolumeConfirmationTester:
                 print(f"❌ Cannot initialize Zerodha client: {e}")
                 sys.exit(1)
         
-        # Initialize other components
+        # Initialize LLM client
         if HAS_BACKEND:
-            self.prompt_manager = PromptManager()
-            
-            # Initialize Gemini client if API key is available
-            self.gemini_client = None
             try:
-                api_key = os.environ.get("GEMINI_API_KEY")
-                if api_key:
-                    self.gemini_client = GeminiClient(api_key=api_key)
-                    print("✅ Gemini API client initialized")
-                else:
-                    print("⚠️  GEMINI_API_KEY not found - will show prompts only")
+                self.llm_client = get_llm_client("volume_agent")
+                print("✅ LLM client initialized using volume_agent configuration")
             except Exception as e:
-                print(f"⚠️  Could not initialize Gemini client: {e}")
+                print(f"⚠️  Could not initialize LLM client: {e}")
+                self.llm_client = None
         
         # Define test stocks from different sectors with different volume profiles
         self.test_stocks = [
@@ -372,12 +364,22 @@ class MultiStockVolumeConfirmationTester:
                 analysis_data, stock_config.symbol, stock_config.name, stock_config.sector
             )
             
-            # Format the final prompt
-            prompt = self.prompt_manager.format_prompt(
-                "volume_confirmation_analysis",
-                context=formatted_context
-            )
-            prompt += self.prompt_manager.SOLVING_LINE
+            # Create the final prompt
+            prompt = f"""
+Analyze the volume confirmation for {stock_config.symbol} ({stock_config.name}) in the {stock_config.sector} sector.
+
+Context Data:
+{formatted_context}
+
+Provide a comprehensive volume confirmation analysis including:
+1. Overall confirmation status (confirmed/unconfirmed/mixed)
+2. Confirmation strength (strong/medium/weak)
+3. Confidence score (0-100)
+4. Key volume patterns and their implications
+5. Risk factors and recommendations
+
+Format your response as structured analysis with clear sections.
+"""
             
             # Save prompt details with timestamp
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -422,11 +424,13 @@ class MultiStockVolumeConfirmationTester:
             
             # Make API call if available
             llm_response = ""
-            if self.gemini_client:
+            if self.llm_client:
                 try:
                     print(f"🚀 Making API call for {stock_config.symbol}...")
-                    response, code_results, execution_results = await self.gemini_client.core.call_llm_with_code_execution(prompt)
-                    llm_response = response
+                    llm_response = await self.llm_client.generate(
+                        prompt=prompt,
+                        enable_code_execution=True
+                    )
                     
                     # Save response with timestamp
                     response_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -439,17 +443,14 @@ class MultiStockVolumeConfirmationTester:
                         f.write(f"Sector: {stock_config.sector}\n")
                         f.write(f"Volume Profile: {stock_config.volume_profile}\n")
                         f.write(f"Response Time: {datetime.now().isoformat()}\n")
-                        f.write(f"Response Length: {len(response) if response else 0} characters\n")
-                        if code_results:
-                            f.write(f"Mathematical Calculations: {len(code_results)} code snippets executed\n")
-                        if execution_results:
-                            f.write(f"Calculation Results: {len(execution_results)} computational outputs\n")
+                        f.write(f"Response Length: {len(llm_response) if llm_response else 0} characters\n")
+                        f.write(f"LLM Model Used: {self.llm_client.get_provider_info().get('model', 'unknown')}\n")
                         f.write("\n")
                         
                         # Full response
                         f.write("COMPLETE LLM RESPONSE:\n")
                         f.write("-" * 40 + "\n")
-                        f.write(response or "No response received")
+                        f.write(llm_response or "No response received")
                         f.write("\n")
                     
                 except Exception as e:

@@ -25,9 +25,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'backend'))
 
 try:
-    from backend.gemini.gemini_client import GeminiClient
-    from backend.gemini.prompt_manager import PromptManager
-    from backend.gemini.context_engineer import ContextEngineer, AnalysisType
+    from backend.llm import get_llm_client
     from backend.zerodha.client import ZerodhaDataClient
 except ImportError as e:
     print(f"❌ Import Error: {e}")
@@ -66,20 +64,15 @@ class VolumeAnomalyMultiStockTester:
         # Initialize volume anomaly components
         self.volume_processor = VolumeAnomalyProcessor()
         self.chart_generator = VolumeAnomalyChartGenerator()
-        self.prompt_manager = PromptManager()
-        self.context_engineer = ContextEngineer()
         
-        # Initialize Gemini client if API key is available
-        self.gemini_client = None
+        # Initialize LLM client for volume analysis
+        self.llm_client = None
         try:
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if api_key:
-                self.gemini_client = GeminiClient(api_key=api_key)
-                print("✅ Gemini API client initialized")
-            else:
-                print("⚠️  GEMINI_API_KEY not found - will show prompts only")
+            self.llm_client = get_llm_client("volume_agent")  # Uses pre-configured volume agent
+            print("✅ LLM client initialized for volume analysis")
         except Exception as e:
-            print(f"⚠️  Could not initialize Gemini client: {e}")
+            print(f"⚠️  Could not initialize LLM client: {e}")
+            print("⚠️  Will show prompts only")
         
         # Define test stocks from different sectors with volume behavior expectations
         self.test_stocks = [
@@ -338,12 +331,19 @@ Recent Significant Anomalies:"""
 - {anomaly.get('date', 'unknown')}: {anomaly.get('volume_ratio', 0):.1f}x volume ({anomaly.get('significance', 'unknown')} significance)
   Context: {anomaly.get('price_context', 'unknown')}, Likely Cause: {anomaly.get('likely_cause', 'unknown')}"""
             
-            # Get the volume anomaly detection prompt
-            prompt = self.prompt_manager.format_prompt(
-                "volume_anomaly_detection",
-                context=context
-            )
-            prompt += self.prompt_manager.SOLVING_LINE
+            # Create the volume anomaly detection prompt
+            prompt = f"""Please analyze the volume anomaly data for this stock:
+
+{context}
+
+Provide a comprehensive volume anomaly analysis including:
+1. Assessment of detected anomalies and their significance
+2. Current volume status and trends
+3. Anomaly patterns and frequency analysis
+4. Risk assessment based on volume behavior
+5. Trading implications and recommendations
+
+Format your response as a structured analysis with clear sections for each component."""
             
             # Save prompt details
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -381,11 +381,17 @@ Recent Significant Anomalies:"""
             
             # Make API call if available
             llm_response = ""
-            if self.gemini_client:
+            if self.llm_client:
                 try:
                     print(f"🚀 Making API call for volume anomaly analysis of {stock_config.symbol}...")
-                    response, code_results, execution_results = await self.gemini_client.core.call_llm_with_code_execution(prompt)
-                    llm_response = response
+                    
+                    # Use the new LLM backend with code execution enabled
+                    llm_response = await self.llm_client.generate(
+                        prompt=prompt,
+                        enable_code_execution=True,  # Enable calculations for better analysis
+                        timeout=90,  # 90 second timeout for volume analysis
+                        max_retries=3
+                    )
                     
                     # Save response
                     response_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -397,16 +403,13 @@ Recent Significant Anomalies:"""
                         f.write(f"Company: {stock_config.name}\n")
                         f.write(f"Sector: {stock_config.sector}\n")
                         f.write(f"Response Time: {datetime.now().isoformat()}\n")
-                        f.write(f"Response Length: {len(response) if response else 0} characters\n")
-                        if code_results:
-                            f.write(f"Code Executions: {len(code_results)} snippets\n")
-                        if execution_results:
-                            f.write(f"Calculation Results: {len(execution_results)} outputs\n")
+                        f.write(f"Response Length: {len(llm_response) if llm_response else 0} characters\n")
+                        f.write(f"Provider: {self.llm_client.get_provider_info()}\n")
                         f.write("\n")
                         
                         f.write("COMPLETE LLM RESPONSE:\n")
                         f.write("-" * 40 + "\n")
-                        f.write(response or "No response received")
+                        f.write(llm_response or "No response received")
                         f.write("\n")
                     
                 except Exception as e:
