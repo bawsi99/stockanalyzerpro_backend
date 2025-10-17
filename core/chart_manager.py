@@ -59,12 +59,9 @@ class ChartManager:
         # Ensure base directory exists
         self.base_output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Start cleanup thread only if enabled
-        if self.enable_cleanup:
-            self._start_cleanup_thread()
-            logger.info(f"ChartManager initialized: {base_output_dir}, max_age={max_age_hours}h, max_size={max_total_size_mb}MB, cleanup=enabled")
-        else:
-            logger.info(f"ChartManager initialized: {base_output_dir}, max_age={max_age_hours}h, max_size={max_total_size_mb}MB, cleanup=disabled")
+        # Chart cleanup thread removed - charts are generated in-memory only
+        logger.info(f"ChartManager initialized: {base_output_dir}, max_age={max_age_hours}h, max_size={max_total_size_mb}MB")
+        logger.info("Charts are generated in-memory - no cleanup needed")
     
     def get_chart_directory(self, symbol: str, interval: str) -> Path:
         """Get the directory path for a specific symbol and interval."""

@@ -39,7 +39,6 @@ class SectorBenchmarkingProvider:
         # Reasoning: Layer 1 expires when data is stale. If Layer 1 expires, we need fresh data,
         # not old cached data from Layer 2. Layer 2 would serve stale data when we need fresh data.
         
-        logging.info("SectorBenchmarkingProvider initialized - Layer 2 cache removed, using Layer 1 only")
     
     def get_comprehensive_benchmarking(self, stock_symbol: str, stock_data: pd.DataFrame, user_sector: str = None) -> Dict[str, Any]:
         """

@@ -592,19 +592,7 @@ async def startup_event():
     except Exception as e:
         print(f"⚠️  Warning during initialization: {e}")
 
-    # Log currently active signals weighting profiles (for transparency)
-    try:
-        from data.signals.config import load_timeframe_weights
-        default_weights = load_timeframe_weights()
-        trending_weights = load_timeframe_weights(regime="trending")
-        ranging_weights = load_timeframe_weights(regime="ranging")
-        print(f"⚖️  Signals timeframe weights (default): {default_weights}")
-        if trending_weights:
-            print(f"⚖️  Signals timeframe weights (trending profile): {trending_weights}")
-        if ranging_weights:
-            print(f"⚖️  Signals timeframe weights (ranging profile): {ranging_weights}")
-    except Exception as e:
-        print(f"⚠️  Warning: Could not load signals weighting profiles: {e}")
+    # Legacy signals system removed - timeframe weighting now handled by individual agents
 
     # Do not kick calibration immediately to avoid duplicate runs with the scheduler
     if os.environ.get("ENABLE_SCHEDULED_CALIBRATION") == "1":

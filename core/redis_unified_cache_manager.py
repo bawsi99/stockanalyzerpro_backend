@@ -102,8 +102,7 @@ class RedisUnifiedCacheManager:
         }
         self.stats_lock = threading.RLock()
         
-        # Start cleanup thread
-        self._start_cleanup_thread()
+        # Redis cleanup thread removed - Redis handles expiration automatically
         
         logger.info(f"RedisUnifiedCacheManager initialized: {self.redis_url}")
     
@@ -533,7 +532,6 @@ class RedisUnifiedCacheManager:
         
         cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
         cleanup_thread.start()
-        logger.info(f"Started cleanup thread with {self.cleanup_interval_minutes} minute interval")
 
 # Global unified Redis cache manager instance
 _unified_redis_cache_manager = None
