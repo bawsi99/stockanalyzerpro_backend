@@ -1,5 +1,507 @@
 {
   "sector_mappings": {
+    "NIFTY FIN SERV": {
+      "sector_name": "financial services",
+      "description": "financial servies in India",
+      "stocks": [
+        {
+          "company_name": "MAS FINANCIAL SERV",
+          "nse_symbol": "MASFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "BAJAJ FINANCE",
+          "nse_symbol": "BAJFINANCE",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "5PAISA CAPITAL",
+          "nse_symbol": "5PAISA",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CAN FIN HOMES",
+          "nse_symbol": "CANFINHOME",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CHOLAMANDALAM IN & FIN CO",
+          "nse_symbol": "CHOLAFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "GIC HOUSING FINANCE",
+          "nse_symbol": "GICHSGFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "LIC HOUSING FINANCE",
+          "nse_symbol": "LICHSGFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "HOME FIRST FIN CO IND",
+          "nse_symbol": "HOMEFIRST",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "MAX FINANCIAL SERV",
+          "nse_symbol": "MFSL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "MOTOR & GENERAL FINANCE L",
+          "nse_symbol": "MOTOGENFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CENTRUM CAPITAL",
+          "nse_symbol": "CENTRUM",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "SURYODAY SMALL FIN BK",
+          "nse_symbol": "SURYODAY",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "INDOSTAR CAPITAL FIN",
+          "nse_symbol": "INDOSTAR",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "SUNDARAM FINANCE",
+          "nse_symbol": "SUNDARMFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "TOURISM FINANCE CORP. OF",
+          "nse_symbol": "TFCILTD",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "VLS FINANCE",
+          "nse_symbol": "VLSFINANCE",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "ARIHANT CAPITAL MKTS",
+          "nse_symbol": "ARIHANTCAP",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CORAL INDIA FIN & HOUS LT",
+          "nse_symbol": "CORALFINAC",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "KEYNOTE FIN SERV",
+          "nse_symbol": "KEYFINSERV",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "SHRIRAM FINANCE",
+          "nse_symbol": "SHRIRAMFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "TCI FINANCE",
+          "nse_symbol": "TCIFINANCE",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "DCM FINANCIAL SERVICES LT",
+          "nse_symbol": "DCMFINSERV",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "UGRO CAPITAL",
+          "nse_symbol": "UGROCAP",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "APTUS VALUE HSG FIN I",
+          "nse_symbol": "APTUS",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "LAKSHMI FIN IND CORP",
+          "nse_symbol": "LFIC",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "STARTECK FINANCE",
+          "nse_symbol": "STARTECK",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "TRUCAP FINANCE",
+          "nse_symbol": "TRU",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "LIFE INSURA CORP OF INDIA",
+          "nse_symbol": "LICI",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CSL FINANCE",
+          "nse_symbol": "CSLFINANCE",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "SATIN CREDIT NET",
+          "nse_symbol": "SATIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "SPANDANA SPHOORTY FIN",
+          "nse_symbol": "SPANDANA",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CONSO. FIN. & HOLD.",
+          "nse_symbol": "CONSOFINVT",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "IIFL FINANCE",
+          "nse_symbol": "IIFL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "GEOJIT FINANCIAL SER L",
+          "nse_symbol": "GEOJITFSL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "FUSION FINANCE",
+          "nse_symbol": "FUSION",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "FIVE-STAR BUS FIN",
+          "nse_symbol": "FIVESTAR",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "HYBRID FINANCIAL SERVICE",
+          "nse_symbol": "HYBRIDFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "IIFL CAPITAL SERVICES",
+          "nse_symbol": "IIFLCAPS",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "M&M FIN. SERVICES",
+          "nse_symbol": "M&MFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "ABANS FINANCIAL SRVCS",
+          "nse_symbol": "AFSL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "EMKAY GLOBAL FIN SERV",
+          "nse_symbol": "EMKAY-BE",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "JM FINANCIAL",
+          "nse_symbol": "JMFINANCIL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "TRANSWARRANTY FIN.",
+          "nse_symbol": "TFL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "MOTILAL OSWAL FIN",
+          "nse_symbol": "MOTILALOFS",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "EDELWEISS FIN SERV",
+          "nse_symbol": "EDELWEISS",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "NAHAR CAP & FIN.",
+          "nse_symbol": "NAHARCAP",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "ARMAN FIN SERV",
+          "nse_symbol": "ARMANFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "VIJI FINANCE",
+          "nse_symbol": "VIJIFIN-BE",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "SBFC FINANCE",
+          "nse_symbol": "SBFC",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "SRG HOUSING FINANCE L",
+          "nse_symbol": "SRGHFL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "JIO FIN SERVICES",
+          "nse_symbol": "JIOFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "PNB HOUSING FIN",
+          "nse_symbol": "PNBHOUSING",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "MANAPPURAM FINANCE",
+          "nse_symbol": "MANAPPURAM",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "N.B.I. IND. FIN. CO.",
+          "nse_symbol": "NBIFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CAPITAL TRUST",
+          "nse_symbol": "CAPTRUST",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "MUFIN GREEN FINANCE",
+          "nse_symbol": "MUFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CP CAPITAL",
+          "nse_symbol": "CPCAP",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "FEDBANK FINANCIAL SER L",
+          "nse_symbol": "FEDFINA",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CAPRI GLOBAL CAPITAL",
+          "nse_symbol": "CGCL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "INDIA SHELTER FIN CORP L",
+          "nse_symbol": "INDIASHLTR",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "MUTHOOT MICROFIN",
+          "nse_symbol": "MUTHOOTMF",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "IBL FINANCE",
+          "nse_symbol": "IBLFL-SM",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "ADITYA BIRLA CAPITAL",
+          "nse_symbol": "ABCAPITAL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CHOLAMANDALAM FIN HOL",
+          "nse_symbol": "CHOLAHLDNG",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "SBI LIFE INSURANCE CO",
+          "nse_symbol": "SBILIFE",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "PTC INDIA FIN SERV",
+          "nse_symbol": "PFS",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "MUTHOOT FINANCE",
+          "nse_symbol": "MUTHOOTFIN",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "AADHAR HOUSING FINANCE L",
+          "nse_symbol": "AADHARHFC",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "MANGAL CREDIT N FINCORP L",
+          "nse_symbol": "MANCREDIT",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "L&T FINANCE",
+          "nse_symbol": "LTF",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "BAJAJ HOUSING FINANCE",
+          "nse_symbol": "BAJAJHFL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "DECCAN TRANSCON LEASING L",
+          "nse_symbol": "DECCANTRAN-SM",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "NORTHERN ARC CAPITAL",
+          "nse_symbol": "NORTHARC",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "MANBA FINANCE",
+          "nse_symbol": "MANBA",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "USHA FINANCIAL SERVICES L",
+          "nse_symbol": "USHAFIN-SM",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "DAM CAPITAL ADVISORS",
+          "nse_symbol": "DAMCAPITAL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CAPITAL INFRA TRUST",
+          "nse_symbol": "CAPINVIT-IV",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "REPCO HOME FINANCE",
+          "nse_symbol": "REPCOHOME",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "SAMMAAN CAPITAL",
+          "nse_symbol": "SAMMAANCAP",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "JIND POL INV & FIN CO",
+          "nse_symbol": "JPOLYINVST",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "CAPITAL INDIA FINANCE",
+          "nse_symbol": "CIFL",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "DAR CREDIT & CAPITAL",
+          "nse_symbol": "DCCL-SM",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "HDB FINANCIAL SERVICES L",
+          "nse_symbol": "HDBFS",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "LAXMI INDIA FINANCE",
+          "nse_symbol": "LAXMIINDIA",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "RELIANCE HOME FINANCE",
+          "nse_symbol": "RHFL-BZ",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "FINKURVE FINANCIAL SERV L",
+          "nse_symbol": "FINKURVE",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "TATA CAPITAL",
+          "nse_symbol": "TATACAP",
+          "sector": "Financial Services"
+        },
+        {
+          "company_name": "MONEYBOXX FINANCE",
+          "nse_symbol": "MONEYBOXX",
+          "sector": "Financial Services"
+        }
+      ]
+    },
+    "NIFTY BANK": {
+      "sector_name": "Banking",
+      "description": "banks in India",
+      "stocks": [
+        {
+          "company_name": "FINO PAYMENTS BANK",
+          "nse_symbol": "FINOPB",
+          "sector": "Banking"
+        },
+        {
+          "company_name": "TAMILNAD MERCA BANK",
+          "nse_symbol": "TMB",
+          "sector": "Banking"
+        },
+        {
+          "company_name": "KOTAK PSU BANK",
+          "nse_symbol": "PSUBANK",
+          "sector": "Banking"
+        },
+        {
+          "company_name": "UJJIVAN SMALL FINANC BANK",
+          "nse_symbol": "UJJIVANSFB",
+          "sector": "Banking"
+        },
+        {
+          "company_name": "INDBANK MERCH BANK",
+          "nse_symbol": "INDBANK",
+          "sector": "Banking"
+        },
+        {
+          "company_name": "UTKARSH SMALL FIN BANK L",
+          "nse_symbol": "UTKARSHBNK",
+          "sector": "Banking"
+        },
+        {
+          "company_name": "ESAF SMALL FINANCE BANK L",
+          "nse_symbol": "ESAFSFB",
+          "sector": "Banking"
+        },
+        {
+          "company_name": "AU SMALL FINANCE BANK",
+          "nse_symbol": "AUBANK",
+          "sector": "Banking"
+        },
+        {
+          "company_name": "JANA SMALL FIN BANK",
+          "nse_symbol": "JSFB",
+          "sector": "Banking"
+        },
+        {
+          "company_name": "CAPITAL SMALL FIN BANK L",
+          "nse_symbol": "CAPITALSFB",
+          "sector": "Banking"
+        }
+      ]
+    },
     "NIFTY PVT BANK": {
       "sector_name": "Private Banking",
       "description": "Private sector banks in India",
@@ -499,6 +1001,1026 @@
           "company_name": "Tata Communications Ltd",
           "nse_symbol": "TATACOMM",
           "sector": "IT"
+        },
+        {
+          "company_name": "GACM TECHNOLOGIES",
+          "nse_symbol": "GATECHDVR-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "OSWAL GREENTECH",
+          "nse_symbol": "OSWALGREEN",
+          "sector": "IT"
+        },
+        {
+          "company_name": "GARWARE TECH FIBRES",
+          "nse_symbol": "GARFIBRES",
+          "sector": "IT"
+        },
+        {
+          "company_name": "HCL INFOSYSTEMS",
+          "nse_symbol": "HCL-INSYS",
+          "sector": "IT"
+        },
+        {
+          "company_name": "KABRA EXTRUSION TECHNIK L",
+          "nse_symbol": "KABRAEXTRU",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SANDHAR TECHNOLOGIES",
+          "nse_symbol": "SANDHAR",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ONWARD TECHNOLOGIES",
+          "nse_symbol": "ONWARDTEC",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DRC SYSTEMS INDIA",
+          "nse_symbol": "DRCSYSTEMS",
+          "sector": "IT"
+        },
+        {
+          "company_name": "HI-TECH PIPES",
+          "nse_symbol": "HITECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "EQUIPPP SOC IMP TECH",
+          "nse_symbol": "EQUIPPP-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "BDR BUILDCON",
+          "nse_symbol": "BDR-IT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ADROIT INFOTECH",
+          "nse_symbol": "ADROITINFO",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CLEAN SCIENCE & TECH",
+          "nse_symbol": "CLEAN",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CIGNITI TECHNOLOGIES",
+          "nse_symbol": "CIGNITITEC",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CARTRADE TECH",
+          "nse_symbol": "CARTRADE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DUDIGITAL GLOBAL",
+          "nse_symbol": "DUGLOBAL-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SERVOTECH REN POW SYS",
+          "nse_symbol": "SERVOTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PARAS DEF AND SPCE TECH L",
+          "nse_symbol": "PARAS",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CYBERTECH SYSTEMS & SOFTW",
+          "nse_symbol": "CYBERTECH-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "3I INFOTECH",
+          "nse_symbol": "3IINFOLTD",
+          "sector": "IT"
+        },
+        {
+          "company_name": "R. S. SOFTWARE (INDIA) LI",
+          "nse_symbol": "RSSOFTWARE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TECHNO ELEC & ENG CO.",
+          "nse_symbol": "TECHNOE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SONATA SOFTWARE",
+          "nse_symbol": "SONATSOFTW",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PB FINTECH",
+          "nse_symbol": "POLICYBZR",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TRIGYN TECHNOLOGIES",
+          "nse_symbol": "TRIGYN-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "LCC INFOTECH",
+          "nse_symbol": "LCCINFOTEC",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CMS INFO SYSTEMS",
+          "nse_symbol": "CMSINFO",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SHREE RAMA MULTI TECH",
+          "nse_symbol": "SHREERAMA-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "MAHALAXMI RUBTECH",
+          "nse_symbol": "MHLXMIRU",
+          "sector": "IT"
+        },
+        {
+          "company_name": "GARWARE HI-TECH FILMS",
+          "nse_symbol": "GRWRHITECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DEV INFO TECHNOLOGY",
+          "nse_symbol": "DEVIT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "RICHA INFO SYSTEMS",
+          "nse_symbol": "RICHA-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CALIFORNIA SOFTWARE CO LT",
+          "nse_symbol": "CALSOFT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SHIGAN QUANTUM TECH",
+          "nse_symbol": "SHIGAN-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "XELPMOC DESIGN & TECH",
+          "nse_symbol": "XELPMOC",
+          "sector": "IT"
+        },
+        {
+          "company_name": "THE HI-TECH GEARS",
+          "nse_symbol": "HITECHGEAR-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "A B N INTERCORP",
+          "nse_symbol": "ABNINT-IT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "MINDPOOL TECHNOLOGIES",
+          "nse_symbol": "MINDPOOL-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TPL PLASTECH",
+          "nse_symbol": "TPLPLASTEH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ARROW GREENTECH",
+          "nse_symbol": "ARROWGREEN",
+          "sector": "IT"
+        },
+        {
+          "company_name": "STERLITE TECHNOLOGIES",
+          "nse_symbol": "STLTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PNC INFRATECH",
+          "nse_symbol": "PNCINFRA",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SILVER TOUCH TECHNO",
+          "nse_symbol": "SILVERTUC",
+          "sector": "IT"
+        },
+        {
+          "company_name": "AXISCADES TECH",
+          "nse_symbol": "AXISCADES-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SONU INFRATECH",
+          "nse_symbol": "SONUINFRA-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "GLOBESECURE TECHNO",
+          "nse_symbol": "GSTL-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "FIDEL SOFTECH",
+          "nse_symbol": "FIDEL-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "AION-TECH SOLUTIONS",
+          "nse_symbol": "GOLDTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "BHALCHANDRAM CLOTHING",
+          "nse_symbol": "BHALCHANDR-IT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "AURUM PROPTECH",
+          "nse_symbol": "AURUM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "RADHIKA JEWELTECH",
+          "nse_symbol": "RADHIKAJWE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DIGICONTENT",
+          "nse_symbol": "DGCONTENT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "JAIN IRRIGATION SYSTEMS",
+          "nse_symbol": "JISLJALEQS",
+          "sector": "IT"
+        },
+        {
+          "company_name": "OLECTRA GREENTECH",
+          "nse_symbol": "OLECTRA",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SYRMA SGS TECHNOLOGY",
+          "nse_symbol": "SYRMA",
+          "sector": "IT"
+        },
+        {
+          "company_name": "GVP INFOTECH",
+          "nse_symbol": "GVPTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "JAY JALARAM TECHNO",
+          "nse_symbol": "KORE-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "VIVIANA POWER TECH",
+          "nse_symbol": "VIVIANA-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "INFOBEANS TECHNO.",
+          "nse_symbol": "INFOBEAN",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SECUREKLOUD TECH",
+          "nse_symbol": "SECURKLOUD",
+          "sector": "IT"
+        },
+        {
+          "company_name": "AGRI-TECH (INDIA)",
+          "nse_symbol": "AGRITECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CREATIVE NEWTECH",
+          "nse_symbol": "CREATIVE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CYBER MEDIA RES & SER",
+          "nse_symbol": "CMRSL-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "NIIT",
+          "nse_symbol": "NIITLTD",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DC INFOTECH AND COMUN",
+          "nse_symbol": "DCI",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TRACXN TECHNOLOGIES",
+          "nse_symbol": "TRACXN",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PHANTOM DIGITAL EFF",
+          "nse_symbol": "PHANTOMFX-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ALLDIGI TECH",
+          "nse_symbol": "ALLDIGI",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CYBER MEDIA (INDIA)",
+          "nse_symbol": "CYBERMEDIA-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DCX SYSTEMS",
+          "nse_symbol": "DCXINDIA",
+          "sector": "IT"
+        },
+        {
+          "company_name": "VITAL CHEMTECH",
+          "nse_symbol": "VITAL-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "FCS SOFTWARE SOLN.",
+          "nse_symbol": "FCSSOFT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "KAYNES TECHNOLOGY IND",
+          "nse_symbol": "KAYNES",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DOLAT ALGOTECH",
+          "nse_symbol": "DOLATALGO",
+          "sector": "IT"
+        },
+        {
+          "company_name": "AAA TECHNOLOGIES",
+          "nse_symbol": "AAATECH-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ARHAM TECHNOLOGIES",
+          "nse_symbol": "ARHAM-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ORIENT CERATECH",
+          "nse_symbol": "ORIENTCER",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ALL E TECHNOLOGIES",
+          "nse_symbol": "ALLETEC-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "INDO TECH TRANSFORM",
+          "nse_symbol": "INDOTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DOLLEX AGROTECH",
+          "nse_symbol": "DOLLEX-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "KFIN TECHNOLOGIES",
+          "nse_symbol": "KFINTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "R SYS INTERNATIONAL",
+          "nse_symbol": "RSYSTEMS",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ANLON TECHNOLOGY SOL",
+          "nse_symbol": "ANLON-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "LUMAX AUTO TECH",
+          "nse_symbol": "LUMAXTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "NINTEC SYSTEMS",
+          "nse_symbol": "NINSYS",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CAMBRIDGE TECH ENTER",
+          "nse_symbol": "CTE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TECHNOCRAFT IND",
+          "nse_symbol": "TIIL",
+          "sector": "IT"
+        },
+        {
+          "company_name": "VERTEXPLUS TECHNOLOGIES L",
+          "nse_symbol": "VERTEXPLUS-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SYSTANGO TECHNOLOGIES",
+          "nse_symbol": "SYSTANGO-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CHEMBOND MATERIALTECH",
+          "nse_symbol": "CHEMBOND",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TIME TECHNOPLAST",
+          "nse_symbol": "TIMETECHNO",
+          "sector": "IT"
+        },
+        {
+          "company_name": "MEGASOFT",
+          "nse_symbol": "MEGASOFT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ALLIED DIGITAL SERV.",
+          "nse_symbol": "ADSL",
+          "sector": "IT"
+        },
+        {
+          "company_name": "AVALON TECHNOLOGIES",
+          "nse_symbol": "AVALON",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PATTECH FITWELL TUB COM L",
+          "nse_symbol": "PATTECH-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "HITECH CORPORATION",
+          "nse_symbol": "HITECHCORP",
+          "sector": "IT"
+        },
+        {
+          "company_name": "BGR ENERGY SYSTEMS",
+          "nse_symbol": "BGRENERGY-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "QUICKTOUCH TECHNOLOGIES L",
+          "nse_symbol": "QUICKTOUCH-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "GSS INFOTECH",
+          "nse_symbol": "GSS",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TITAGARH RAIL SYSTEMS",
+          "nse_symbol": "TITAGARH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PANACHE DIGILIFE",
+          "nse_symbol": "PANACHE-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DIGISPICE TECHNOLOGIES LT",
+          "nse_symbol": "DIGISPICE-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "KORE DIGITAL",
+          "nse_symbol": "KDL-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "IKIO TECHNOLOGIES",
+          "nse_symbol": "IKIO",
+          "sector": "IT"
+        },
+        {
+          "company_name": "THYROCARE TECH",
+          "nse_symbol": "THYROCARE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PALRED TECHNOLOGIES",
+          "nse_symbol": "PALREDTEC-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "URAVI DEFENCE &TECH",
+          "nse_symbol": "URAVIDEF",
+          "sector": "IT"
+        },
+        {
+          "company_name": "IDEAFORGE TECHNO",
+          "nse_symbol": "IDEAFORGE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "AARTECH SOLONICS",
+          "nse_symbol": "AARTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SYNOPTICS TECHNOLOGIES L",
+          "nse_symbol": "SYNOPTICS-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TRIDHYA TECH",
+          "nse_symbol": "TRIDHYA-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "MOLD-TEK TECHNOLOGIES",
+          "nse_symbol": "MOLDTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SHRI TECHTEX",
+          "nse_symbol": "SHRITECH-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "NIIT LEARNING SYSTEMS",
+          "nse_symbol": "NIITMTS",
+          "sector": "IT"
+        },
+        {
+          "company_name": "GACM TECHNOLOGIES",
+          "nse_symbol": "GATECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "VINSYS IT SERVICES IND LT",
+          "nse_symbol": "VINSYS-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "VL E GOV AND IT SOL",
+          "nse_symbol": "VLEGOV",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ADVANCED ENZYME TECH",
+          "nse_symbol": "ADVENZYMES",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PYRAMID TECHNOPLAST",
+          "nse_symbol": "PYRAMID",
+          "sector": "IT"
+        },
+        {
+          "company_name": "INTRASOFT TECH.",
+          "nse_symbol": "ISFT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ENDURANCE TECHNO.",
+          "nse_symbol": "ENDURANCE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DIGIKORE STUDIOS",
+          "nse_symbol": "DIGIKORE-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "NEWJAISA TECHNOLOGIES",
+          "nse_symbol": "NEWJAISA-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "VINYAS INNOVATIVE TECH L",
+          "nse_symbol": "VINYAS-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TERA SOFTWARE",
+          "nse_symbol": "TERASOFT-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PLADA INFOTECH SERVICES L",
+          "nse_symbol": "PLADAINFO-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "MICROPRO SOFTWARE SOL L",
+          "nse_symbol": "MICROPRO-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "INTENSE TECHNOLOGIES",
+          "nse_symbol": "INTENTECH-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ROX HI TECH",
+          "nse_symbol": "ROXHITECH-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "VA TECH WABAG",
+          "nse_symbol": "WABAG",
+          "sector": "IT"
+        },
+        {
+          "company_name": "NET AVENUE TECHNOLOGIES L",
+          "nse_symbol": "CBAZAAR-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DIGIDRIVE DISTRIBUTORS L",
+          "nse_symbol": "DIGIDRIVE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SALASAR TECHNO ENGG.",
+          "nse_symbol": "SALASAR",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ADDICTIVE LEARNING TECH L",
+          "nse_symbol": "LAWSIKHO-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "NOVA AGRITECH",
+          "nse_symbol": "NOVAAGRI",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DOCMODE HEALTH TECH",
+          "nse_symbol": "DHTL-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "RASHI PERIPHERALS",
+          "nse_symbol": "RPTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ESCONET TECHNOLOGIES",
+          "nse_symbol": "ESCONET-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DEEM ROLL TECH",
+          "nse_symbol": "DEEM-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "EXICOM TELE SYSTEMS",
+          "nse_symbol": "EXICOM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TRUST FINTECH",
+          "nse_symbol": "TRUST-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ALUWIND INFRA-TECH",
+          "nse_symbol": "ALUWIND-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SLONE INFOSYSTEMS",
+          "nse_symbol": "SLONE-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "GO DIGIT GENERAL INS",
+          "nse_symbol": "GODIGIT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "Z-TECH (INDIA)",
+          "nse_symbol": "ZTECH-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "LE TRAVENUES TECHNOLOGY L",
+          "nse_symbol": "IXIGO",
+          "sector": "IT"
+        },
+        {
+          "company_name": "FALCON TECHNOPROJ IND",
+          "nse_symbol": "FALCONTECH-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "MASON INFRATECH",
+          "nse_symbol": "MASON-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DIENSTEN TECH",
+          "nse_symbol": "DTL-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DHANUKA AGRITECH",
+          "nse_symbol": "DHANUKA",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PRIZOR VIZTECH",
+          "nse_symbol": "PRIZOR-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "MACOBS TECHNOLOGIES",
+          "nse_symbol": "MACOBSTECH-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "S A TECH SOFTWARE INDIA L",
+          "nse_symbol": "SATECH-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "IDEAL TECHNOPLAST IND",
+          "nse_symbol": "IDEALTECHO-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ORIENT TECHNOLOGIES",
+          "nse_symbol": "ORIENTTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "YAARI DIGI INT SER",
+          "nse_symbol": "YAARI-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PARAMATRIX TECHNOLOGIES L",
+          "nse_symbol": "PARAMATRIX-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TD POWER SYSTEMS",
+          "nse_symbol": "TDPOWERSYS",
+          "sector": "IT"
+        },
+        {
+          "company_name": "XTGLOBAL INFOTECH",
+          "nse_symbol": "XTGLOBAL",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ENVIROTECH SYSTEMS",
+          "nse_symbol": "ENVIRO-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PAISALO DIGITAL",
+          "nse_symbol": "PAISALO",
+          "sector": "IT"
+        },
+        {
+          "company_name": "BIKEWO GREEN TECH",
+          "nse_symbol": "BIKEWO-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TECHERA ENGINEER (IND) L",
+          "nse_symbol": "TECHERA-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "HVAX TECHNOLOGIES",
+          "nse_symbol": "HVAX-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "VIKAS ECOTECH",
+          "nse_symbol": "VIKASECO",
+          "sector": "IT"
+        },
+        {
+          "company_name": "LAKSHYA POWERTECH",
+          "nse_symbol": "LAKSHYA-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "RACL GEARTECH",
+          "nse_symbol": "RACLGEAR",
+          "sector": "IT"
+        },
+        {
+          "company_name": "APEX ECOTECH",
+          "nse_symbol": "APEXECO-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ROSSELL TECHSYS",
+          "nse_symbol": "ROSSTECH",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ONE MOBIKWIK SYSTEMS",
+          "nse_symbol": "MOBIKWIK",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CONCORD ENVIRO SYSTEMS L",
+          "nse_symbol": "CEWATER",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DUCON INFRATECHNOLOGIES L",
+          "nse_symbol": "DUCON",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ANYA POLYTECH & FERTI",
+          "nse_symbol": "ANYA-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CEREBRA INT TECH",
+          "nse_symbol": "CEREBRAINT-BZ",
+          "sector": "IT"
+        },
+        {
+          "company_name": "STANDARD GLASS LIN TECH L",
+          "nse_symbol": "SGLTL",
+          "sector": "IT"
+        },
+        {
+          "company_name": "MOSCHIP TECHNOLOGIES",
+          "nse_symbol": "MOSCHIP",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PROTEAN EGOV TECHNO",
+          "nse_symbol": "PROTEAN",
+          "sector": "IT"
+        },
+        {
+          "company_name": "HEXAWARE TECHNOLOGIES",
+          "nse_symbol": "HEXT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CALSOFT RS.2.50 PPD UP",
+          "nse_symbol": "CALSOFTPP-E1",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CURA TECHNOLOGIES",
+          "nse_symbol": "CURAA-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "COMPUCOM SOFTWARE",
+          "nse_symbol": "COMPUSOFT",
+          "sector": "IT"
+        },
+        {
+          "company_name": "WAAREE RENEWABLE TECH",
+          "nse_symbol": "WAAREERTL",
+          "sector": "IT"
+        },
+        {
+          "company_name": "NETWORK PEOPLE SRV TECH L",
+          "nse_symbol": "NPST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "VIRTUAL GALAXY INFOTECH L",
+          "nse_symbol": "VGINFOTECH-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "DIGITIDE SOLUTIONS",
+          "nse_symbol": "DIGITIDE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "AAKAAR MEDICAL TECHNO",
+          "nse_symbol": "AAKAAR-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "INFLUX HEALTHTECH",
+          "nse_symbol": "INFLUX-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SMARTEN POWER SYSTEMS",
+          "nse_symbol": "SMARTEN-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SUNTECH INFRA SOLUTIONS L",
+          "nse_symbol": "SUNTECH-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PRO FX TECH",
+          "nse_symbol": "PROFX-SM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "GVPTECH RE.1 PPD UP",
+          "nse_symbol": "GVPTECHPP-E1",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PROSTARM INFO SYSTEMS",
+          "nse_symbol": "PROSTARM",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CYBERMEDIA RS.5 PPD UP",
+          "nse_symbol": "CYBERPP-X1",
+          "sector": "IT"
+        },
+        {
+          "company_name": "ADITYA INFOTECH",
+          "nse_symbol": "CPPLUS",
+          "sector": "IT"
+        },
+        {
+          "company_name": "CAREER POINT EDUTECH",
+          "nse_symbol": "CPEDU",
+          "sector": "IT"
+        },
+        {
+          "company_name": "TECHD CYBERSECURITY",
+          "nse_symbol": "TECHD-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "AGS TRANSACT TECH",
+          "nse_symbol": "AGSTRA-BZ",
+          "sector": "IT"
+        },
+        {
+          "company_name": "EPACK PREFAB TECHN",
+          "nse_symbol": "EPACKPEB",
+          "sector": "IT"
+        },
+        {
+          "company_name": "PACE DIGITEK",
+          "nse_symbol": "PACEDIGITK",
+          "sector": "IT"
+        },
+        {
+          "company_name": "B.A.G.CONVERGENCE",
+          "nse_symbol": "BAGDIGITAL-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "GREENLEAF ENVIROTECH",
+          "nse_symbol": "GREENLEAF-ST",
+          "sector": "IT"
+        },
+        {
+          "company_name": "SESHAASAI TECHNOLOGIES L",
+          "nse_symbol": "STYL",
+          "sector": "IT"
+        },
+        {
+          "company_name": "3I INFOTECH",
+          "nse_symbol": "3IINFO-RE-BE",
+          "sector": "IT"
+        },
+        {
+          "company_name": "FABTECH TECHNOLOGIES",
+          "nse_symbol": "FABTECH-BE",
+          "sector": "IT"
         }
       ],
       "total_stocks": 64,
@@ -877,6 +2399,101 @@
           "company_name": "Neo Infracon Ltd",
           "nse_symbol": "NEOINFRA",
           "sector": "Real Estate"
+        },
+        {
+          "company_name": "NILA SPACES",
+          "nse_symbol": "NILASPACES-BE",
+          "sector": "Real Estate"
+        },
+        {
+          "company_name": "EMBASSY OFFICE PARKS REIT",
+          "nse_symbol": "EMBASSY-RR",
+          "sector": "Real Estate"
+        },
+        {
+          "company_name": "SUMIT WOODS",
+          "nse_symbol": "SUMIT",
+          "sector": "Real Estate"
+        },
+        {
+          "company_name": "KEYSTONE REALTORS",
+          "nse_symbol": "RUSTOMJEE",
+          "sector": "Real Estate"
+        },
+        {
+          "company_name": "EMBASSY DEVELOPMENTS",
+          "nse_symbol": "EMBDL",
+          "sector": "Real Estate"
+        },
+        {
+          "company_name": "COUNTRY CONDO S",
+          "nse_symbol": "COUNCODOS",
+          "sector": "Real Estate"
+        },
+        {
+          "company_name": "LANCOR HOLDINGS",
+          "nse_symbol": "LANCORHOL",
+          "sector": "Real Estate"
+        },
+        {
+          "company_name": "EFC (I)",
+          "nse_symbol": "EFCIL",
+          "sector": "Real Estate"
+        },
+        {
+          "company_name": "DEV ACCELERATOR",
+          "nse_symbol": "DEVX",
+          "sector": "Real Estate"
+        },
+        {
+          "company_name": "PANSARI DEVELOPERS",
+          "nse_symbol": "PANSARI",
+          "sector": "Realty"
+        },
+        {
+          "company_name": "SHRIRAM PROPERTIES",
+          "nse_symbol": "SHRIRAMPPS",
+          "sector": "Realty"
+        },
+        {
+          "company_name": "P. E. ANALYTICS",
+          "nse_symbol": "PROPEQUITY-SM",
+          "sector": "Realty"
+        },
+        {
+          "company_name": "HOMESFY REALTY",
+          "nse_symbol": "HOMESFY-SM",
+          "sector": "Realty"
+        },
+        {
+          "company_name": "PARSVNATH DEVELOPER",
+          "nse_symbol": "PARSVNATH-BE",
+          "sector": "Realty"
+        },
+        {
+          "company_name": "EXCEL REALTY N INFRA",
+          "nse_symbol": "EXCEL-BE",
+          "sector": "Realty"
+        },
+        {
+          "company_name": "DHANUKA REALTY",
+          "nse_symbol": "DRL-SM",
+          "sector": "Realty"
+        },
+        {
+          "company_name": "MEP INFRA. DEVELOPERS",
+          "nse_symbol": "MEP-BZ",
+          "sector": "Realty"
+        },
+        {
+          "company_name": "PROZONE REALTY",
+          "nse_symbol": "PROZONER-BE",
+          "sector": "Realty"
+        },
+        {
+          "company_name": "KNOWLEDGE REALTY TRUST",
+          "nse_symbol": "KRT-RR",
+          "sector": "Realty"
         }
       ],
       "total_stocks": 74,
@@ -905,6 +2522,1066 @@
           "company_name": "Indus Towers Ltd",
           "nse_symbol": "INDUSTOWER",
           "sector": "Infrastructure"
+        },
+        {
+          "company_name": "BIRLA CABLE",
+          "nse_symbol": "BIRLACABLE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "LIKHITHA INFRASTRUC",
+          "nse_symbol": "LIKHITHA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SHRADHA INFRAPROJECTS",
+          "nse_symbol": "SHRADHA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "FINOLEX CABLES",
+          "nse_symbol": "FINCABLES",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "FINOLEX INDUSTRIES",
+          "nse_symbol": "FINPIPE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "MARINE ELECTRICAL (I)",
+          "nse_symbol": "MARINE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "HINDUSTAN CONSTRUCTION CO",
+          "nse_symbol": "HCC",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "INDIAN HUME PIPE CO.",
+          "nse_symbol": "INDIANHUME",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "RKEC PROJECTS",
+          "nse_symbol": "RKEC",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "H.G.INFRA ENGINEERING",
+          "nse_symbol": "HGINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "RELIANCE INDUSTRIAL INFRA",
+          "nse_symbol": "RIIL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SIMPLEX INFRASTRUCTURES L",
+          "nse_symbol": "SIMPLEXINF",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SPML INFRA",
+          "nse_symbol": "SPMLINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "ISGEC HEAVY ENG",
+          "nse_symbol": "ISGEC",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "POWERGRID INFRA. INVITS",
+          "nse_symbol": "PGINVIT-IV",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "UNIVERSAL CABLES",
+          "nse_symbol": "UNIVCABLES",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "VARROC ENGINEERING",
+          "nse_symbol": "VARROC",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "RUCHI INFRASTRUCTURE",
+          "nse_symbol": "RUCHINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "RELIANCE INFRASTRUCTU",
+          "nse_symbol": "RELINFRA-BE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "G R INFRAPROJECTS",
+          "nse_symbol": "GRINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "REX PIPES AND CABLES",
+          "nse_symbol": "REXPIPES-ST",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "CEMINDIA PROJECTS",
+          "nse_symbol": "CEMPRO",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "BEW ENGINEERING",
+          "nse_symbol": "BEWLTD-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SANSERA ENGINEERING",
+          "nse_symbol": "SANSERA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "NATIONAL HIGHW INFRA TRUS",
+          "nse_symbol": "NHIT-IV",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "WONDER ELECTRICALS",
+          "nse_symbol": "WEL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "GMR POW AND URBAN INFRA L",
+          "nse_symbol": "GMRP&UI",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "HARIOM PIPE INDUSTRIES L",
+          "nse_symbol": "HARIOMPIPE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "THE ANUP ENGINEERING",
+          "nse_symbol": "ANUP",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "NILA INFRASTRUCTURES",
+          "nse_symbol": "NILAINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "IL&FS ENG AND CONS CO",
+          "nse_symbol": "IL&FSENGG-BZ",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "RACHANA INFRA",
+          "nse_symbol": "RILINFRA-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "PRAKASH PIPES",
+          "nse_symbol": "PPL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "DYNAMIC CABLES",
+          "nse_symbol": "DYCL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "ORIENTAL INFRATRUST",
+          "nse_symbol": "OSEINTRUST-IV",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SADBHAV INFRA PROJ",
+          "nse_symbol": "SADBHIN-BE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "VERTIS INFRASTRUCTURE TST",
+          "nse_symbol": "VERTIS-IV",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "HARSHA ENGINEERS INT",
+          "nse_symbol": "HARSHA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "KRIDHAN INFRA",
+          "nse_symbol": "KRIDHANINF",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SWASTIK PIPE",
+          "nse_symbol": "SWASTIK-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "TEXMACO INFRA & HOLDG",
+          "nse_symbol": "TEXINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SUPRAJIT ENGINEERING",
+          "nse_symbol": "SUPRAJIT",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SEMAC CONSTRUCTION",
+          "nse_symbol": "SEMAC",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "TRIVENI ENGG. & INDS.",
+          "nse_symbol": "TRIVENI",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "AIA ENGINEERING",
+          "nse_symbol": "AIAENG",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "GVK POW. & INFRA",
+          "nse_symbol": "GVKPIL-BE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SADBHAV ENGINEERING",
+          "nse_symbol": "SADBHAV",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SUPREME INFRA.",
+          "nse_symbol": "SUPREMEINF-BZ",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "RBM INFRACON",
+          "nse_symbol": "RBMINFRA-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "MADHUCON PROJECTS",
+          "nse_symbol": "MADHUCON",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "GTL INFRA.LTD",
+          "nse_symbol": "GTLINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "PARAMOUNT COMM",
+          "nse_symbol": "PARACABLES",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "HBL ENGINEERING",
+          "nse_symbol": "HBLENGINE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "JASH ENGINEERING",
+          "nse_symbol": "JASH",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "PITTI ENGINEERING",
+          "nse_symbol": "PITTIENG",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "APOLLO PIPES",
+          "nse_symbol": "APOLLOPIPE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "IRB INFRASTRUCTURE TRUST",
+          "nse_symbol": "IRBIT-IV",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "UDAYSHIVAKUMAR INFRA",
+          "nse_symbol": "USK",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "KAUSHALYA INFRA DEV",
+          "nse_symbol": "KAUSHALYA-BE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "CORDS CABLE INDUS",
+          "nse_symbol": "CORDSCABLE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SEPC",
+          "nse_symbol": "SEPC",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "IRB INFRA DEV",
+          "nse_symbol": "IRB",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "PRINCE PIPES FITTINGS",
+          "nse_symbol": "PRINCEPIPE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "MAHINDRA EPC IRRIG",
+          "nse_symbol": "MAHEPC",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "GPT INFRAPROJECTS",
+          "nse_symbol": "GPTINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "LLOYDS ENGG WORK",
+          "nse_symbol": "LLOYDSENGG",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "HOUSING DEV & INFRA",
+          "nse_symbol": "HDIL-BZ",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SETUBANDHAN INFRA",
+          "nse_symbol": "SETUINFRA-BZ",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "MBL INFRASTRUCTURE",
+          "nse_symbol": "MBLINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "TEXMO PIPE & PRODUCTS",
+          "nse_symbol": "TEXMOPIPES",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "MAN INFRA",
+          "nse_symbol": "MANINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "CHAVDA INFRA",
+          "nse_symbol": "CHAVDA-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "MARCO CABLE & CONDUCTOR L",
+          "nse_symbol": "MARCO-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "JSW INFRASTRUCTURE",
+          "nse_symbol": "JSWINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "THEJO ENGINEERING",
+          "nse_symbol": "THEJO",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "PLAZA WIRES",
+          "nse_symbol": "PLAZACABLE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "TWAMEV CONS AND INFRA",
+          "nse_symbol": "TICL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "RAMKY INFRA",
+          "nse_symbol": "RAMKY",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "PRESSTONIC ENGINEERING L",
+          "nse_symbol": "PRESSTONIC-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "BAJEL PROJECTS",
+          "nse_symbol": "BAJEL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "R.P.P INFRA PROJECTS",
+          "nse_symbol": "RPPINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "PSP PROJECTS",
+          "nse_symbol": "PSPPROJECT",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "AZAD ENGINEERING",
+          "nse_symbol": "AZAD",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "A2Z INFRA ENGINEERING",
+          "nse_symbol": "A2ZINFRA-BE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "INDIGRID INFRASTRUCT TRST",
+          "nse_symbol": "INDIGRID-IV",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SAMEERA AGRO AND INFRA L",
+          "nse_symbol": "SAIFL-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "OPTIEMUS INFRACOM",
+          "nse_symbol": "OPTIEMUS",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "CAPACITE INFRAPROJECT",
+          "nse_symbol": "CAPACITE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "V R INFRASPACE",
+          "nse_symbol": "VR-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "INDUS INFRA TRUST",
+          "nse_symbol": "INDUSINVIT-IV",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "PRATHAM EPC PROJECTS",
+          "nse_symbol": "PRATHAM-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "AVP INFRACON",
+          "nse_symbol": "AVPINFRA-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "K2 INFRAGEN",
+          "nse_symbol": "K2INFRA-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "TARA CHAND INFRA SOLN",
+          "nse_symbol": "TARACHAND",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "DCG CABLES & WIRES",
+          "nse_symbol": "DCG-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "AUTHUM INVEST & INFRA",
+          "nse_symbol": "AIIL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "RULKA ELECTRICALS",
+          "nse_symbol": "RULKA-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "OM INFRA",
+          "nse_symbol": "OMINFRAL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "NXT-INFRA TRUST",
+          "nse_symbol": "NXT-INFRA-IV",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "EFFWA INFRA & RESEARCH L",
+          "nse_symbol": "EFFWA-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "V.L.INFRAPROJECTS",
+          "nse_symbol": "VLINFRA-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "MANGLAM INFRA & ENG",
+          "nse_symbol": "MIEL-ST",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "APRAMEYA ENGINEERING",
+          "nse_symbol": "APRAMEYA-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "VISION INFRA EQUIP SOL L",
+          "nse_symbol": "VIESL-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "GARUDA CONSTRUCT N ENG L",
+          "nse_symbol": "GARUDA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "AFCONS INFRASTRUCTURE",
+          "nse_symbol": "AFCONS",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "A B INFRABUILD",
+          "nse_symbol": "ABINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "ENVIRO INFRA ENGINEERS L",
+          "nse_symbol": "EIEL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "GANESH INFRAWORLD",
+          "nse_symbol": "GANESHIN-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "DENTA WATER N INFRA SOL L",
+          "nse_symbol": "DENTA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "CHAMUNDA ELECTRICAL",
+          "nse_symbol": "CHAMUNDA-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "AJAX ENGINEERING",
+          "nse_symbol": "AJAXENGG",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "ROADSTAR INFRA INVT TRUST",
+          "nse_symbol": "ROADSTAR-IV",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "ACTIVE INFRASTRUCTURES L",
+          "nse_symbol": "ACTIVEINFR-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SCHNEIDER ELECTRIC INFRA",
+          "nse_symbol": "SCHNEIDER",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "ARISINFRA SOLUTIONS",
+          "nse_symbol": "ARISINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SAVY INFRA AND LOGI",
+          "nse_symbol": "SAVY-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "INTEGRITY INFRABUILD DE L",
+          "nse_symbol": "INTEGRITY-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "PERFECT INFRAENGINEER",
+          "nse_symbol": "PERFECT-SZ",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "M AND B ENGINEERING",
+          "nse_symbol": "MBEL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "GLOBE CIVIL PROJECTS",
+          "nse_symbol": "GLOBECIVIL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "TVS INFRASTRUCTURE TRUST",
+          "nse_symbol": "TVSINVIT-IV",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "MAHENDRA REALTO & INFRA L",
+          "nse_symbol": "MRIL-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "MANGAL ELECTRICAL IND L",
+          "nse_symbol": "MEIL",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "SATTVA ENGINEERING CSTN L",
+          "nse_symbol": "SATTVAENGG-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "CURRENT INFRAPROJECTS",
+          "nse_symbol": "CURRENT-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "VIKRAN ENGINEERING",
+          "nse_symbol": "VIKRAN",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "ATLANTA ELECTRICALS",
+          "nse_symbol": "ATLANTAELE",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "PRIME CABLE INDUSTRIES L",
+          "nse_symbol": "PRIMECAB-SM",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "HIGHWAY INFRASTRUCTURE L",
+          "nse_symbol": "HILINFRA",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "DHARAN INFRA-EPC",
+          "nse_symbol": "DHARAN-BZ",
+          "sector": "Infra & Capital Goods"
+        },
+        {
+          "company_name": "NIRAJ CEMENT STRUC",
+          "nse_symbol": "NIRAJ",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "MAHINDRA LOGISTIC",
+          "nse_symbol": "MAHLOG",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "BLUE DART EXPRESS",
+          "nse_symbol": "BLUEDART",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "AMBUJA CEMENTS",
+          "nse_symbol": "AMBUJACEM",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "ACCURACY SHIPPING",
+          "nse_symbol": "ACCURACY",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "THE INDIA CEMENTS",
+          "nse_symbol": "INDIACEM",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "ANTONY WASTE HDG CELL",
+          "nse_symbol": "AWHCL",
+          "sector": "Utilities"
+        },
+        {
+          "company_name": "KAKATIYA CEM SUGAR &IND L",
+          "nse_symbol": "KAKATCEM",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "WEALTH FRST PORT. MG.",
+          "nse_symbol": "WEALTH",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "MANGALAM CEMENT",
+          "nse_symbol": "MANGLMCEM",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "HEIDELBERGCEMENT (I)",
+          "nse_symbol": "HEIDELBERG",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "SAURASHTRA CEMENT",
+          "nse_symbol": "SAURASHCEM",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "SHIPPING CORP OF INDIA LT",
+          "nse_symbol": "SCI",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "SHREE DIGVIJAY CEM CO",
+          "nse_symbol": "SHREDIGCEM",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "SHREE CEMENT",
+          "nse_symbol": "SHREECEM",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "TRANSWORLD SHIP LINES",
+          "nse_symbol": "TRANSWORLD",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "ZENITH EXPORTS",
+          "nse_symbol": "ZENITHEXPO",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "SNOWMAN LOGISTICS",
+          "nse_symbol": "SNOWMAN",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "DESTINY LOGISTICS & I",
+          "nse_symbol": "DESTINY-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "SBC EXPORTS",
+          "nse_symbol": "SBC",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "RAJESH EXPORTS",
+          "nse_symbol": "RAJESHEXPO",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "TIMESCAN LOGISTICS IND L",
+          "nse_symbol": "TIMESCAN-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "VRL LOGISTICS",
+          "nse_symbol": "VRLLOG",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "GUJARAT AMBUJA EXPORTS LT",
+          "nse_symbol": "GAEL",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "UMA EXPORTS",
+          "nse_symbol": "UMAEXPORTS",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "RITCO LOGISTICS",
+          "nse_symbol": "RITCO",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "LE MERITE EXPORTS",
+          "nse_symbol": "LEMERITE-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "NORBEN TEA &EXPORTS",
+          "nse_symbol": "NORBTEAEXP-BE",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "MAHESHWARI LOGISTICS",
+          "nse_symbol": "MAHESHWARI",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "TRANSPORT CORPN OF INDIA",
+          "nse_symbol": "TCI",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "SPORTKING INDIA",
+          "nse_symbol": "SPORTKING",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "ULTRATECH CEMENT",
+          "nse_symbol": "ULTRACEMCO",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "GOKALDAS EXPORTS",
+          "nse_symbol": "GOKEX",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "AMIABLE LOGISTICS (I)",
+          "nse_symbol": "AMIABLE-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "SAKUMA EXPORTS",
+          "nse_symbol": "SAKUMA",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "JK CEMENT",
+          "nse_symbol": "JKCEMENT",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "JK LAKSHMI CEMENT",
+          "nse_symbol": "JKLAKSHMI",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "ALLCARGO LOGISTICS",
+          "nse_symbol": "ALLCARGO",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "GMR AIRPORTS",
+          "nse_symbol": "GMRAIRPORT",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "ALLCARGO GATI",
+          "nse_symbol": "ACLGATI",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "THE GE SHPG.LTD",
+          "nse_symbol": "GESHIP",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "SAGAR CEMENTS",
+          "nse_symbol": "SAGCEM",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "NAGREEKA EXPORTS",
+          "nse_symbol": "NAGREEKEXP",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "DECCAN CEMENTS",
+          "nse_symbol": "DECCANCE",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "BARAK VALLEY CEM.",
+          "nse_symbol": "BVCL-BE",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "SHREE VASU LOGISTICS",
+          "nse_symbol": "SVLL-BE",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "ANDHRA CEMENTS",
+          "nse_symbol": "ACL-BE",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "AVG LOGISTICS",
+          "nse_symbol": "AVG",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "URBAN ENVIRO WASTE MGMT L",
+          "nse_symbol": "URBAN-SM",
+          "sector": "Utilities"
+        },
+        {
+          "company_name": "ALLCARGO TERMINALS",
+          "nse_symbol": "ATL",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "TCI EXPRESS",
+          "nse_symbol": "TCIEXP",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "ONECLICK LOGISTICS IND L",
+          "nse_symbol": "OLIL-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "COMMITTED CARGO CARE",
+          "nse_symbol": "COMMITTED-ST",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "ARVIND PORT AND INFRA",
+          "nse_symbol": "ARVINDPORT-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "JITF INFRALOGISTICS",
+          "nse_symbol": "JITFINFRA-BE",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "GUJARAT PIPAVAV PORT",
+          "nse_symbol": "GPPL",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "ANJANI PORTLAND CEM",
+          "nse_symbol": "APCL",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "S J LOGISTICS (INDIA)",
+          "nse_symbol": "SJLOGISTIC-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "STAR CEMENT",
+          "nse_symbol": "STARCEMENT",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "KAUSHALYA LOGISTICS",
+          "nse_symbol": "KLL-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "TOTAL TRANSPORT SYS",
+          "nse_symbol": "TOTAL",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "SADHAV SHIPPING",
+          "nse_symbol": "SADHAV-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "SHIPPING CORP OF ILA",
+          "nse_symbol": "SCILAL",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "DRS CARGO MOVERS",
+          "nse_symbol": "DRSCARGO-ST",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "BEACON TRUSTEESHIP",
+          "nse_symbol": "BEACON-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "ASHAPURA LOGISTICS",
+          "nse_symbol": "ASHALOG-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "BRACE PORT LOGISTICS",
+          "nse_symbol": "BRACEPORT-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "QVC EXPORTS",
+          "nse_symbol": "QVCEL-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "NAMO EWASTE MANAGEMENT L",
+          "nse_symbol": "NAMOEWASTE-SM",
+          "sector": "Utilities"
+        },
+        {
+          "company_name": "ESSAR SHIPPING",
+          "nse_symbol": "ESSARSHPNG",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "PRANIK LOGISTICS",
+          "nse_symbol": "PRANIK-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "FRESHARA AGRO EXPORTS",
+          "nse_symbol": "FRESHARA-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "READYMIX CONSTRU MACHI L",
+          "nse_symbol": "READYMIX-ST",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "TEJAS CARGO INDIA",
+          "nse_symbol": "TEJASCARGO-ST",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "ORIENT CEMENT",
+          "nse_symbol": "ORIENTCEM",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "ORBIT EXPORTS",
+          "nse_symbol": "ORBTEXP",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "BLUE WATER LOGISTICS",
+          "nse_symbol": "BLUEWATER-SM",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "JSW CEMENT",
+          "nse_symbol": "JSWCEMENT",
+          "sector": "Cement"
+        },
+        {
+          "company_name": "TIGER LOGISTICS (INDIA) L",
+          "nse_symbol": "TIGERLOGS",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "OM FREIGHT FORWARDERS",
+          "nse_symbol": "OMFREIGHT-BE",
+          "sector": "Logistics"
+        },
+        {
+          "company_name": "SHREEJI SHIPPING GLOBAL L",
+          "nse_symbol": "SHREEJISPG",
+          "sector": "Logistics"
         }
       ],
       "total_stocks": 4,
@@ -988,6 +3665,221 @@
           "company_name": "Sona BLW Precision Forgings Ltd",
           "nse_symbol": "SONACOMS",
           "sector": "Automobile"
+        },
+        {
+          "company_name": "STYRENIX PERFORMANCE",
+          "nse_symbol": "STYRENIX",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "APOLLO TYRES",
+          "nse_symbol": "APOLLOTYRE",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "AUTOMOTIVE AXLES",
+          "nse_symbol": "AUTOAXLES",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "IGARASHI MOTORS INDIA",
+          "nse_symbol": "IGARASHI",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "RICO AUTO INDUSTRIES",
+          "nse_symbol": "RICOAUTO",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "SHANTHI GEARS",
+          "nse_symbol": "SHANTIGEAR",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "GANGA FORGING",
+          "nse_symbol": "GANGAFORGE",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "PRITIKA AUTO INDUS",
+          "nse_symbol": "PRITIKAUTO",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "VETO SWITCHGEAR CABLE",
+          "nse_symbol": "VETO",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "BHARAT GEARS",
+          "nse_symbol": "BHARATGEAR-BE",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "SHARDA MOTOR INDS",
+          "nse_symbol": "SHARDAMOTR",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "AUTOMOTIVE STAMPINGS & AS",
+          "nse_symbol": "ASAL",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "RAMKRISHNA FORGINGS",
+          "nse_symbol": "RKFORGE",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "FORCE MOTORS",
+          "nse_symbol": "FORCEMOT",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "JBM AUTO",
+          "nse_symbol": "JBMA",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "IND MOTOR PART & ACC",
+          "nse_symbol": "IMPAL",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "MUNJAL AUTO IND.",
+          "nse_symbol": "MUNJALAU",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "TALBROS AUTO. COMP.",
+          "nse_symbol": "TALBROAUTO",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "SHIVAM AUTO.LTD",
+          "nse_symbol": "SHIVAMAUTO",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "VIAZ TYRES",
+          "nse_symbol": "VIAZ-ST",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "JK TYRE & INDUSTRIES",
+          "nse_symbol": "JKTYRE",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "CIE AUTOMOTIVE INDIA",
+          "nse_symbol": "CIEINDIA",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "KALYANI FORGE",
+          "nse_symbol": "KALYANIFRG",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "PPAP AUTOMOTIVE",
+          "nse_symbol": "PPAP",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "SETCO AUTOMOTIVE",
+          "nse_symbol": "SETCO",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "ASK AUTOMOTIVE",
+          "nse_symbol": "ASKAUTOLTD",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "JAMNA AUTO IND",
+          "nse_symbol": "JAMNAAUTO",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "HAPPY FORGINGS",
+          "nse_symbol": "HAPPYFORGE",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "NDR AUTO COMPONENTS",
+          "nse_symbol": "NDRAUTO",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "TIRUPATI FORGE",
+          "nse_symbol": "TIRUPATIFL",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "SRM CONTRACTORS",
+          "nse_symbol": "SRM",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "BALU FORGE INDUSTRIES",
+          "nse_symbol": "BALUFORGE",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "MANDEEP AUTO INDUSTRIES L",
+          "nse_symbol": "MANDEEP-SM",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "VST TILLERS TRACTORS",
+          "nse_symbol": "VSTTILLERS",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "TUNWAL E-MOTORS",
+          "nse_symbol": "TUNWAL-SM",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "TOLINS TYRES",
+          "nse_symbol": "TOLINS",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "FORGE AUTO INTERNATION L",
+          "nse_symbol": "FORGEAUTO-ST",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "HYUNDAI MOTOR INDIA",
+          "nse_symbol": "HYUNDAI",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "AFFORD ROBO & AUTO",
+          "nse_symbol": "AFFORDABLE",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "INNOVATIVE TYRE & TUBE LT",
+          "nse_symbol": "ITTL-ST",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "EMERALD TYRE MANUF",
+          "nse_symbol": "ETML-SM",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "ATUL AUTO",
+          "nse_symbol": "ATULAUTO",
+          "sector": "Auto"
+        },
+        {
+          "company_name": "MUNISH FORGE",
+          "nse_symbol": "MUNISH-ST",
+          "sector": "Auto"
         }
       ],
       "total_stocks": 15,
@@ -1078,7 +3970,7 @@
           "sector": "Pharmaceuticals"
         },
         {
-          "company_name": "Dr. Reddy’s Laboratories Limited",
+          "company_name": "Dr. Reddy\u2019s Laboratories Limited",
           "nse_symbol": "DRREDDY",
           "sector": "Pharmaceuticals"
         },
@@ -1241,6 +4133,371 @@
           "company_name": "Zydus Lifesciences Limited",
           "nse_symbol": "ZYDUSLIFE",
           "sector": "Pharmaceuticals"
+        },
+        {
+          "company_name": "ORCHID PHARMA",
+          "nse_symbol": "ORCHPHARMA",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "GLAXOSMITHKLINE PHARMA LT",
+          "nse_symbol": "GLAXO",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "GLAND PHARMA",
+          "nse_symbol": "GLAND",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "J B CHEMICALS AND PHARMA",
+          "nse_symbol": "JBCHEPHARM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "KREBS BIOCHEMICALS & IND",
+          "nse_symbol": "KREBSBIO",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "LYKA LABS",
+          "nse_symbol": "LYKALABS",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "MOREPEN LAB.",
+          "nse_symbol": "MOREPENLAB",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "ARVEE LABORATORIES I",
+          "nse_symbol": "ARVEE",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "AJOONI BIOTECH",
+          "nse_symbol": "AJOONI",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "VINEET LABORATORIES",
+          "nse_symbol": "VINEETLAB",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "CAPLIN POINT LAB",
+          "nse_symbol": "CAPLIPOINT",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "PANACEA BIOTEC",
+          "nse_symbol": "PANACEABIO",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "BIOFIL CHEM & PHARMA",
+          "nse_symbol": "BIOFILCHEM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "JAGSONPAL PHARMACEUTICALS",
+          "nse_symbol": "JAGSNPHARM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "IND SWIFT LABORATORIES LT",
+          "nse_symbol": "INDSWFTLAB",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "WINDLAS BIOTECH",
+          "nse_symbol": "WINDLAS",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "ASTRAZENECA PHARMA IND LT",
+          "nse_symbol": "ASTRAZEN",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "MEDICAMEN BIOTECH",
+          "nse_symbol": "MEDICAMEQ",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "NIDAN LABS AND HEALTH",
+          "nse_symbol": "NIDAN-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "HESTER BIOSCIENCES",
+          "nse_symbol": "HESTERBIO",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "SUPRIYA LIFESCIENCE",
+          "nse_symbol": "SUPRIYA",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "VIVO COLLAB SOLUTIONS",
+          "nse_symbol": "VIVO-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "AJANTA PHARMA",
+          "nse_symbol": "AJANTPHARM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "VAIDYA SANE AYUR LAB",
+          "nse_symbol": "MADHAVBAUG-ST",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "MARKSANS PHARMA",
+          "nse_symbol": "MARKSANS",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "DHAMPUR BIO ORGANICS",
+          "nse_symbol": "DBOL",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "TAPI FRUIT PROCESSING",
+          "nse_symbol": "TAPIFRUIT-ST",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "NATH BIO-GENES (I)",
+          "nse_symbol": "NATHBIOGEN",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "BALAXI PHARMA",
+          "nse_symbol": "BALAXI",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "LINCOLN PHARMA",
+          "nse_symbol": "LINCOLN",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "DR. LAL PATH LABS",
+          "nse_symbol": "LALPATHLAB",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "NECTAR LIFESCIENCES",
+          "nse_symbol": "NECLIFE-BE",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "ZIM LABORATORIES",
+          "nse_symbol": "ZIMLAB",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "VIMTA LABS",
+          "nse_symbol": "VIMTALABS",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "BAL PHARMA",
+          "nse_symbol": "BALPHARMA",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "JHS SVEND. LAB.",
+          "nse_symbol": "JHS",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "AARTI PHARMALABS",
+          "nse_symbol": "AARTIPHARM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "ARISTO BIO T AND LIFESC L",
+          "nse_symbol": "ARISTO-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "SMS PHARMACEUTICALS",
+          "nse_symbol": "SMSPHARMA",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "SUN PHARMA ADV.RES.CO.LTD",
+          "nse_symbol": "SPARC",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "ALPA LABORATORIES",
+          "nse_symbol": "ALPA",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "SOTAC PHARMACEUTICALS",
+          "nse_symbol": "SOTAC-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "INFINIUM PHARMACHEM",
+          "nse_symbol": "INFINIUM-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "REMUS PHARMACEUTICALS L",
+          "nse_symbol": "REMUS-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "VAISHALI PHARMA",
+          "nse_symbol": "VAISHALI",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "VILIN BIO MED",
+          "nse_symbol": "VILINBIO-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "ASTEC LIFESCIENCES",
+          "nse_symbol": "ASTEC",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "BAFNA PHARMACEUTICALS",
+          "nse_symbol": "BAFNAPH-BE",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "COHANCE LIFESCIENCES",
+          "nse_symbol": "COHANCE",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "CONCORD BIOTECH",
+          "nse_symbol": "CONCORDBIO",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "CROP LIFE SCIENCE",
+          "nse_symbol": "CLSL-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "MONO PHARMACARE",
+          "nse_symbol": "MONOPHARMA-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "SAROJA PHARMA INDUS IND L",
+          "nse_symbol": "SAROJA-ST",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "KODY TECHNOLAB",
+          "nse_symbol": "KODYTECH-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "VALIANT LABORATORIES",
+          "nse_symbol": "VALIANTLAB",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "ROSSARI BIOTECH",
+          "nse_symbol": "ROSSARI",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "ANSAL PROP & INFRA",
+          "nse_symbol": "ANSALAPI-BZ",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "SUNREST LIFESCIENCE",
+          "nse_symbol": "SUNREST-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "IOL CHEM AND PHARMA",
+          "nse_symbol": "IOLCP",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "TRIDENT TECHLABS",
+          "nse_symbol": "TECHLABS-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "SMS LIFESCIENCES (I)",
+          "nse_symbol": "SMSLIFE",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "QUEST LABORATORIES",
+          "nse_symbol": "QUESTLAB-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "KRONOX LAB SCIENCES",
+          "nse_symbol": "KRONOX",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "AMBEY LABORATORIES",
+          "nse_symbol": "AMBEY-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "AKUMS DRUGS AND PHARMA L",
+          "nse_symbol": "AKUMS",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "BROOKS LAB",
+          "nse_symbol": "BROOKS",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "ALEMBIC PHARMA",
+          "nse_symbol": "APLLTD",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "INDO US BIOTECH",
+          "nse_symbol": "INDOUS",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "INNOVANA THINKLABS",
+          "nse_symbol": "INNOVANA-BE",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "SENORES PHARMACEUTICALS L",
+          "nse_symbol": "SENORES",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "ONESOURCE SPECL PHARMA L",
+          "nse_symbol": "ONESOURCE",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "ACCRETION PHARMA",
+          "nse_symbol": "ACCPL-SM",
+          "sector": "Pharma"
+        },
+        {
+          "company_name": "SHEEL BIOTECH",
+          "nse_symbol": "SHEEL-ST",
+          "sector": "Pharma"
         }
       ],
       "total_stocks": 49,
@@ -1334,6 +4591,346 @@
           "company_name": "Reliance Infrastructure Limited",
           "nse_symbol": "RELINFRA",
           "sector": "Energy"
+        },
+        {
+          "company_name": "GOLDSTAR POWER",
+          "nse_symbol": "GOLDSTAR-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "INDIAN ENERGY EXC",
+          "nse_symbol": "IEX",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "S&S POWER SWITCHGEARS",
+          "nse_symbol": "S&SPOWER",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "HONDA I POWER PRODUCT",
+          "nse_symbol": "HONDAPOWER",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "KPI GREEN ENERGY",
+          "nse_symbol": "KPIGREEN",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "ASIAN ENERGY SERVICES",
+          "nse_symbol": "ASIANENE",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "ZODIAC ENERGY",
+          "nse_symbol": "ZODIAC",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "GE POWER INDIA",
+          "nse_symbol": "GVPIL",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "ADANI ENERGY SOLUTION",
+          "nse_symbol": "ADANIENSOL",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "POWER MECH PROJECTS",
+          "nse_symbol": "POWERMECH",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "AGNI GREEN POWER",
+          "nse_symbol": "AGNI-ST",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "MAKS ENERGY SOL INDIA",
+          "nse_symbol": "MAKS-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "JAIPRAKASH POWER VEN.",
+          "nse_symbol": "JPPOWER",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "GENUS POWER INFRASTRU",
+          "nse_symbol": "GENUSPOWER",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SWELECT ENERGY SYS",
+          "nse_symbol": "SWELECTES",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "INOX GREEN ENERGY SER",
+          "nse_symbol": "INOXGREEN",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SOLAR INDUSTRIES (I)",
+          "nse_symbol": "SOLARINDS",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "VOLTAMP TRANSFORMERS",
+          "nse_symbol": "VOLTAMP",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "TORRENT POWER",
+          "nse_symbol": "TORNTPOWER",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "WEBSOL ENERGY SYSTEM",
+          "nse_symbol": "WEBELSOLAR",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "INDOWIND ENERGY",
+          "nse_symbol": "INDOWIND",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "ENERGY DEVE. CO.LTD",
+          "nse_symbol": "ENERGYDEV",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "RELIANCE POWER",
+          "nse_symbol": "RPOWER",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "POWER INSTRUMENT (G)",
+          "nse_symbol": "PIGL-BE",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "GE VERNOVA T&D INDIA",
+          "nse_symbol": "GVT&D",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "RATTANINDIA POWER",
+          "nse_symbol": "RTNPOWER",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "ORIANA POWER",
+          "nse_symbol": "ORIANA-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "HITACHI ENERGY INDIA",
+          "nse_symbol": "POWERINDIA",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "DIAMOND POWER INFRA",
+          "nse_symbol": "DIACABS",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "HPL ELECTRIC & POWER",
+          "nse_symbol": "HPL",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "TARAPUR TRANSFORMERS",
+          "nse_symbol": "TARAPUR",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "IRM ENERGY",
+          "nse_symbol": "IRMENERGY",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "ORIENT GREEN POWER CO",
+          "nse_symbol": "GREENPOWER",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "INDIAN RENEWABLE ENERGY",
+          "nse_symbol": "IREDA",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SUPREME POWER EQUIPMENT L",
+          "nse_symbol": "SUPREMEPWR-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SURANA SOLAR",
+          "nse_symbol": "SURANASOL",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "AKANKSHA POWER N INFRA L",
+          "nse_symbol": "AKANKSHA-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "KAY CEE ENERGY & INFRA L",
+          "nse_symbol": "KCEIL-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "TRANSWIND INFRA",
+          "nse_symbol": "TRANSWIND-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SUSTAINABLE ENERGY INFRA",
+          "nse_symbol": "SEITINVIT-IV",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "AUSTRALIAN PREM SOLAR I L",
+          "nse_symbol": "APS-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "ALPEX SOLAR",
+          "nse_symbol": "ALPEXSOLAR-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "ENERGY MISSION MACH IND L",
+          "nse_symbol": "EMMIL-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SHIVALIC POWER CONTROL L",
+          "nse_symbol": "SPCL-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "DIVINE POWER ENERGY",
+          "nse_symbol": "DPEL-ST",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "KARMA ENERGY",
+          "nse_symbol": "KARMAENG-BE",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SAHAJ SOLAR",
+          "nse_symbol": "SAHAJSOLAR-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "RAVINDRA ENERGY",
+          "nse_symbol": "RELTD",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "POSITRON ENERGY",
+          "nse_symbol": "POSITRON-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "WINDSOR MACHINES",
+          "nse_symbol": "WINDMACHIN",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "TRIVENI TURBINE",
+          "nse_symbol": "TRITURBINE",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "DANISH POWER",
+          "nse_symbol": "DANISH-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "ACME SOLAR HOLDINGS",
+          "nse_symbol": "ACMESOLAR",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "K.P. ENERGY",
+          "nse_symbol": "KPEL",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "MAXVOLT ENERGY INDUS L",
+          "nse_symbol": "MAXVOLT-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "QUALITY POWER ELEC EQUP L",
+          "nse_symbol": "QPOWER",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "PRABHA ENERGY",
+          "nse_symbol": "PRABHA",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "ATC ENERGIES SYSTEM",
+          "nse_symbol": "ATCENERGY-SM",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SIEMENS ENERGY INDIA",
+          "nse_symbol": "ENRIN",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SOLARA RS. 7 PPD UP",
+          "nse_symbol": "SOLARAPP1-E1",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "ATHER ENERGY",
+          "nse_symbol": "ATHERENERG",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "JAINIK POWER CABLES",
+          "nse_symbol": "JAINIK-ST",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "GK ENERGY",
+          "nse_symbol": "GKENERGY",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SAATVIK GREEN ENERGY",
+          "nse_symbol": "SAATVIKGL",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "TRUALT BIOENERGY",
+          "nse_symbol": "TRUALT",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SOLEX ENERGY",
+          "nse_symbol": "SOLEX",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "VIKRAM SOLAR",
+          "nse_symbol": "VIKRAMSOLR",
+          "sector": "Energy"
+        },
+        {
+          "company_name": "SOLARWORLD ENERGY SOL",
+          "nse_symbol": "SOLARWORLD",
+          "sector": "Energy"
         }
       ],
       "total_stocks": 17,
@@ -1354,7 +4951,7 @@
           "sector": "FMCG"
         },
         {
-          "company_name": "Nestlé India Limited",
+          "company_name": "Nestl\u00e9 India Limited",
           "nse_symbol": "NESTLEIND",
           "sector": "FMCG"
         },
@@ -1417,6 +5014,591 @@
           "company_name": "Emami Limited",
           "nse_symbol": "EMAMILTD",
           "sector": "FMCG"
+        },
+        {
+          "company_name": "G M BREWERIES",
+          "nse_symbol": "GMBREW",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "SOM DIST & BREW",
+          "nse_symbol": "SDBL",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "MRS BECTORS FOOD SPE",
+          "nse_symbol": "BECTORFOOD",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "JAYSHREE TEA & INDUSTRIES",
+          "nse_symbol": "JAYSREETEA",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "KOHINOOR FOODS",
+          "nse_symbol": "KOHINOOR",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "UNITED FOODBRANDS",
+          "nse_symbol": "UFBL",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "HERITAGE FOODS",
+          "nse_symbol": "HERITGFOOD",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "DODLA DAIRY",
+          "nse_symbol": "DODLA",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "EURO (I) FRESH FOODS",
+          "nse_symbol": "EIFFL",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "DHUNSERI TEA & IND.",
+          "nse_symbol": "DTIL",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "FOODS & INNS",
+          "nse_symbol": "FOODSIN",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "SAPPHIRE FOODS INDIA",
+          "nse_symbol": "SAPPHIRE",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "MEGASTAR FOODS",
+          "nse_symbol": "MEGASTAR",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "THE P K TEA PROD CO",
+          "nse_symbol": "PKTEA-BE",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "UNITED SPIRITS",
+          "nse_symbol": "UNITDSPR",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "COFFEE DAY ENTERPRISE",
+          "nse_symbol": "COFFEEDAY-BE",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "TEAM INDIA GUARANTY",
+          "nse_symbol": "TEAMGTY-BE",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "WESTLIFE FOODWORLD",
+          "nse_symbol": "WESTLIFE",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "BIKAJI FOODS INTERN",
+          "nse_symbol": "BIKAJI",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "HINDUSTAN FOODS",
+          "nse_symbol": "HNDFDS",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "SARVESHWAR FOODS",
+          "nse_symbol": "SARVESHWAR",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "LT FOODS",
+          "nse_symbol": "LTFOODS",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "TEAMO PRODUCTIONS HQ",
+          "nse_symbol": "TPHQ",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "PARAG MILK FOODS",
+          "nse_symbol": "PARAGMILK",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "ASSO ALCOHOLS & BREW",
+          "nse_symbol": "ASALCBR",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "THE GROB TEA COMPANY",
+          "nse_symbol": "GROBTEA",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "UNITED NILGIRI TEA",
+          "nse_symbol": "UNITEDTEA",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "SRIVARI SPICES N FOODS L",
+          "nse_symbol": "SSFL-SM",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "JUBILANT FOODWORKS",
+          "nse_symbol": "JUBLFOOD",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "VARUN BEVERAGES",
+          "nse_symbol": "VBL",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "GOYAL SALT",
+          "nse_symbol": "GOYALSALT-SM",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "SHANTHALA FMCG PRODUCTS L",
+          "nse_symbol": "SHANTHALA-SM",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "ADF FOODS",
+          "nse_symbol": "ADFFOODS",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "BABA FOOD PROCESSING",
+          "nse_symbol": "BABAFP-SM",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "APEX FROZEN FOODS",
+          "nse_symbol": "APEX",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "PRATAAP SNACKS",
+          "nse_symbol": "DIAMONDYD",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "M.V.K. AGRO FOOD PROD",
+          "nse_symbol": "MVKAGRO-ST",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "GOPAL SNACKS",
+          "nse_symbol": "GOPAL",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "HOAC FOODS INDIA",
+          "nse_symbol": "HOACFOODS-SM",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "JEYYAM GLOBAL FOODS",
+          "nse_symbol": "JEYYAM-ST",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "VINTAGE COFFEE N BVRGS L",
+          "nse_symbol": "VINCOFE",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "KRISHIVAL FOODS",
+          "nse_symbol": "KRISHIVAL-BE",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "TRAVEL FOOD SERVICES",
+          "nse_symbol": "TRAVELFOOD",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "SAWALIYA FOOD PRODUCTS L",
+          "nse_symbol": "SAWALIYA-SM",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "SHIVASHRIT FOODS",
+          "nse_symbol": "SHIVASHRIT-SM",
+          "sector": "FMCG"
+        },
+        {
+          "company_name": "ANDHRA SUGARS",
+          "nse_symbol": "ANDHRSUGAR",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "ANDHRA PAPER",
+          "nse_symbol": "ANDHRAPAP",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "BAJAJ HINDUSTHAN SUGAR LT",
+          "nse_symbol": "BAJAJHIND",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "BANNARI AMMAN SUGARS",
+          "nse_symbol": "BANARISUG",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "GLOBE TEXTILES (I)",
+          "nse_symbol": "GLOBE",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "SHIVA TEXYARN",
+          "nse_symbol": "SHIVATEX",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "DHAMPUR SUGAR MILLS",
+          "nse_symbol": "DHAMPURSUG",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "ASTRON PAPER BORD MIL",
+          "nse_symbol": "ASTRON",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "VARDHMAN TEXTILES",
+          "nse_symbol": "VTL",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "ORIENT PAPER AND INDS",
+          "nse_symbol": "ORIENTPPR",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "RAJSHREE SUGAR & CHEMICAL",
+          "nse_symbol": "RAJSREESUG",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "RANA SUGARS",
+          "nse_symbol": "RANASUG",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "SAKTHI SUGARS",
+          "nse_symbol": "SAKHTISUG",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "SESHASAYEE PAPER & BOARDS",
+          "nse_symbol": "SESHAPAPER",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "STAR PAPER MILLS",
+          "nse_symbol": "STARPAPER",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "SUPER SPINNING MILLS",
+          "nse_symbol": "SUPERSPIN",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "WEST COAST PAPER MILLS LT",
+          "nse_symbol": "WSTCSTPAPR",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "JAKHARIA FABRIC",
+          "nse_symbol": "JAKHARIA-ST",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "TAMILNADU NEWSPRT & PAPER",
+          "nse_symbol": "TNPL",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "KCP SUGAR IND CORP",
+          "nse_symbol": "KCPSUGIND",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "SVP GLOBAL TEXTILES",
+          "nse_symbol": "SVPGLOB",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "MONTE CARLO FASHIONS",
+          "nse_symbol": "MONTECARLO",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "LAMBODHARA TEXTILES",
+          "nse_symbol": "LAMBODHARA",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "GENUS P&B",
+          "nse_symbol": "GENUSPAPER",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "GO FASHION INDIA",
+          "nse_symbol": "GOCOLORS",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "VEDANT FASHIONS",
+          "nse_symbol": "MANYAVAR",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "SOMA TEXTILEI NDUSTRIES L",
+          "nse_symbol": "SOMATEX-BE",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "ARVIND FASHIONS",
+          "nse_symbol": "ARVINDFASN",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "AXITA COTTON",
+          "nse_symbol": "AXITA",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "EMAMI PAPER MILLS",
+          "nse_symbol": "EMAMIPAP",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "BALKRISHNA PAPER MILLS L",
+          "nse_symbol": "BALKRISHNA",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "LOYAL TEXTILE MILLS",
+          "nse_symbol": "LOYALTEX-BE",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "PONNIE SUGARS (ERODE)",
+          "nse_symbol": "PONNIERODE",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "DWARIKESH SUGAR IND",
+          "nse_symbol": "DWARKESH",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "JK PAPER",
+          "nse_symbol": "JKPAPER",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "SHREE RENUKA SUGARS",
+          "nse_symbol": "RENUKA",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "CELEBRITY FASHIONS",
+          "nse_symbol": "CELEBRITY",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "NITIN SPINNERS",
+          "nse_symbol": "NITINSPIN",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "MALU PAPER MILLS",
+          "nse_symbol": "MALUPAPER",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "UTTAM SUGAR MILLS",
+          "nse_symbol": "UTTAMSUGAR",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "VISHWARAJ SUGAR IND",
+          "nse_symbol": "VISHWARAJ",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "RUCHIRA PAPERS",
+          "nse_symbol": "RUCHIRA",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "KUANTUM PAPERS",
+          "nse_symbol": "KUANTUM",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "NAHAR SPINNING MILLS",
+          "nse_symbol": "NAHARSPING",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "SIMBHAOLI SUGARS",
+          "nse_symbol": "SIMBHALS-BE",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "K M SUGAR MILLS",
+          "nse_symbol": "KMSUGAR",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "WINSOME YARNS",
+          "nse_symbol": "WINSOME-BZ",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "LORENZINI APPARELS",
+          "nse_symbol": "LAL",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "AMBIKA COTTON MILL",
+          "nse_symbol": "AMBIKCO",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "PUDUMJEE PAPER PRO.",
+          "nse_symbol": "PDMJEPAPER",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "GHCL TEXTILES",
+          "nse_symbol": "GHCLTEXTIL",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "MAWANA SUGARS",
+          "nse_symbol": "MAWANASUG",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "S. P. APPARELS",
+          "nse_symbol": "SPAL",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "THE UGAR SUGAR WORKS",
+          "nse_symbol": "UGARSUGAR",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "PRUDENTIAL SUGAR CORPORAT",
+          "nse_symbol": "PRUDMOULI",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "MAGADH SUGAR & ENERGY",
+          "nse_symbol": "MAGADSUGAR",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "AVADH SUG & ENERGY",
+          "nse_symbol": "AVADHSUGAR",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "DAVANGERE SUGAR COMPANY L",
+          "nse_symbol": "DAVANGERE",
+          "sector": "Sugar"
+        },
+        {
+          "company_name": "IND TERRAIN FASHIONS",
+          "nse_symbol": "INDTERRAIN",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "FILATEX FASHIONS",
+          "nse_symbol": "FILATFASH",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "SYLVAN PLYBOARD (INDIA) L",
+          "nse_symbol": "SYLVANPLY-SM",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "MAHALAXMI FABRIC MILLS LT",
+          "nse_symbol": "MFML",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "AVI ANSH TEXTILE",
+          "nse_symbol": "AVIANSH-SM",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "MORARJEE TEXTILES",
+          "nse_symbol": "MORARJEE-BZ",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "SANATHAN TEXTILES",
+          "nse_symbol": "SANATHAN",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "KITEX GARMENTS",
+          "nse_symbol": "KITEX",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "ADITYA BIRLA FASHION & RT",
+          "nse_symbol": "ABFRL",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "NANDAN DENIM",
+          "nse_symbol": "NDL",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "CEDAAR TEXTILE",
+          "nse_symbol": "CEDAAR-SM",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "NIKITA PAPERS",
+          "nse_symbol": "NIKITA-ST",
+          "sector": "Paper"
+        },
+        {
+          "company_name": "KAYTEX FABRICS",
+          "nse_symbol": "KAYTEX-SM",
+          "sector": "Textiles"
+        },
+        {
+          "company_name": "R&B DENIMS",
+          "nse_symbol": "RNBDENIMS",
+          "sector": "Textiles"
         }
       ],
       "total_stocks": 15,
@@ -1785,6 +5967,866 @@
           "company_name": "ANB Metal Limited",
           "nse_symbol": "ANBMETAL",
           "sector": "Metals"
+        },
+        {
+          "company_name": "ASHAPURA MINECHEM",
+          "nse_symbol": "ASHAPURMIN",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "ELECTROSTEEL CASTINGS",
+          "nse_symbol": "ELECTCAST",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "RAJNANDINI METAL",
+          "nse_symbol": "RAJMET",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "PRAKASH INDUSTRIES",
+          "nse_symbol": "PRAKASH",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "ALKYL AMINES CHEM.",
+          "nse_symbol": "ALKYLAMINE",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "SHIVALIK BIMETAL CON.",
+          "nse_symbol": "SBCL",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "GUJARAT MINERAL DEV CORP",
+          "nse_symbol": "GMDCLTD",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "JAINAM FER ALLOYS (I)",
+          "nse_symbol": "JAINAM-SM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "STEELCAST",
+          "nse_symbol": "STEELCAS",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "SARTHAK METALS",
+          "nse_symbol": "SMLT",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "MAN COAT METAL & IND",
+          "nse_symbol": "MANAKCOAT",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "MANAK ALUMINIUM CO.",
+          "nse_symbol": "MANAKALUCO-BE",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "MANAKSIA STEELS",
+          "nse_symbol": "MANAKSTEEL-BE",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "PRECISION METALIKS",
+          "nse_symbol": "PRECISION-SM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "SURANI STEEL TUBES",
+          "nse_symbol": "SURANI-SM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "INDO AMINES",
+          "nse_symbol": "INDOAMIN",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "SHYAM CENTURY FERROUS",
+          "nse_symbol": "SHYAMCENT",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "RAMA STEEL TUBES",
+          "nse_symbol": "RAMASTEEL",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "STEEL CITY SECURITIES",
+          "nse_symbol": "STEELCITY",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "CENTURY EXTRUSIONS",
+          "nse_symbol": "CENTEXT-BE",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "S.A.L. STEEL",
+          "nse_symbol": "SALSTEEL-BE",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "GOYAL ALUMINIUMS",
+          "nse_symbol": "GOYALALUM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "STEEL STRIPS WHEELS",
+          "nse_symbol": "SSWL",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "SHAH ALLOYS",
+          "nse_symbol": "SHAHALLOYS",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "MSP STEEL & POWER",
+          "nse_symbol": "MSPL",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "VISA STEEL",
+          "nse_symbol": "VISASTEEL-BE",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "SHIV AUM STEELS",
+          "nse_symbol": "SHIVAUM-SM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "ALICON CASTALLOY",
+          "nse_symbol": "ALICON",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "CHAMAN METALLICS",
+          "nse_symbol": "CMNL-SM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "MM FORGINGS",
+          "nse_symbol": "MMFL",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "BALAJI AMINES",
+          "nse_symbol": "BALAMINES",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "ZENITH STEEL PIP IND",
+          "nse_symbol": "ZENITHSTL-BE",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "HILTON METAL FORGING",
+          "nse_symbol": "HILTON",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "MAAN ALUMINIUM",
+          "nse_symbol": "MAANALU",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "MMP INDUSTRIES",
+          "nse_symbol": "MMP",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "ALKALI METALS",
+          "nse_symbol": "ALKALI",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "MAHAMAYA STEEL INDS",
+          "nse_symbol": "MAHASTEEL-BE",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "SANDUR MANG & IRON ORES L",
+          "nse_symbol": "SANDUMA",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "DIAMINES & CHEMICALS",
+          "nse_symbol": "DIAMINESQ",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "KALYANI STEELS",
+          "nse_symbol": "KSL",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "KIOCL",
+          "nse_symbol": "KIOCL-BE",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "MANGALAM ALLOYS",
+          "nse_symbol": "MAL-SM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "HISAR METAL IND.",
+          "nse_symbol": "HISARMETAL",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "PRAKASH STEELAGE",
+          "nse_symbol": "PRAKASHSTL",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "TRANSTEEL SEATING TECH L",
+          "nse_symbol": "TRANSTEEL-SM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "AMINES & PLASTICIZERS",
+          "nse_symbol": "AMNPLST",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "ORISSA MIN DEV CO",
+          "nse_symbol": "ORISSAMINE",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "STEEL EXCHANGE INDIA",
+          "nse_symbol": "STEELXIND",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "MADHAV COPPER",
+          "nse_symbol": "MCL-BE",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "VIBHOR STEEL TUBES",
+          "nse_symbol": "VSTL",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "OWAIS METAL & MINERAL",
+          "nse_symbol": "OWAIS-SM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "VRAJ IRON AND STEEL",
+          "nse_symbol": "VRAJ",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "MAITHAN ALLOYS",
+          "nse_symbol": "MAITHANALL",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "RAJPUTANA INDUSTRIES",
+          "nse_symbol": "RAJINDLTD-SM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "ADITYA ULTRA STEEL",
+          "nse_symbol": "AUSL-ST",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "ANKIT MET & POW",
+          "nse_symbol": "ANKITMETAL-BZ",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "IMPEX FERRO TECH",
+          "nse_symbol": "IMPEXFERRO-BZ",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "VARDHMAN SPC STEEL",
+          "nse_symbol": "VSSL",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "ABHA POWER N STEEL",
+          "nse_symbol": "ABHAPOWER-ST",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "NEWMALAYALAM STEEL",
+          "nse_symbol": "NMSTEEL-SM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "P S RAJ STEELS",
+          "nse_symbol": "PSRAJ-ST",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "SAMBHV STEEL TUBES",
+          "nse_symbol": "SAMBHV",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "EURO PANEL PRODUCTS",
+          "nse_symbol": "EUROBOND",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "ANB METAL CAST",
+          "nse_symbol": "AMCL-ST",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "SHRI HARE-KRI SPO IRON L",
+          "nse_symbol": "SHKSIL-SM",
+          "sector": "Metals"
+        },
+        {
+          "company_name": "CHEMCON SPECIAL CHEM",
+          "nse_symbol": "CHEMCON",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "BHANSALI ENG. POLYMERS LT",
+          "nse_symbol": "BEPL",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "BOMBAY DYEING & MFG. CO L",
+          "nse_symbol": "BOMDYEING",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SMVD POLY PACK",
+          "nse_symbol": "SMVD-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "KHAITAN CHEM & FERT",
+          "nse_symbol": "KHAICHEM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "GUJ NAR VAL FER & CHEM L",
+          "nse_symbol": "GNFC",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "GUJ STATE FERT & CHEM",
+          "nse_symbol": "GSFC",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "GUJARAT ALKALIES & CHEM",
+          "nse_symbol": "GUJALKALI",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "GALAXY SURFACTANTS",
+          "nse_symbol": "GALAXYSURF",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "JINDAL POLY FILMS",
+          "nse_symbol": "JINDALPOLY",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "KANPUR PLASTIPACK",
+          "nse_symbol": "KANPRPLA",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "KANORIA CHEMICALS & INDUS",
+          "nse_symbol": "KANORICHEM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "INDIGO PAINTS",
+          "nse_symbol": "INDIGOPNTS",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "HLE GLASCOAT",
+          "nse_symbol": "HLEGLAS",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "CONTINENTAL SEED CHEM",
+          "nse_symbol": "CONTI-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "PEARL POLYMERS",
+          "nse_symbol": "PEARLPOLY",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "PCBL CHEMICAL",
+          "nse_symbol": "PCBL",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "POLYPLEX CORPORATION",
+          "nse_symbol": "POLYPLEX",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "CHEMFAB ALKALIS",
+          "nse_symbol": "CHEMFAB",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "MAHICKRA CHEMICAL",
+          "nse_symbol": "MAHICKRA-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "RASHTRIYA CHEMICALS & FER",
+          "nse_symbol": "RCF",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SIDDHIKA COATINGS",
+          "nse_symbol": "SIDDHIKA-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SUDARSHAN CHEMICAL INDS L",
+          "nse_symbol": "SUDARSCHEM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "TAINWALA CHEMICAL AND PLA",
+          "nse_symbol": "TAINWALCHM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "TATA CHEMICALS",
+          "nse_symbol": "TATACHEM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "THIRUMALAI CHEMICALS",
+          "nse_symbol": "TIRUMALCHM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "VARDHMAN POLYTEX",
+          "nse_symbol": "VARDMNPOLY",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "TOKYO PLAST INTL",
+          "nse_symbol": "TOKYOPLAST",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "PREMIER POLYFILM",
+          "nse_symbol": "PREMIERPOL",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "USHANTI COLOUR CHEM",
+          "nse_symbol": "UCL-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "PUNJAB CHEM & CROP PROT L",
+          "nse_symbol": "PUNJABCHEM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "HINDCON CHEMICALS",
+          "nse_symbol": "HINDCON",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "TATVA CHIN PHARM CHEM",
+          "nse_symbol": "TATVA",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "CHEMPLAST SANMAR",
+          "nse_symbol": "CHEMPLASTS",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "ACUTAAS CHEMICALS",
+          "nse_symbol": "ACUTAAS",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "GANESH BENZOPLAST",
+          "nse_symbol": "GANESHBE",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "PAR DRUGS AND CHEM",
+          "nse_symbol": "PAR-BE",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "BHAGIRADHA CHEM & INDS L",
+          "nse_symbol": "BHAGCHEM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "FINEOTEX CHEMICAL",
+          "nse_symbol": "FCL",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "GULSHAN POLYOLS",
+          "nse_symbol": "GULPOLY",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "VISHNU CHEMICALS",
+          "nse_symbol": "VISHNU",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "RAJSHREE POLYPACK",
+          "nse_symbol": "RPPL",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "DMCC SPECIALITY CHEMICALS",
+          "nse_symbol": "DMCC",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "HP ADHESIVES",
+          "nse_symbol": "HPAL",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "UNITED POLYFAB GUJ.",
+          "nse_symbol": "UNITEDPOLY-BE",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "INDO BORAX & CHEMICAL",
+          "nse_symbol": "INDOBORAX-BE",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SHAILY ENG PLASTICS",
+          "nse_symbol": "SHAILY",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "POLYCAB INDIA",
+          "nse_symbol": "POLYCAB",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "RELIANCE CHEMOTEX IND",
+          "nse_symbol": "RELCHEMQ",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "NEOGEN CHEMICALS",
+          "nse_symbol": "NEOGEN",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "NGL FINE CHEM",
+          "nse_symbol": "NGLFINE",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "KSHITIJ POLYLINE",
+          "nse_symbol": "KSHITIJPOL",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SHRE PUSH CHEM & FERT",
+          "nse_symbol": "SHREEPUSHK",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "MEGA FLEX PLASTICS",
+          "nse_symbol": "MEGAFLEX-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SANGINITA CHEMICALS",
+          "nse_symbol": "SANGINITA",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SIRCA PAINT INDIA",
+          "nse_symbol": "SIRCA",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "KOTHARI SUG & CHEM",
+          "nse_symbol": "KOTARISUG",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SUKHJIT STARCH & CHEM",
+          "nse_symbol": "SUKHJITS",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "MANGALAM DRUG & CHEM",
+          "nse_symbol": "MANGALAM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "RITE ZONE CHEMCON IND",
+          "nse_symbol": "RITEZONE-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "ARCHEAN CHEMICAL IND",
+          "nse_symbol": "ACI",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "AARTI SURFACTANTS",
+          "nse_symbol": "AARTISURF-P1",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "OMKAR SPL CHEM",
+          "nse_symbol": "OMKARCHEM-BZ",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "KAMDHENU VENTURES",
+          "nse_symbol": "KAMOPAINTS",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "PLASTIBLENDS INDIA",
+          "nse_symbol": "PLASTIBLEN",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SARLA PERF. FIBERS",
+          "nse_symbol": "SARLAPOLY",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "GAYATRI RUBB AND CHEM",
+          "nse_symbol": "GRCL-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "HIMADRI SPECIALITY CHEM L",
+          "nse_symbol": "HSCL",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "PONDY OXIDES & CHEM",
+          "nse_symbol": "POCL",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SRIVASAVI ADHESIVE TAPE L",
+          "nse_symbol": "SRIVASAVI-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "NAHAR POLY FILMS",
+          "nse_symbol": "NAHARPOLY",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "TECIL CHEMICALS",
+          "nse_symbol": "TECILCHEM-BE",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "MANG.CHEM.FERT.LTD",
+          "nse_symbol": "MANGCHEFER",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SHALIM PAINTS",
+          "nse_symbol": "SHALPAINTS",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "AURO IMPEX & CHEMICALS L",
+          "nse_symbol": "AUROIMPEX-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "VINYL CHEMICALS (I)",
+          "nse_symbol": "VINYLINDIA",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SUMITOMO CHEM INDIA",
+          "nse_symbol": "SUMICHEM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "YASONS CHEMEX CARE",
+          "nse_symbol": "YCCL-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "LORDS CHLORO ALKALI",
+          "nse_symbol": "LORDSCHLO-BE",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "PODDAR PIGMENTS",
+          "nse_symbol": "PODDARMENT",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "AARTI SURFACTANTS",
+          "nse_symbol": "AARTISURF",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "VADIVARHE SPCLTY CHEM",
+          "nse_symbol": "VSCL-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "POLYSIL IRRIGATION SYST L",
+          "nse_symbol": "POLYSIL-ST",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "J.G.CHEMICALS",
+          "nse_symbol": "JGCHEM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "RAMDEVBABA SOLVENT",
+          "nse_symbol": "RBS-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SILKFLEX POLYMERS INDIA L",
+          "nse_symbol": "SILKFLEX-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SATI POLY PLAST",
+          "nse_symbol": "SATIPOLY-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SOLVE PLASTIC PRODUCTS L",
+          "nse_symbol": "BALCO-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "BODAL CHEMICALS",
+          "nse_symbol": "BODALCHEM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "SPP POLYMER",
+          "nse_symbol": "SPPPOLY-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "TIJARIA POLYPIPES",
+          "nse_symbol": "TIJARIA",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "UNILEX COLOURS AND CHEM L",
+          "nse_symbol": "UNILEX-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "PARAMOUNT DYE TEC",
+          "nse_symbol": "PARAMOUNT-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "POLY MEDICURE",
+          "nse_symbol": "POLYMED",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "PREMIUM PLAST",
+          "nse_symbol": "PREMIUM-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "ZUARI AGRO CHEMICALS",
+          "nse_symbol": "ZUARI",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "DDEV PLASTIKS IND",
+          "nse_symbol": "DDEVPLSTIK",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "BARFLEX POLYFILMS",
+          "nse_symbol": "BARFLEX-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "VISAGAR POLYTEX",
+          "nse_symbol": "VIVIDHA",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "ISHAN DYES N CHEMICALS L",
+          "nse_symbol": "ISHANCH-BE",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "PRIMO CHEMICALS",
+          "nse_symbol": "PRIMO",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "CHEMBOND CHEMICAL",
+          "nse_symbol": "CHEMBONDCH",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "RENOL POLYCHEM",
+          "nse_symbol": "RNPL-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "JYOTI GLOBAL PLAST",
+          "nse_symbol": "JYOTIGLOBL-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "ALL TIME PLASTICS",
+          "nse_symbol": "ALLTIME",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "VIGOR PLAST INDIA",
+          "nse_symbol": "VIGOR-SM",
+          "sector": "Chemicals"
+        },
+        {
+          "company_name": "MANAS POLYMER N ENERGIE L",
+          "nse_symbol": "MPEL-ST",
+          "sector": "Chemicals"
         }
       ],
       "total_stocks": 72,
@@ -1867,6 +6909,181 @@
         {
           "company_name": "Sri Adhikari Brothers Television Network Ltd",
           "nse_symbol": "SABTN",
+          "sector": "Media"
+        },
+        {
+          "company_name": "DILIGENT MEDIA CORP",
+          "nse_symbol": "DNAMEDIA",
+          "sector": "Media"
+        },
+        {
+          "company_name": "SAMBHAAV MEDIA",
+          "nse_symbol": "SAMBHAAV",
+          "sector": "Media"
+        },
+        {
+          "company_name": "CINEVISTA",
+          "nse_symbol": "CINEVISTA",
+          "sector": "Media"
+        },
+        {
+          "company_name": "UFO MOVIEZ INDIA",
+          "nse_symbol": "UFO",
+          "sector": "Media"
+        },
+        {
+          "company_name": "TIPS MUSIC",
+          "nse_symbol": "TIPSMUSIC",
+          "sector": "Media"
+        },
+        {
+          "company_name": "NEXT MEDIAWORKS",
+          "nse_symbol": "NEXTMEDIA",
+          "sector": "Media"
+        },
+        {
+          "company_name": "RADAAN MEDIAWORKS (I)",
+          "nse_symbol": "RADAAN",
+          "sector": "Media"
+        },
+        {
+          "company_name": "B.A.G FILMS AND MEDIA",
+          "nse_symbol": "BAGFILMS",
+          "sector": "Media"
+        },
+        {
+          "company_name": "TIPS FILMS",
+          "nse_symbol": "TIPSFILMS",
+          "sector": "Media"
+        },
+        {
+          "company_name": "HT MEDIA",
+          "nse_symbol": "HTMEDIA-BE",
+          "sector": "Media"
+        },
+        {
+          "company_name": "DJ MEDIAPRINT & LOG",
+          "nse_symbol": "DJML",
+          "sector": "Media"
+        },
+        {
+          "company_name": "ENTERTAIN NET. IND.",
+          "nse_symbol": "ENIL",
+          "sector": "Media"
+        },
+        {
+          "company_name": "INFOMEDIA PRESS",
+          "nse_symbol": "INFOMEDIA-BE",
+          "sector": "Media"
+        },
+        {
+          "company_name": "BODHI TREE MULTIMEDIA",
+          "nse_symbol": "BTML",
+          "sector": "Media"
+        },
+        {
+          "company_name": "VELS FILM INTERNATIONAL L",
+          "nse_symbol": "VELS-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "MUSIC BROADCAST",
+          "nse_symbol": "RADIOCITY-P1",
+          "sector": "Media"
+        },
+        {
+          "company_name": "TOUCHWOOD ENTERTAIN",
+          "nse_symbol": "TOUCHWOOD",
+          "sector": "Media"
+        },
+        {
+          "company_name": "ESSEN SPECIALITY FILMS L",
+          "nse_symbol": "ESFL-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "DEN NETWORKS",
+          "nse_symbol": "DEN",
+          "sector": "Media"
+        },
+        {
+          "company_name": "BASILIC FLY STUDIO",
+          "nse_symbol": "BASILIC-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "SILLY MONKS ENTERTAIN",
+          "nse_symbol": "SILLYMONKS",
+          "sector": "Media"
+        },
+        {
+          "company_name": "INSPIRE FILMS",
+          "nse_symbol": "INSPIRE-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "HINDUSTAN MEDIA VENT",
+          "nse_symbol": "HMVL",
+          "sector": "Media"
+        },
+        {
+          "company_name": "MUSIC BROADCAST",
+          "nse_symbol": "RADIOCITY",
+          "sector": "Media"
+        },
+        {
+          "company_name": "M P TODAY MEDIA",
+          "nse_symbol": "MPTODAY-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "BAWEJA STUDIOS",
+          "nse_symbol": "BAWEJA-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "RADIOWALLA NETWORK",
+          "nse_symbol": "RADIOWALLA-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "PICTUREPOST STUDIOS",
+          "nse_symbol": "PPSL-ST",
+          "sector": "Media"
+        },
+        {
+          "company_name": "FORCAS STUDIO",
+          "nse_symbol": "FORCAS-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "CINELINE INDIA",
+          "nse_symbol": "CINELINE",
+          "sector": "Media"
+        },
+        {
+          "company_name": "IDENTICAL BRAINS STUDIO L",
+          "nse_symbol": "IDENTICAL-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "MOVING MEDIA ENTER",
+          "nse_symbol": "MMEL-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "CONNPLEX CINEMAS",
+          "nse_symbol": "CONNPLEX-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "STUDIO LSD",
+          "nse_symbol": "STUDIOLSD-SM",
+          "sector": "Media"
+        },
+        {
+          "company_name": "BALAJI TELEFILMS",
+          "nse_symbol": "BALAJITELE",
           "sector": "Media"
         }
       ],
@@ -1996,6 +7213,116 @@
           "company_name": "Alphageo India Limited",
           "nse_symbol": "ALPHAGEO",
           "sector": "Oil and Gas"
+        },
+        {
+          "company_name": "RAJ OIL MILLS",
+          "nse_symbol": "ROML",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "HINDUSTAN OIL EXPLORATION",
+          "nse_symbol": "HINDOILEXP",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "SAVITA OIL TECHNOLO.",
+          "nse_symbol": "SOTL",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "DEEP INDUSTRIES",
+          "nse_symbol": "DEEPINDS",
+          "sector": "Oil and Gas"
+        },
+        {
+          "company_name": "PARAS PETROFILS",
+          "nse_symbol": "PARASPETRO",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "GULF OIL LUB. IND.",
+          "nse_symbol": "GULFOILLUB",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "KOTHARI PETROCHEM",
+          "nse_symbol": "KOTHARIPET",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "TAMILNADU PETROPRODUCTS L",
+          "nse_symbol": "TNPETRO-BE",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "ABAN OFFSHORE",
+          "nse_symbol": "ABAN-BE",
+          "sector": "Oil and Gas"
+        },
+        {
+          "company_name": "SUPREME PETROCHEM",
+          "nse_symbol": "SPLPETRO",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "CONFIDENCE PETRO IND",
+          "nse_symbol": "CONFIPET",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "GP PETROLEUMS",
+          "nse_symbol": "GULFPETRO",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "STRLNG & WIL REN ENE",
+          "nse_symbol": "SWSOLAR",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "MANALI PETROCHEMICALS LT",
+          "nse_symbol": "MANALIPETC",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "I G PETROCHEMICALS",
+          "nse_symbol": "IGPL",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "ARABIAN PETROLEUM",
+          "nse_symbol": "ARABIAN-SM",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "GANDHAR OIL REFINE IND L",
+          "nse_symbol": "GANDHAR",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "KIRLOSKAR OIL ENG",
+          "nse_symbol": "KIRLOSENG",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "PETRO CARBON AND CHEMI L",
+          "nse_symbol": "PCCL-SM",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "PANAMA PETROCHEM",
+          "nse_symbol": "PANAMAPET",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "GODAVARI BIOREFINERIES L",
+          "nse_symbol": "GODAVARIB",
+          "sector": "Oil & Gas"
+        },
+        {
+          "company_name": "NEPTUNE PETROCHEMICALS L",
+          "nse_symbol": "NEPTUNE-SM",
+          "sector": "Oil & Gas"
         }
       ],
       "total_stocks": 24,
@@ -2144,6 +7471,236 @@
           "company_name": "Nidan Healthcare Ltd",
           "nse_symbol": "NIDAN",
           "sector": "Healthcare"
+        },
+        {
+          "company_name": "MOHINI HEALTH&HYGIENE",
+          "nse_symbol": "MHHL-SM",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "ASTER DM HEALTHCARE",
+          "nse_symbol": "ASTERDM",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "P&G HYGIENE & HEALTH CARE",
+          "nse_symbol": "PGHH",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "INDRAPRASTHA MEDICAL CORP",
+          "nse_symbol": "INDRAMEDCO",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "KRSNAA DIAGNOSTICS",
+          "nse_symbol": "KRSNAA",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "VIJAYA DIAGNOSTIC CEN",
+          "nse_symbol": "VIJAYA",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "COUNTRY CLUB HOSP HOL",
+          "nse_symbol": "CCHHL",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "BAJAJ HEALTHCARE",
+          "nse_symbol": "BAJAJHCARE",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "STAR HEALTH & AL INS CO L",
+          "nse_symbol": "STARHEALTH",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "MEDPLUS HEALTH SERV",
+          "nse_symbol": "MEDPLUS",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "SRI HAVISHA HOSP & INFR L",
+          "nse_symbol": "HAVISHA",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "THE BYKE HOSPITALITY",
+          "nse_symbol": "BYKE",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "SAKAR HEALTHCARE",
+          "nse_symbol": "SAKAR",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "METROPOLIS HEALTHCARE",
+          "nse_symbol": "METROPOLIS",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "PARADEEP PHOSPHATES",
+          "nse_symbol": "PARADEEP",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "RAMA PHOSPHATES",
+          "nse_symbol": "RAMAPHO",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "TTK HEALTHCARE",
+          "nse_symbol": "TTKHLTCARE",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "ZOTA HEALTH CARE",
+          "nse_symbol": "ZOTA",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "QMS MEDICAL ALLIED S",
+          "nse_symbol": "QMSMEDI-SM",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "NARAYANA HRUDAYALAYA",
+          "nse_symbol": "NH",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "GLOBAL HEALTH",
+          "nse_symbol": "MEDANTA",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "HEALTHCARE GLOB. ENT.",
+          "nse_symbol": "HCG",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "LOTUS EYE HOSP & INST L",
+          "nse_symbol": "LOTUSEYE-BE",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "AATMAJ HEALTHCARE",
+          "nse_symbol": "AATMAJ-SM",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "AMRUTAJAN HEALTH",
+          "nse_symbol": "AMRUTANJAN",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "SANGANI HOSPITALS",
+          "nse_symbol": "SANGANI-SM",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "JUPITER LIFE LINE HOSP L",
+          "nse_symbol": "JLHL",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "UNIHEALTH HOSPITALS",
+          "nse_symbol": "UNIHEALTH-SM",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "BLUE JET HEALTHCARE",
+          "nse_symbol": "BLUEJET",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "MEDI ASSIST HEALTH SER L",
+          "nse_symbol": "MEDIASSIST",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "ENTERO HEALTHCARE SOLU L",
+          "nse_symbol": "ENTERO",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "NEPHRO CARE INDIA",
+          "nse_symbol": "NEPHROCARE-ST",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "INDIAN PHOSPHATE",
+          "nse_symbol": "IPHL-SM",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "ECOS (INDIA) MOB & HOSP L",
+          "nse_symbol": "ECOSMOBLTY",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "SANOFI CONS HEALTHC IND L",
+          "nse_symbol": "SANOFICONR",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "NIVA BUPA HEALTH INS CO L",
+          "nse_symbol": "NIVABUPA",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "SURAKSHA DIAGNOSTIC",
+          "nse_symbol": "SURAKSHA",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "VENTIVE HOSPITALITY",
+          "nse_symbol": "VENTIVE",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "SUPREME HOLDIN N HOSP I L",
+          "nse_symbol": "SUPREME",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "DR AGARWALS HEALTH CARE L",
+          "nse_symbol": "AGARWALEYE",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "CHANDAN HEALTHCARE",
+          "nse_symbol": "CHANDAN-ST",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "BALAJI PHOSPHATES",
+          "nse_symbol": "BALAJIPHOS-ST",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "FISCHER MEDICAL VENTURE L",
+          "nse_symbol": "FISCHER",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "MEDISTEP HEALTHCARE",
+          "nse_symbol": "MEDISTEP-SM",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "AMANTA HEALTHCARE",
+          "nse_symbol": "AMANTA",
+          "sector": "Healthcare"
+        },
+        {
+          "company_name": "ANLON HEALTHCARE",
+          "nse_symbol": "AHCL-BE",
+          "sector": "Healthcare"
         }
       ],
       "total_stocks": 28,
@@ -2252,6 +7809,11 @@
           "company_name": "Apollo Micro Systems Limited",
           "nse_symbol": "APOLLO",
           "sector": "Defence"
+        },
+        {
+          "company_name": "DATA PATTERNS INDIA",
+          "nse_symbol": "DATAPATTNS",
+          "sector": "Defence"
         }
       ],
       "total_stocks": 20,
@@ -2318,20 +7880,227 @@
           "company_name": "Jyothy Labs Ltd",
           "nse_symbol": "JYOTHYLAB",
           "sector": "Consumption"
+        },
+        {
+          "company_name": "EIH - OBEROI HOTELS",
+          "nse_symbol": "EIHOTEL",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "THE INDIAN HOTELS CO.",
+          "nse_symbol": "INDHOTEL",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "KAMAT HOTELS (I)",
+          "nse_symbol": "KAMATHOTEL",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "ORIENT HOTELS",
+          "nse_symbol": "ORIENTHOT",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "LEMON TREE HOTELS",
+          "nse_symbol": "LEMONTREE",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "APOLLO SINDOORI HOTEL",
+          "nse_symbol": "APOLSINHOT",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "CHALET HOTELS",
+          "nse_symbol": "CHALET",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "BLUE COAST HOTELS",
+          "nse_symbol": "BLUECOAST-BE",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "TAJ GVK HOTELS & RESORTS",
+          "nse_symbol": "TAJGVK",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "ROYAL ORCHID HOTELS",
+          "nse_symbol": "ROHLTD",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "TGB BANQUETS&HOTELS",
+          "nse_symbol": "TGBHOTELS",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "ROBUST HOTELS",
+          "nse_symbol": "RHL",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "EIH ASSOCIATED HOTELS - OBEROI HOTELS",
+          "nse_symbol": "EIHAHOTELS",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "ASIAN HOTELS (NORTH)",
+          "nse_symbol": "ASIANHOTNR",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "SAMHI HOTELS",
+          "nse_symbol": "SAMHI",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "ASIAN HOTELS (EAST)",
+          "nse_symbol": "AHLEAST",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "PARKHOTELS",
+          "nse_symbol": "PARKHOTELS",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "JUNIPER HOTELS",
+          "nse_symbol": "JUNIPER",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "VICEROY HOTELS",
+          "nse_symbol": "VHLTD-BE",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "SINCLAIRS HOTELS",
+          "nse_symbol": "SINCLAIR",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "SAJ HOTELS",
+          "nse_symbol": "SAJHOTELS-SM",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "GRAND CONTINENT HOTELS L",
+          "nse_symbol": "GCHOTELS-ST",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "LEELA PALACES HOTEL",
+          "nse_symbol": "THELEELA",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "BRIGADE HOTEL VENTURE",
+          "nse_symbol": "BRIGHOTEL",
+          "sector": "Hotels"
+        },
+        {
+          "company_name": "SUBA HOTELS",
+          "nse_symbol": "SUBAHOTELS-ST",
+          "sector": "Hotels"
         }
       ],
       "total_stocks": 3,
       "last_updated": "2025-10-17"
     },
+    "NIFTY MIDSMALL IT & TELECOM": {
+      "sector_name": "midsmall it and telecom",
+      "description": "midsmall it and telecom",
+      "stocks": [
+        {
+          "company_name": "MAHANAGAR TELEPHONE NIGAM",
+          "nse_symbol": "MTNL",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "TAMILNADU TELECOMMUNICATI",
+          "nse_symbol": "TNTELE",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "VINDHYA TELELINKS",
+          "nse_symbol": "VINDHYATEL",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "UNIINFO TELECOM SERVI",
+          "nse_symbol": "UNIINFO",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "TATA TELESERV(MAHARASTRA)",
+          "nse_symbol": "TTML",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "SURANA TELECOM AND POW LT",
+          "nse_symbol": "SURANAT&P",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "PATEL ENGINEERING",
+          "nse_symbol": "PATELENG",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "SHYAM TELECOM",
+          "nse_symbol": "SHYAMTEL",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "SPECTRUM TALENT MGMT",
+          "nse_symbol": "SPECTSTM-SM",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "SAR TELEVENTURE",
+          "nse_symbol": "SARTELE-SM",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "SRI ADHIKARI BRO TELE N L",
+          "nse_symbol": "SABTNL-BE",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "SUYOG TELEMATICS",
+          "nse_symbol": "SUYOG",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "HP TELECOM INDIA",
+          "nse_symbol": "HPTL-ST",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "SPECTRUM ELECTRIC IND",
+          "nse_symbol": "SPECTRUM",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "RAMA TELECOM",
+          "nse_symbol": "RTL-SM",
+          "sector": "Telecom"
+        },
+        {
+          "company_name": "BHART AIRTEL",
+          "nse_symbol": "BHARTIARTL",
+          "sector": "Telecom"
+        }
+                
+      ]
+    },
     "NIFTY EV": {
       "sector_name": "Electric Vehicles",
       "description": "Electric vehicle manufacturers, components and new-age automotive companies listed on NSE",
       "stocks": [
-        {
-          "company_name": "Bajaj Auto Ltd",
-          "nse_symbol": "BAJAJ-AUTO",
-          "sector": "Electric Vehicles"
-        },
         {
           "company_name": "Amara Raja Batteries Ltd",
           "nse_symbol": "AMARAJABAT",
@@ -2348,11 +8117,6 @@
           "sector": "Electric Vehicles"
         },
         {
-          "company_name": "Greaves Cotton Ltd",
-          "nse_symbol": "GREAVESCOT",
-          "sector": "Electric Vehicles"
-        },
-        {
           "company_name": "Wabco India Ltd",
           "nse_symbol": "WABCOINDIA",
           "sector": "Electric Vehicles"
@@ -2360,6 +8124,11 @@
         {
           "company_name": "OLA Electric Mobility Ltd",
           "nse_symbol": "OLAELEC",
+          "sector": "Electric Vehicles"
+        },
+        {
+          "company_name": "OLA ELECTRIC MOBILITY",
+          "nse_symbol": "OLAELEC-BE",
           "sector": "Electric Vehicles"
         }
       ],
@@ -2553,6 +8322,31 @@
         {
           "company_name": "Butterfly Gandhimathi Appliances Ltd",
           "nse_symbol": "BUTTERFLY",
+          "sector": "Consumer Durables"
+        },
+        {
+          "company_name": "BATA INDIA",
+          "nse_symbol": "BATAINDIA",
+          "sector": "Consumer Durables"
+        },
+        {
+          "company_name": "BLUE STAR",
+          "nse_symbol": "BLUESTARCO",
+          "sector": "Consumer Durables"
+        },
+        {
+          "company_name": "BOROSIL",
+          "nse_symbol": "BOROLTD",
+          "sector": "Consumer Durables"
+        },
+        {
+          "company_name": "EUREKA FORBES",
+          "nse_symbol": "EUREKAFORB",
+          "sector": "Consumer Durables"
+        },
+        {
+          "company_name": "LG ELECTRONICS INDIA",
+          "nse_symbol": "LGEINDIA",
           "sector": "Consumer Durables"
         }
       ],

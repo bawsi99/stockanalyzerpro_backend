@@ -55,7 +55,8 @@ def retry_on_error(max_retries: int = 3, delay: float = 1.0):
 class SectorClassifier:
     """
     Classifies stocks into sectors and provides sector-specific index mappings.
-    Now reads sector data from JSON files in the sector_category folder.
+    Prefers consolidated data file (data/sector_mappings.json) when available,
+    otherwise falls back to per-sector JSON files in data/sector_category.
     Implements singleton pattern for optimization.
     """
     
@@ -70,28 +71,24 @@ class SectorClassifier:
     
     def __init__(self, sector_folder: str = None):
         """
-        Initialize the SectorClassifier with data from JSON files.
-        
-        Args:
-            sector_folder: Path to the folder containing sector JSON files
+        Initialize the SectorClassifier with data from consolidated JSON only.
         """
         # Skip initialization if already initialized (singleton pattern)
         if hasattr(self, '_initialized') and self._initialized:
             return
             
-        # Use provided path or construct absolute path to data/sector_category
-        if sector_folder is None:
-            # Default to correct absolute path in backend/data/sector_category
-            backend_path = Path(__file__).parent.parent.parent  # agents/sector -> agents -> backend
-            sector_folder = backend_path / "data" / "sector_category"
-            
-        self.sector_folder = Path(sector_folder)
+        # Compute backend/data paths
+        backend_path = Path(__file__).parent.parent.parent  # agents/sector -> agents -> backend
+        data_path = backend_path / "data"
+        self.consolidated_file = data_path / "sector_mappings.json"
+        self.use_consolidated_file = True  # Force consolidated-only mode (no legacy fallback)
+        
         self.sector_mappings = {}
         self.stock_to_sector = {}
         self.rate_limiter = RateLimiter(max_calls=1000, time_window=60)  # 1000 calls per minute
         
-        # Load all sector data from JSON files
-        self._load_sector_data()
+        # Load sector data (consolidated only)
+        self._load_consolidated_sector_data()
         
         # Create reverse mapping for quick lookup
         self._build_stock_to_sector_mapping()
@@ -100,7 +97,7 @@ class SectorClassifier:
         self._initialized = True
     
     def _load_sector_data(self):
-        """Load sector data from all JSON files in the sector folder."""
+        """Load sector data from all JSON files in the sector folder (legacy mode)."""
         if not self.sector_folder.exists():
             logging.error(f"Sector folder not found: {self.sector_folder}")
             return
@@ -126,7 +123,48 @@ class SectorClassifier:
             except Exception as e:
                 logging.error(f"Error loading sector data from {json_file}: {e}")
         
-        logging.info(f"Loaded {len(self.sector_mappings)} sectors from JSON files")
+        logging.info(f"Loaded {len(self.sector_mappings)} sectors from per-sector JSON files")
+
+    def _load_consolidated_sector_data(self):
+        """Load sector data from consolidated JSON at data/sector_mappings.json."""
+        try:
+            with open(self.consolidated_file, 'r') as f:
+                data = json.load(f)
+        except Exception as e:
+            logging.error(f"Failed to read consolidated sector mappings: {e}")
+            return
+        
+        mappings = data.get('sector_mappings', {})
+        if not isinstance(mappings, dict) or not mappings:
+            logging.warning("Consolidated sector_mappings.json has no 'sector_mappings' object or it's empty")
+            return
+        
+        loaded_count = 0
+        for primary_index, entry in mappings.items():
+            try:
+                # Derive sector_code from primary index (e.g., 'NIFTY IT' -> 'NIFTY_IT')
+                sector_code = primary_index.upper().replace(' ', '_')
+                stocks = []
+                for s in entry.get('stocks', []):
+                    # Each stock entry expected to be an object with 'nse_symbol'
+                    if isinstance(s, dict):
+                        sym = s.get('nse_symbol') or s.get('symbol') or s.get('nse')
+                        if sym:
+                            stocks.append(str(sym).upper())
+                    elif isinstance(s, str):
+                        stocks.append(s.upper())
+                display_name = entry.get('sector_name') or primary_index
+                self.sector_mappings[sector_code] = {
+                    'indices': [primary_index],
+                    'primary_index': primary_index,
+                    'display_name': display_name,
+                    'stocks': stocks,
+                    'description': entry.get('description', '')
+                }
+                loaded_count += 1
+            except Exception as e:
+                logging.warning(f"Failed to load sector entry for {primary_index}: {e}")
+        logging.info(f"Loaded {loaded_count} sectors from consolidated sector_mappings.json")
     
     def _build_stock_to_sector_mapping(self):
         """Build reverse mapping from stock symbols to sectors."""
@@ -214,98 +252,32 @@ class SectorClassifier:
     
     def add_stock_to_sector(self, stock_symbol: str, sector: str) -> bool:
         """
-        Add a stock to a sector. This will update both the sector data and the reverse mapping.
-        
-        Args:
-            stock_symbol: Stock symbol to add
-            sector: Sector to add the stock to
-            
-        Returns:
-            bool: True if successful, False otherwise
+        Disabled in read-only mode.
         """
-        if sector not in self.sector_mappings:
-            logging.error(f"Sector {sector} not found")
-            return False
-        
-        stock_symbol = stock_symbol.upper()
-        if stock_symbol not in self.sector_mappings[sector]['stocks']:
-            self.sector_mappings[sector]['stocks'].append(stock_symbol)
-            self.stock_to_sector[stock_symbol] = sector
-            logging.info(f"Added {stock_symbol} to sector {sector}")
-            return True
-        else:
-            logging.warning(f"Stock {stock_symbol} already exists in sector {sector}")
-            return False
+        logging.warning("add_stock_to_sector is disabled: SectorClassifier is read-only")
+        return False
     
     def remove_stock_from_sector(self, stock_symbol: str, sector: str) -> bool:
         """
-        Remove a stock from a sector.
-        
-        Args:
-            stock_symbol: Stock symbol to remove
-            sector: Sector to remove the stock from
-            
-        Returns:
-            bool: True if successful, False otherwise
+        Disabled in read-only mode.
         """
-        if sector not in self.sector_mappings:
-            logging.error(f"Sector {sector} not found")
-            return False
-        
-        stock_symbol = stock_symbol.upper()
-        if stock_symbol in self.sector_mappings[sector]['stocks']:
-            self.sector_mappings[sector]['stocks'].remove(stock_symbol)
-            if stock_symbol in self.stock_to_sector:
-                del self.stock_to_sector[stock_symbol]
-            logging.info(f"Removed {stock_symbol} from sector {sector}")
-            return True
-        else:
-            logging.warning(f"Stock {stock_symbol} not found in sector {sector}")
-            return False
+        logging.warning("remove_stock_from_sector is disabled: SectorClassifier is read-only")
+        return False
     
     def save_sector_data(self, sector: str) -> bool:
         """
-        Save sector data back to its JSON file.
-        
-        Args:
-            sector: Sector to save
-            
-        Returns:
-            bool: True if successful, False otherwise
+        Disabled in read-only mode.
         """
-        if sector not in self.sector_mappings:
-            logging.error(f"Sector {sector} not found")
-            return False
-        
-        try:
-            sector_data = self.sector_mappings[sector]
-            json_data = {
-                'sector_code': sector,
-                'display_name': sector_data['display_name'],
-                'indices': sector_data['indices'],
-                'primary_index': sector_data['primary_index'],
-                'stocks': sector_data['stocks'],
-                'description': sector_data.get('description', '')
-            }
-            
-            json_file = self.sector_folder / f"{sector.lower()}.json"
-            with open(json_file, 'w') as f:
-                json.dump(json_data, f, indent=2)
-            
-            logging.info(f"Saved sector data for {sector} to {json_file}")
-            return True
-            
-        except Exception as e:
-            logging.error(f"Error saving sector data for {sector}: {e}")
-            return False
+        logging.warning("save_sector_data is disabled: SectorClassifier is read-only")
+        return False
     
     def reload_sector_data(self):
-        """Reload all sector data from JSON files."""
+        """Reload sector data from consolidated JSON only."""
         self.sector_mappings.clear()
         self.stock_to_sector.clear()
-        self._load_sector_data()
+        self._load_consolidated_sector_data()
         self._build_stock_to_sector_mapping()
-        logging.info("Reloaded all sector data from JSON files")
+        logging.info("Reloaded sector data from consolidated file")
     
     def validate_data_integrity(self) -> Dict[str, List[str]]:
         """
@@ -408,25 +380,9 @@ class SectorClassifier:
     
     def export_sector_mappings(self, filepath: str = "sector_mappings.json"):
         """
-        Export sector mappings to JSON file for frontend use.
-        
-        Args:
-            filepath: Path to save the JSON file
+        Disabled in read-only mode.
         """
-        export_data = {
-            'sectors': self.sector_mappings,
-            'stock_to_sector': self.stock_to_sector,
-            'sector_list': self.get_all_sectors(),
-            'metadata': {
-                'total_sectors': len(self.sector_mappings),
-                'total_stocks': len(self.stock_to_sector),
-                'export_timestamp': pd.Timestamp.now().isoformat()
-            }
-        }
-        
-        with open(filepath, 'w') as f:
-            json.dump(export_data, f, indent=2)
-        
-        logging.info(f"Sector mappings exported to {filepath}")
+        logging.warning("export_sector_mappings is disabled: SectorClassifier is read-only")
+        return False
 
 # Global instance removed - instantiate locally as needed 
