@@ -594,39 +594,14 @@ async def startup_event():
 
     # Legacy signals system removed - timeframe weighting now handled by individual agents
 
-    # Do not kick calibration immediately to avoid duplicate runs with the scheduler
-    if os.environ.get("ENABLE_SCHEDULED_CALIBRATION") == "1":
-        print("⏲️  Weekly calibration scheduler enabled")
-    else:
-        print("ℹ️  Scheduled calibration disabled (set ENABLE_SCHEDULED_CALIBRATION=1 to enable)")
+    # Calibration system disabled - scripts not implemented
+    print("ℹ️  Calibration system disabled (scripts not implemented)")
 
-    # Start background weekly scheduler only if enabled
-    async def _weekly_scheduler():
-        try:
-            await asyncio.sleep(5)
-            week_seconds = 7 * 24 * 60 * 60
-            while True:
-                try:
-                    # No need to check again since we only start this task when enabled
-                    result = scheduled_calibration_task()
-                    if asyncio.iscoroutine(result):
-                        await result
-                except Exception as inner_e:
-                    print("[CALIBRATION] Background weekly scheduler error:", inner_e)
-                await asyncio.sleep(week_seconds)
-        except asyncio.CancelledError:
-            return
-
-    # Only create the scheduler task if calibration is enabled
-    if os.environ.get("ENABLE_SCHEDULED_CALIBRATION") == "1":
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_weekly_scheduler())
-            print("🔁 Background weekly calibration scheduler started")
-        except Exception as e:
-            print("⚠️  Warning: Failed to start background weekly scheduler:", e)
-    else:
-        print("ℹ️  Scheduled calibration disabled - no background task created")
+    # Weekly scheduler disabled - calibration scripts not implemented
+    # async def _weekly_scheduler():
+    #     ...
+    # Scheduler creation disabled
+    print("ℹ️  Weekly scheduler disabled - calibration scripts not implemented")
 
 
 def scheduled_calibration_task() -> None:
