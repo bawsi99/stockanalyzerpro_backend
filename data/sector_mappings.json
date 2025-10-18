@@ -1,7 +1,7 @@
 {
   "sector_mappings": {
     "NIFTY FIN SERV": {
-      "sector_name": "financial services",
+      "sector_name": "Financial Services",
       "description": "financial servies in India",
       "stocks": [
         {
@@ -8011,7 +8011,7 @@
       "last_updated": "2025-10-17"
     },
     "NIFTY MIDSMALL IT & TELECOM": {
-      "sector_name": "midsmall it and telecom",
+      "sector_name": "Midsmall IT and Telecom",
       "description": "midsmall it and telecom",
       "stocks": [
         {

@@ -6,11 +6,11 @@ A state-of-the-art, AI-powered stock analysis backend providing technical analys
 
 - **AI-Only Analysis**: Pure AI-powered analysis using Google's Gemini LLM—no rule-based consensus, no conflicting signals.
 - **25+ Technical Indicators**: SMA, EMA, MACD, RSI, Bollinger Bands, ADX, Stochastic, OBV, Ichimoku, Fibonacci, and more.
-- **Advanced Pattern Recognition**: Detects triangles, flags, double tops/bottoms, head & shoulders, divergences, and volume anomalies.
+- **Advanced Pattern Recognition**: Detects triangles, flags, double tops/bottoms, head & shoulders, divergences, and volume anomalies with cross-validation and market structure analysis.
 - **Sector Benchmarking**: Hybrid approach for sector-specific and market-wide benchmarking, with sector rotation and correlation analysis.
 - **Real-Time Data**: Live market data and streaming via Zerodha API and WebSocket with multi-service architecture.
 - **Advanced ML System**: Reorganized quantitative trading system with pattern ML, raw data ML, and hybrid approaches.
-- **Agent-Based Analysis**: Modular Volume Agents, Risk Analysis Agent, and Multi-Timeframe (MTF) Agents running in parallel.
+- **Agent-Based Analysis**: Modular Volume Agents, Risk Analysis Agent, Pattern Analysis Agent, and Multi-Timeframe (MTF) Agents running in parallel.
 - **Universal LLM System**: Unified LLM client supporting Gemini (with multi-model support), OpenAI, Claude, and extensible for new providers.
 - **Smart Token Tracking**: Model-based token usage tracking with cost analysis and performance monitoring across different models.
 - **Advanced API Key Management**: Multi-key rotation system with round-robin, agent-specific, and single-key strategies.
@@ -53,6 +53,7 @@ The system is built as a collection of microservices that can be deployed indepe
 - **VolumeAgentIntegrationManager** (`agents/volume/__init__.py`): Runs 5 volume agents concurrently and aggregates results.
 - **MTFAgentsOrchestrator/CoreMTFProcessor** (`agents/mtf_analysis/`): New agent-based multi-timeframe analysis engine with LLM integration.
 - **Risk Analysis Agent** (`agents/risk_analysis/risk_llm_agent.py`): LLM-powered risk analysis with quantitative metrics and scenario analysis.
+- **Pattern Analysis Agent** (`patterns/recognition.py`): Comprehensive pattern recognition with market structure analysis and cross-validation.
 - **FinalDecisionProcessor** (`agents/final_decision/processor.py`): Centralized final decision agent combining deterministic and LLM contexts.
 
 #### Module Placement Note: `advanced_analysis.py`
@@ -101,11 +102,12 @@ Safe migration plan (if moving):
 3. **Parallel Agents**: Launch independent tasks in parallel:
    - Volume Agents: POST `/agents/volume/analyze-all` (reuses prefetched data via correlation_id)
    - Risk Analysis Agent: POST `/agents/risk/analyze-all` (quant metrics, stress tests, LLM bullets)
+   - Pattern Analysis Agent: POST `/agents/patterns/analyze-all` (comprehensive pattern recognition with cross-validation)
    - MTF Analysis: `mtf_agent_integration_manager.get_comprehensive_mtf_analysis`
    - Advanced Analysis Digest: scenario probabilities, stress summaries
    - Sector Context: benchmarking, rotation, correlation (with file-based cache)
    - Indicator Summary LLM: curated indicators to markdown + JSON
-4. **Final Decision**: Centralized FinalDecisionProcessor combines labeled contexts (indicators, MTF, risk, sector, advanced) via Gemini.
+4. **Final Decision**: Centralized FinalDecisionProcessor combines labeled contexts (indicators, MTF, risk, pattern insights, sector, advanced) via Gemini.
 5. **Response Assembly**: Build UI response and persist to Database Service.
 
 ---
@@ -127,7 +129,7 @@ The system can be deployed as:
 ### Main Analysis Endpoints (Analysis Service)
 
 - `POST /analyze` — Backward-compatible shim; forwards to `/analyze/enhanced`.
-- `POST /analyze/enhanced` — Enhanced analysis; runs volume, risk, MTF, sector, advanced in parallel; final decision via LLM.
+- `POST /analyze/enhanced` — Enhanced analysis; runs 7 agents in parallel (volume, risk, pattern, MTF, advanced, sector, indicator summary); final decision via LLM.
 - `POST /analyze/enhanced-mtf` — Returns comprehensive multi-timeframe analysis (agent-based).
 - `POST /analyze/async` — Async index-data analysis path.
 
@@ -147,6 +149,9 @@ Volume Agents
 
 Risk Agent
 - `POST /agents/risk/analyze-all` — Quantitative risk metrics, stress tests, scenarios, and LLM risk bullets.
+
+Pattern Agent
+- `POST /agents/patterns/analyze-all` — Comprehensive pattern recognition with market structure analysis and cross-validation.
 
 ### Data Service Endpoints
 
@@ -314,6 +319,11 @@ Risk Agent
     "overlays": {},
     "indicator_summary_md": "",
     "chart_insights": "",
+    "pattern_insights": {
+      "overall_confidence": 0.75,
+      "detected_patterns": ["ascending_triangle", "bullish_divergence"],
+      "market_structure": "bullish_trend_continuation"
+    },
     "sector_benchmarking": {},
     "metadata": {}
   }
@@ -358,6 +368,10 @@ agents:
     model: "gemini-2.5-pro"  # Use Pro for critical decisions
   indicator_agent:
     model: "gemini-2.5-pro"  # Use Pro for complex indicator analysis
+  pattern_agent:
+    model: "gemini-2.5-flash"  # Use Flash for pattern recognition
+  mtf_llm_agent:
+    model: "gemini-2.5-pro"  # Use Pro for MTF analysis
   volume_confirmation_agent:
     api_key_strategy: "agent_specific"  # Dedicated key tracking
 ```
@@ -371,15 +385,18 @@ Every analysis provides detailed token usage breakdown:
 📊 TOKEN USAGE SUMMARY for AAPL
 ================================================================================
 Total Analysis Time: 45.23s
-Total LLM Calls: 8
-Total Input Tokens: 2,650
-Total Output Tokens: 1,325
-Total Tokens: 3,975
+Total LLM Calls: 12
+Total Input Tokens: 4,250
+Total Output Tokens: 2,125
+Total Tokens: 6,375
 
 🤖 AGENT DETAILS:
-  indicator_agent      : gemini-2.5-flash  :  180 input :   90 output :   1.20s
-  final_decision_agent : gemini-2.5-pro    :  500 input :  250 output :   3.20s
-  risk_agent           : gemini-2.5-pro    :  300 input :  150 output :   2.80s
+  indicator_agent      : gemini-2.5-flash  :  280 input :  140 output :   1.20s
+  final_decision_agent : gemini-2.5-pro    :  750 input :  375 output :   3.20s
+  risk_agent           : gemini-2.5-flash  :  450 input :  225 output :   2.80s
+  pattern_agent        : gemini-2.5-flash  :  380 input :  190 output :   2.10s
+  mtf_llm_agent       : gemini-2.5-pro    :  620 input :  310 output :   4.50s
+  sector_synthesis    : gemini-2.5-flash  :  340 input :  170 output :   1.80s
 ================================================================================
 ```
 
@@ -437,7 +454,63 @@ The system now features a completely reorganized quantitative trading system (`m
 
 ---
 
-## 🏭 Hybrid Sector Analysis
+## 🔍 Comprehensive Pattern Analysis
+
+### Advanced Pattern Recognition System
+
+- **Market Structure Analysis**: Detects break-of-structure events and trend changes
+- **Cross-Validation Engine**: Multiple pattern recognition engines with consensus building
+- **Pattern Conflict Detection**: Identifies and resolves conflicting pattern signals
+- **LLM Synthesis**: Natural language insights from detected patterns
+- **Integration with Final Decision**: Pattern insights directly fed to decision agent
+
+### Pattern Analysis Features
+
+#### Core Pattern Detection
+- **Classical Patterns**: Triangles, flags, pennants, double tops/bottoms, head & shoulders
+- **Advanced Patterns**: Complex multi-timeframe patterns and market structure shifts
+- **Volume Confirmation**: Pattern validation with volume analysis
+- **Trend Continuation**: Identification of continuation vs reversal patterns
+
+#### Market Structure Analysis
+- **Break-of-Structure (BOS)**: Automated detection of significant level breaks
+- **Order Block Analysis**: Institutional order flow pattern recognition
+- **Support/Resistance**: Dynamic level identification and validation
+- **Trend Analysis**: Multi-timeframe trend structure assessment
+
+#### Cross-Validation System
+- **Multi-Engine Consensus**: Combines multiple pattern recognition approaches
+- **Confidence Scoring**: Weighted confidence based on pattern strength and validation
+- **Conflict Resolution**: Intelligent handling of contradictory pattern signals
+- **Quality Assessment**: Pattern completion and reliability scoring
+
+### Pattern Analysis API
+
+- **POST `/agents/patterns/analyze-all`**: Comprehensive pattern analysis with all engines
+- **Correlation ID Support**: Reuses prefetched data for optimal performance
+- **LLM Integration**: Natural language pattern insights for decision making
+- **Error Handling**: Robust error handling with detailed failure reporting
+
+### Pattern Insights for Final Decision
+
+```python
+# Pattern insights extraction for final decision agent
+pattern_insights = {
+    "overall_confidence": 0.85,
+    "detected_patterns": ["ascending_triangle", "volume_breakout"],
+    "market_structure": "bullish_continuation",
+    "pattern_conflicts": [],
+    "cross_validation": {
+        "engines_agreeing": 3,
+        "total_engines": 4,
+        "consensus_strength": "strong"
+    }
+}
+```
+
+---
+
+## 🏷 Hybrid Sector Analysis
 
 - **Stock-Specific Benchmarking**: Only fetches data for the stock's sector and NIFTY 50, minimizing API calls.
 - **Comprehensive Sector Context**: Cached sector rotation and correlation analysis for all sectors, updated hourly.
@@ -445,7 +518,39 @@ The system now features a completely reorganized quantitative trading system (`m
 
 ---
 
-## ⚡ Real-Time Data & Streaming
+## ⚙️ Optimized Data Reuse with Prefetch Cache
+
+### VOLUME_PREFETCH_CACHE System
+
+- **Shared Data Cache**: Correlation ID-based cache for inter-agent data reuse
+- **Agent Support**: Reused by Volume, Risk, Pattern, Sector, and MTF agents
+- **Performance Gains**: 200-600ms saved per agent by avoiding duplicate data fetching
+- **Automatic Cleanup**: 350-second expiry with background cleanup tasks
+- **Memory Safe**: Bounded cache size (200 entries max) with LRU eviction
+
+### Usage in Parallel Processing
+
+```python
+# Correlation ID passed to all agents
+correlation_id = str(uuid.uuid4())
+
+# Agent 1: Store prefetched data
+VOLUME_PREFETCH_CACHE[correlation_id] = {
+    'stock_data': df,
+    'indicators': indicators,
+    'created_at': datetime.now()
+}
+
+# Agents 2-N: Retrieve and reuse
+if correlation_id in VOLUME_PREFETCH_CACHE:
+    cached_data = VOLUME_PREFETCH_CACHE[correlation_id]
+    stock_data = cached_data['stock_data']
+    indicators = cached_data['indicators']
+```
+
+---
+
+## 📡 Real-Time Data & Streaming
 
 - **WebSocket Streaming**: Real-time tick and candle data via `/ws/stream` endpoint.
 - **Live Pub/Sub**: Efficient, filterable pub/sub system for streaming to multiple clients.
@@ -669,10 +774,13 @@ When test mode is enabled, you'll see:
 
 ### Recent Major Updates
 
+- **Pattern Analysis Integration (Latest)**: Comprehensive pattern recognition system with cross-validation and market structure analysis
+- **Enhanced Multi-Agent Architecture**: Now includes 7 parallel agents (Volume, Risk, Pattern, MTF, Advanced, Sector, Indicator Summary)
 - **Universal LLM System**: Complete migration from Gemini-only to universal LLM system supporting multiple providers
 - **Token Tracking**: Comprehensive model-based token usage tracking with cost analysis
 - **API Key Rotation**: Advanced multi-key management system with flexible assignment strategies
-- **Agent Migrations**: All major agents (Risk, MTF, Volume, Sector, Final Decision) migrated to new LLM system
+- **Agent Migrations**: All major agents (Risk, MTF, Volume, Sector, Pattern, Final Decision) migrated to new LLM system
+- **Prefetch Cache Optimization**: Shared data cache across all agents for 200-600ms performance improvement per agent
 - **Enhanced Error Handling**: Improved path resolution and error recovery across all services
 - **Performance Optimizations**: Optimized LLM response extraction and agent processing times
 

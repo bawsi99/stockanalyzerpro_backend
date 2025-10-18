@@ -3,6 +3,14 @@
 ## Overview
 This document provides a comprehensive technical overview of the Stock Analysis Service's decision-making flow, focusing on the enhanced analysis pipeline that orchestrates multiple AI agents, performs parallel processing, and provides detailed analytics.
 
+## Recent Enhancements
+### Pattern Analysis Integration (Latest)
+- Added comprehensive pattern recognition system with cross-validation
+- Implemented `_extract_pattern_insights_for_decision()` helper function for final decision agent
+- Market structure analysis with break-of-structure detection
+- Pattern conflict detection and resolution mechanisms
+- Full integration into parallel agent execution pipeline
+
 ## Scope
 - Starting point: `backend/services/analysis_service.py`
 - Traced modules:
@@ -83,7 +91,7 @@ This document provides a comprehensive technical overview of the Stock Analysis 
 - **`VOLUME_PREFETCH_CACHE`**: Optimized inter-agent data reuse
   - Keyed by `correlation_id` for traceability
   - Stores `stock_data`, `indicators`, and creation timestamp
-  - Reused by volume agents, risk analysis, and sector analysis
+  - Reused by volume agents, risk analysis, sector analysis, and pattern analysis
   - **Automatic cleanup**: 350-second expiry with background task cleanup
   - **Memory optimization**: Prevents redundant data fetching across parallel agents
   - **Performance impact**: Saves 200-500ms per agent by avoiding duplicate API calls
@@ -142,6 +150,10 @@ This document provides a comprehensive technical overview of the Stock Analysis 
   - `symbol`, `exchange="NSE"`, `interval="day"`, `period=365`, `correlation_id?`, `return_prompt?`
 - RiskAnalysisRequest
   - `symbol`, `exchange="NSE"`, `interval="day"`, `period=365`, `correlation_id?`, `return_prompt?`, `timeframes=["short","medium","long"]`
+- PatternAnalysisRequest
+  - `symbol`, `exchange="NSE"`, `interval="day"`, `period=365`, `correlation_id?`, `return_prompt?`, `context?`
+- MarketStructureRequest
+  - `symbol`, `exchange="NSE"`, `interval="day"`, `period=365`, `correlation_id?`, `return_prompt?`, `context?`, `include_charts?`, `include_llm_analysis?`
 
 ---
 
@@ -221,6 +233,13 @@ Step-by-step:
   - `orchestrator.indicator_agents_manager.get_enhanced_indicators_summary()`
   - Returns markdown summary, structured JSON, and debug info
 
+- **Pattern analysis** (timeout: 200s): POST `/agents/patterns/analyze-all`
+  - Reuses `stock_data`/`indicators` via `VOLUME_PREFETCH_CACHE` for efficiency
+  - Performs comprehensive pattern recognition with cross-validation
+  - Includes market structure analysis and pattern conflict detection
+  - Returns `pattern_insights_for_decision` for final decision agent
+  - Uses advanced pattern recognition engines with LLM synthesis
+
 8) **Parallel task coordination and error handling**
 - Uses `asyncio.gather()` with `return_exceptions=True` to prevent cancellation
 - Comprehensive logging with task start/end timestamps and duration tracking
@@ -233,6 +252,7 @@ Step-by-step:
 - Prepare specialized payloads for final decision agent:
   - `sector_bullets`: Synthesis bullets from sector analysis
   - `risk_bullets`: Decision-ready risk bullets from risk analysis
+  - `pattern_insights`: Pattern analysis insights with conflict detection
   - `mtf_payload`: Combined technical + LLM insights from MTF analysis
   - `volume_analysis`: Aggregated volume agent results
   - `advanced_digest`: Scenario analysis and risk summaries
@@ -242,7 +262,9 @@ Step-by-step:
 - Detailed debug logging of all input contexts for transparency
 - `FinalDecisionProcessor.analyze_async()` with enhanced input validation:
   - `symbol`, `ind_json`, `mtf_context`, `sector_bullets`, `advanced_digest`
-  - `risk_bullets` (NEW), `chart_insights`, `knowledge_context`, `volume_analysis`
+  - `risk_bullets` (Enhanced multi-timeframe risk analysis)
+  - `pattern_insights` (NEW: Pattern recognition with cross-validation)
+  - `chart_insights`, `knowledge_context`, `volume_analysis`
 - Uses new backend/LLM system for API key management
 - Returns `ai_analysis` with trend, confidence, guidance, etc.
 
@@ -278,7 +300,7 @@ Inputs/Outputs:
 - Intermediate:
   - DataFrame with datetime index + attrs (`data_freshness`, `market_status`)
   - Indicators dict (optimized or minimal)
-  - Parallel contexts: volume agents, MTF, advanced digest, sector context, indicator summary JSON
+  - Parallel contexts: volume agents, MTF, advanced digest, sector context, indicator summary JSON, pattern insights, risk analysis
 - Output: Frontend response JSON structure with all contexts and UI-friendly fields
 
 ---
@@ -392,6 +414,21 @@ Inputs/Outputs:
     - Comprehensive risk breakdown by timeframe
     - Success/failure tracking with detailed error handling
 
+### Pattern analysis
+- POST `/agents/patterns/analyze-all`
+  - Reuses prefetched data via `VOLUME_PREFETCH_CACHE` using `correlation_id`
+  - **Comprehensive Pattern Recognition System**:
+    - Market structure analysis with break-of-structure detection
+    - Cross-validation analysis across multiple pattern recognition engines
+    - Pattern conflict detection and resolution
+    - Unified analysis with LLM synthesis for actionable insights
+  - Returns structured pattern analysis with:
+    - `pattern_insights_for_decision`: Decision-ready insights for final decision agent
+    - Overall confidence score and detected pattern count
+    - Market structure insights and technical analysis
+    - Pattern conflicts and cross-validation results
+    - Success/failure tracking with comprehensive error handling
+
 ### Storage and cache
 - Charts storage:
   - GET `/charts/storage/stats`, POST `/charts/cleanup`, DELETE `/charts/{symbol}/{interval}`, DELETE `/charts/all`
@@ -415,6 +452,7 @@ Inputs/Outputs:
 - POST `/analyze/enhanced` → orchestrates parallel tasks:
   - Volume agents → POST `/agents/volume/analyze-all` → VolumeAgentIntegrationManager.get_comprehensive_volume_analysis
   - Risk analysis → POST `/agents/risk/analyze-all` → QuantitativeRiskProcessor + risk_llm_agent
+  - Pattern analysis → POST `/agents/patterns/analyze-all` → Comprehensive pattern recognition with cross-validation
   - MTF analysis → mtf_agent_integration_manager.get_comprehensive_mtf_analysis → MTFAgentsOrchestrator
   - Advanced analysis → advanced_analysis_provider.generate_advanced_analysis
   - Sector analysis → POST `/agents/sector/analyze-all` → SectorBenchmarkingProvider + SectorSynthesisProcessor (+ SectorCacheManager)
@@ -558,6 +596,7 @@ The MTF system now follows an agent-based orchestration pattern similar to volum
 - **Parallel Agent Execution** (with comprehensive logging + timeouts):
   - **Volume agents** (timeout: 180s): 5 distributed agents via loopback REST
   - **Risk analysis** (timeout: 200s): Quantitative + LLM synthesis via loopback REST
+  - **Pattern analysis** (timeout: 200s): Comprehensive pattern recognition with cross-validation via loopback REST
   - **MTF analysis** (timeout: 120s): **Enhanced 2-step process**:
     - Step 1: Technical MTF via `mtf_agent_integration_manager.get_comprehensive_mtf_analysis()`
     - Step 2: LLM insights via `mtf_llm_agent.analyze_mtf_with_llm()`
@@ -565,8 +604,8 @@ The MTF system now follows an agent-based orchestration pattern similar to volum
   - **Advanced analysis** (timeout: 90s): Scenario analysis and risk digest
   - **Sector analysis** (timeout: 220s): Comprehensive sector context via loopback REST
   - **Indicator summary** (timeout: 120s): Enhanced conflict detection via new backend/LLM system
-- **Context Preparation**: Normalize results → Extract specialized payloads → Debug logging
-- **Final Decision**: `FinalDecisionProcessor.analyze_async()` with enhanced multi-context input
+- **Context Preparation**: Normalize results → Extract specialized payloads (including pattern insights) → Debug logging
+- **Final Decision**: `FinalDecisionProcessor.analyze_async()` with enhanced multi-context input (including pattern insights)
 - **ML Predictions**: Optional `UnifiedMLManager` with automatic cache cleanup
 - **Response Building**: `FrontendResponseBuilder` → Add token usage metadata
 - **Persistence**: Store in Database Service with retry logic
