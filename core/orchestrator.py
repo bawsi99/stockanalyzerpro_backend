@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # from gemini.token_tracker import AnalysisTokenTracker
 from zerodha.client import ZerodhaDataClient
 from services.enhanced_data_service import enhanced_data_service, DataRequest
-from ml.indicators.technical_indicators import TechnicalIndicators, DataCollector
+from analysis.technical_indicators import TechnicalIndicators, DataCollector
 from patterns.recognition import PatternRecognition
 from patterns.visualization import PatternVisualizer, ChartVisualizer
 # Global instance import removed - using local instantiation

@@ -19,7 +19,7 @@ import asyncio
 # Import existing components
 from agents.sector.classifier import SectorClassifier
 from agents.sector.enhanced_classifier import enhanced_sector_classifier
-from ml.indicators.technical_indicators import IndianMarketMetricsProvider
+from analysis.technical_indicators import IndianMarketMetricsProvider
 from zerodha.client import ZerodhaDataClient
 
 class SectorBenchmarkingProvider:

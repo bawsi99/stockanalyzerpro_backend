@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 # Local imports
 from zerodha.client import ZerodhaDataClient
-from ml.indicators.technical_indicators import TechnicalIndicators
+from analysis.technical_indicators import TechnicalIndicators
 from patterns.recognition import PatternRecognition
 
 logger = logging.getLogger(__name__)

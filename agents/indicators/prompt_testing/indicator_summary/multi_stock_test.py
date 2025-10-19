@@ -38,7 +38,7 @@ if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
 # Imports from backend
-from ml.indicators.technical_indicators import TechnicalIndicators
+from analysis.technical_indicators import TechnicalIndicators
 from gemini.context_engineer import ContextEngineer, AnalysisType
 from gemini.prompt_manager import PromptManager
 from agents.indicators import indicators_orchestrator

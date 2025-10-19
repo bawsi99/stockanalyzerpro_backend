@@ -693,7 +693,7 @@ class PatternDetector:
             
             # Calculate RSI first
             try:
-                from ml.indicators.technical_indicators import TechnicalIndicators
+                from analysis.technical_indicators import TechnicalIndicators
             except ImportError:
                 logger.warning("[PATTERN_DETECTOR] TechnicalIndicators module not available")
                 return patterns
@@ -819,7 +819,7 @@ class PatternDetector:
                 return patterns
             
             try:
-                from ml.indicators.technical_indicators import TechnicalIndicators
+                from analysis.technical_indicators import TechnicalIndicators
             except ImportError:
                 logger.warning("[PATTERN_DETECTOR] TechnicalIndicators module not available")
                 return patterns

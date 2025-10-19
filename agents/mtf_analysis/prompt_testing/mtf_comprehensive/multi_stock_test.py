@@ -44,7 +44,7 @@ if BACKEND_DIR not in sys.path:
 
 # Backend imports
 from agents.mtf_analysis import mtf_agent_integration_manager
-from ml.indicators.technical_indicators import TechnicalIndicators
+from analysis.technical_indicators import TechnicalIndicators
 from gemini.gemini_client import GeminiClient
 from gemini.context_engineer import ContextEngineer, AnalysisType
 from gemini.prompt_manager import PromptManager

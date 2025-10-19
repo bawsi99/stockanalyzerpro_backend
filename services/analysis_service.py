@@ -223,7 +223,7 @@ from pydantic import BaseModel, Field
 from core.orchestrator import StockAnalysisOrchestrator
 from agents.sector import SectorClassifier, SectorBenchmarkingProvider, enhanced_sector_classifier, SectorCacheManager
 from patterns.recognition import PatternRecognition
-from ml.indicators.technical_indicators import TechnicalIndicators
+from analysis.technical_indicators import TechnicalIndicators
 from api.responses import FrontendResponseBuilder
 from core.chart_manager import get_chart_manager, initialize_chart_manager
 from config.deployment_config import DeploymentConfig

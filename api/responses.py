@@ -135,7 +135,7 @@ class FrontendResponseBuilder:
     def _compute_pivots_for_ui(data: pd.DataFrame, interval: str, method: str = 'standard') -> dict:
         """Compute pivot + S/R using prior period anchor inferred from interval. Returns dict."""
         try:
-            from ml.indicators.technical_indicators import TechnicalIndicators
+            from analysis.technical_indicators import TechnicalIndicators
         except Exception:
             return {}
         try:

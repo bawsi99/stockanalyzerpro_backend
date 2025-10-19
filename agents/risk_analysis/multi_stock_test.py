@@ -30,7 +30,7 @@ sys.path.insert(0, backend_path)
 
 try:
     from backend.zerodha.client import ZerodhaDataClient
-    from backend.ml.indicators.technical_indicators import TechnicalIndicators
+from backend.analysis.technical_indicators import TechnicalIndicators
     from backend.agents.risk_analysis.quantitative_risk.processor import QuantitativeRiskProcessor
     from backend.agents.risk_analysis.risk_llm_agent import risk_llm_agent
 except ImportError as e:

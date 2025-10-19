@@ -244,7 +244,7 @@ class ChartVisualizer:
         ax1.bar(down.index, down['close'] - down['open'], width, bottom=down['open'], color='red')
         ax1.bar(down.index, down['high'] - down['open'], width2, bottom=down['open'], color='red')
         ax1.bar(down.index, down['low'] - down['close'], width2, bottom=down['close'], color='red')
-        from ml.indicators.technical_indicators import TechnicalIndicators
+        from analysis.technical_indicators import TechnicalIndicators
         sma_20 = TechnicalIndicators.calculate_sma(data, 'close', 20)
         sma_50 = TechnicalIndicators.calculate_sma(data, 'close', 50)
         sma_200 = TechnicalIndicators.calculate_sma(data, 'close', 200)
@@ -1245,7 +1245,7 @@ class ChartVisualizer:
         ax1.plot(data.index, data['close'], label='Close Price', color='blue', linewidth=1.5)
         
         # Compute and plot moving averages and Bollinger Bands directly from data
-        from ml.indicators.technical_indicators import TechnicalIndicators
+        from analysis.technical_indicators import TechnicalIndicators
         sma_20_series = TechnicalIndicators.calculate_sma(data, 'close', 20)
         sma_50_series = TechnicalIndicators.calculate_sma(data, 'close', 50)
         sma_200_series = TechnicalIndicators.calculate_sma(data, 'close', 200)
@@ -1260,7 +1260,7 @@ class ChartVisualizer:
         ax1.fill_between(data.index, upper_band, lower_band, alpha=0.1, color='gray')
         
         # Add support/resistance levels
-        from ml.indicators.technical_indicators import TechnicalIndicators
+        from analysis.technical_indicators import TechnicalIndicators
         support, resistance = TechnicalIndicators.detect_support_resistance(data)
         for level in support:
             ax1.axhline(y=level, color='green', linestyle='--', alpha=0.6, label='Support' if level == support[0] else "")
@@ -1329,7 +1329,7 @@ class ChartVisualizer:
         from patterns.recognition import PatternRecognition
         
         # Divergences
-        from ml.indicators.technical_indicators import TechnicalIndicators
+        from analysis.technical_indicators import TechnicalIndicators
         rsi = TechnicalIndicators.calculate_rsi(data)
         divergences = PatternRecognition.detect_divergence(data['close'], rsi)
         for idx1, idx2, dtype in divergences:
@@ -1835,7 +1835,7 @@ class ChartVisualizer:
         ax1.plot(data.index, data['close'], label='Close Price', color='blue', linewidth=1.5)
         
         # Add different timeframe moving averages computed from data (ensures full-length series)
-        from ml.indicators.technical_indicators import TechnicalIndicators
+        from analysis.technical_indicators import TechnicalIndicators
         sma_20_series = TechnicalIndicators.calculate_sma(data, 'close', 20)
         sma_50_series = TechnicalIndicators.calculate_sma(data, 'close', 50)
         sma_200_series = TechnicalIndicators.calculate_sma(data, 'close', 200)
@@ -1886,7 +1886,7 @@ class ChartVisualizer:
         # RSI for momentum across timeframes
         ax3 = axes[2]
         try:
-            from ml.indicators.technical_indicators import TechnicalIndicators
+            from analysis.technical_indicators import TechnicalIndicators
             rsi_series = TechnicalIndicators.calculate_rsi(data)
         except Exception:
             rsi_series = None
