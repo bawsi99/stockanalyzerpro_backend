@@ -20,7 +20,7 @@ from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 
 # Import the new LLM system
-from llm import get_llm_client
+from backend.llm import get_llm_client
 
 # Import indicator-specific components
 from .prompt_manager import indicator_prompt_manager
