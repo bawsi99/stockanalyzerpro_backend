@@ -4,13 +4,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from datetime import datetime
 from typing import Dict, List
 
 import joblib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.metrics import roc_auc_score, average_precision_score, roc_curve
 
 
 EXCLUDE_COLS = {"y_cls", "y_reg", "open", "high", "low", "close", "volume"}
@@ -68,10 +70,56 @@ def select_best_threshold(p: np.ndarray, y_reg: np.ndarray) -> float:
     return float(best_thr)
 
 
+def plot_roc_curves(y_sets: Dict[str, np.ndarray], p_sets: Dict[str, np.ndarray], 
+                   auc_scores: Dict[str, float], save_path: str) -> None:
+    """Plot and save ROC curves for train/val/test sets."""
+    plt.figure(figsize=(10, 8))
+    
+    colors = {'train': 'blue', 'val': 'orange', 'test': 'green'}
+    
+    for set_name in ['train', 'val', 'test']:
+        if set_name not in y_sets or set_name not in p_sets:
+            continue
+            
+        y_true = y_sets[set_name]
+        y_scores = p_sets[set_name]
+        auc = auc_scores.get(set_name, float('nan'))
+        
+        # Skip if we don't have both classes or AUC is NaN
+        if len(np.unique(y_true)) < 2 or np.isnan(auc):
+            continue
+            
+        # Calculate ROC curve
+        fpr, tpr, _ = roc_curve(y_true, y_scores)
+        
+        # Plot ROC curve
+        plt.plot(fpr, tpr, color=colors[set_name], lw=2, 
+                label=f'{set_name.capitalize()} (AUC = {auc:.3f})')
+    
+    # Plot diagonal line for random classifier
+    plt.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', alpha=0.7, label='Random (AUC = 0.500)')
+    
+    # Formatting
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate', fontsize=12)
+    plt.ylabel('True Positive Rate', fontsize=12)
+    plt.title('ROC Curves - Logistic Regression', fontsize=14, fontweight='bold')
+    plt.legend(loc='lower right', fontsize=10)
+    plt.grid(True, alpha=0.3)
+    
+    # Add some styling
+    plt.tight_layout()
+    
+    # Save the plot
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()  # Close to free memory
+
+
 def main():
     ap = argparse.ArgumentParser(description="Train LogisticRegression on splits with standardization")
     ap.add_argument("--splits_dir", required=True, help="Directory containing train.csv/val.csv/test.csv and scaler.json")
-    ap.add_argument("--model_dir", default=None, help="Output directory for model artifacts (default: <splits_dir>/model)")
+    ap.add_argument("--model_dir", default=None, help="Output directory for model artifacts (default: backend/agents/ml/models/model_TIMESTAMP)")
     args = ap.parse_args()
 
     splits = args.splits_dir
@@ -141,8 +189,27 @@ def main():
         "features": cols,
     }
 
-    model_dir = args.model_dir or os.path.join(splits, "model")
+    # Prepare data for ROC curve plotting
+    y_sets = {'train': y_tr, 'val': y_va, 'test': y_te}
+    p_sets = {'train': p_tr, 'val': p_va, 'test': p_te}
+    auc_scores = {'train': auc_tr, 'val': auc_va, 'test': auc_te}
+
+    # Default to backend/agents/ml/models/model_TIMESTAMP directory
+    if args.model_dir:
+        model_dir = args.model_dir
+    else:
+        # Get the path to backend/agents/ml/models/model_TIMESTAMP (script is now in training/)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        ml_dir = os.path.dirname(script_dir)  # Go up one level from training/ to ml/
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        model_dir = os.path.join(ml_dir, "models", f"model_{timestamp}")
     os.makedirs(model_dir, exist_ok=True)
+    
+    # Plot and save ROC curves
+    roc_plot_path = os.path.join(model_dir, "roc_curves.png")
+    plot_roc_curves(y_sets, p_sets, auc_scores, roc_plot_path)
+    
+    # Save model and metrics
     joblib.dump({"model": clf, "features": cols, "threshold": thr, "scaler_json": scaler_json}, os.path.join(model_dir, "logreg.joblib"))
     with open(os.path.join(model_dir, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
@@ -156,7 +223,11 @@ def main():
     }, index=df_te.index)
     preds.to_csv(os.path.join(model_dir, "test_predictions.csv"))
 
-    print({"model_dir": model_dir, "metrics": os.path.join(model_dir, "metrics.json")})
+    print({
+        "model_dir": model_dir, 
+        "metrics": os.path.join(model_dir, "metrics.json"),
+        "roc_curves": roc_plot_path
+    })
 
 
 if __name__ == "__main__":

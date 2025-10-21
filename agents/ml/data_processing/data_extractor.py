@@ -16,7 +16,7 @@ from typing import Dict, Iterable, List
 
 import pandas as pd
 
-from backend.agents.ml.config import TimeframeSpec, ml_defaults
+from backend.agents.ml.config.config import TimeframeSpec, ml_defaults
 from backend.core.orchestrator import StockAnalysisOrchestrator
 
 

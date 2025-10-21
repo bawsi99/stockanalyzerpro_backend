@@ -14,7 +14,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 # Import timeframe spec/costs from project config
-from backend.agents.ml.config import ml_defaults, TimeframeSpec
+from backend.agents.ml.config.config import ml_defaults, TimeframeSpec
 
 EPS = 1e-12
 

@@ -29,8 +29,8 @@ def derive_out_dir(input_csv: str) -> str:
 def main():
     ap = argparse.ArgumentParser(description="Time-based split of labeled dataset into train/val/test CSVs")
     ap.add_argument("input_csv", help="Path to labeled CSV (e.g., .../labels_final.csv)")
-    ap.add_argument("--train_frac", type=float, default=0.7)
-    ap.add_argument("--val_frac", type=float, default=0.15)
+    ap.add_argument("--train_frac", type=float, default=0.8)
+    ap.add_argument("--val_frac", type=float, default=0.1)
     ap.add_argument("--out_dir", default=None, help="Directory to write splits (default: <input_dir>/splits)")
     args = ap.parse_args()
 
