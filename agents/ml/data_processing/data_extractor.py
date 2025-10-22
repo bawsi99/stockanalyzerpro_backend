@@ -104,16 +104,12 @@ class MLDataExtractor:
             return []
         base = os.path.join(self.base_dir, f"symbol={symbol}", f"timeframe={timeframe_key}")
         os.makedirs(base, exist_ok=True)
-        use_parquet = self._supports_parquet()
-        file_path = os.path.join(base, f"bars.{ 'parquet' if use_parquet else 'csv'}")
+        file_path = os.path.join(base, "bars.csv")
 
         # Merge with existing if present
         try:
             if os.path.exists(file_path):
-                if use_parquet:
-                    existing = pd.read_parquet(file_path)
-                else:
-                    existing = pd.read_csv(file_path, index_col=0, parse_dates=True)
+                existing = pd.read_csv(file_path, index_col=0, parse_dates=True)
                 if not isinstance(existing.index, pd.DatetimeIndex):
                     # Best-effort parse
                     existing.index = pd.to_datetime(existing.index, utc=True).tz_convert("UTC").tz_localize(None)
@@ -125,11 +121,8 @@ class MLDataExtractor:
             # If reading/merging fails, fall back to current df
             combined = df.sort_index()
 
-        # Persist consolidated file
-        if use_parquet:
-            combined.to_parquet(file_path, index=True)
-        else:
-            combined.to_csv(file_path, index=True)
+        # Persist consolidated file as CSV
+        combined.to_csv(file_path, index=True)
         return [file_path]
 
     def backfill_universe(self, universe: Iterable[str], tf_specs: Dict[str, TimeframeSpec]) -> Dict[str, Dict[str, List[str]]]:
