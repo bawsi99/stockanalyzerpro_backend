@@ -1,0 +1,35 @@
+{
+  "rows": {
+    "train": 3452,
+    "val": 740,
+    "test": 740
+  },
+  "features": [
+    "atr_14_pct",
+    "atr_vol_20",
+    "range_pct",
+    "dist_sma50_pct",
+    "macd_hist",
+    "bb_bw_20",
+    "vol_ratio_20",
+    "cmf_20",
+    "up_down_vol_ratio_20",
+    "ret_vol_corr_20",
+    "pct_dist_to_20_high",
+    "vwap_dist",
+    "vwap_slope_5",
+    "wick_to_body_ratio",
+    "gap_pct",
+    "up_streak",
+    "down_streak",
+    "wick_up_streak_3",
+    "wick_down_streak_3",
+    "ret_skew_20",
+    "ret_kurt_20",
+    "dow_sin",
+    "dow_cos",
+    "hour_sin",
+    "hour_cos",
+    "vol_cv_20_log"
+  ]
+}

@@ -29,7 +29,7 @@ class TimeframeSpec:
 # }
 
 DEFAULT_TIMEFRAMES: Dict[str, TimeframeSpec] = {
-    "1d": TimeframeSpec(backfill_days=10000, horizon_bars=5, est_cost_bps=5.0, interval="day"),
+    "1d": TimeframeSpec(backfill_days=10000, horizon_bars=1, est_cost_bps=5.0, interval="day"),
 }
 
 
