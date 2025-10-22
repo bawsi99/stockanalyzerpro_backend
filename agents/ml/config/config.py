@@ -8,16 +8,7 @@ from typing import Dict, List
 # Default universe: placeholder; replace/extend as needed
 # Add more symbols for better cross-stock generalization
 DEFAULT_UNIVERSE: List[str] = [
-    "RELIANCE",
-    "TCS", 
-    "INFY",
-    "HDFCBANK",
-    "ICICIBANK",
-    "ITC",
-    "SBIN",
-    "BAJFINANCE",
-    "BHARTIARTL",
-    "HINDUNILVR"
+    "RELIANCE"
 ]
 
 
@@ -38,7 +29,7 @@ class TimeframeSpec:
 # }
 
 DEFAULT_TIMEFRAMES: Dict[str, TimeframeSpec] = {
-    "1d": TimeframeSpec(backfill_days=2000, horizon_bars=5, est_cost_bps=5.0, interval="day"),
+    "1d": TimeframeSpec(backfill_days=10000, horizon_bars=5, est_cost_bps=5.0, interval="day"),
 }
 
 

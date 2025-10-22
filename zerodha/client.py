@@ -33,6 +33,20 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('ZerodhaClient')
 
+# Zerodha API limits per interval (in days)
+ZERODHA_INTERVAL_LIMITS = {
+    "minute": 30,
+    "3minute": 90,
+    "5minute": 90,
+    "10minute": 90,
+    "15minute": 180,
+    "30minute": 180,
+    "60minute": 365,
+    "day": 2000,
+    "week": 2000,  # Aggregated from daily
+    "month": 2000,  # Aggregated from daily
+}
+
 
 # Load environment variables from .env file using centralized path utility
 ENV_PATH = get_config_path()
@@ -720,6 +734,43 @@ class ZerodhaDataClient:
             time.sleep(sleep_time)
         self.last_request_time = datetime.now()
 
+    def _chunk_date_range(self, from_date: datetime, to_date: datetime, interval: str) -> list:
+        """
+        Split a date range into chunks based on Zerodha API limits.
+        
+        Args:
+            from_date: Start date
+            to_date: End date
+            interval: Candle interval
+            
+        Returns:
+            list: List of (from_date, to_date) tuples representing non-overlapping chunks
+        """
+        # Get the limit for this interval
+        limit_days = ZERODHA_INTERVAL_LIMITS.get(interval.lower(), 2000)
+        
+        # Calculate total days requested
+        total_days = (to_date - from_date).days
+        
+        # If within limit, return single chunk
+        if total_days <= limit_days:
+            return [(from_date, to_date)]
+        
+        # Split into chunks
+        chunks = []
+        current_start = from_date
+        
+        while current_start < to_date:
+            # Calculate end date for this chunk (limit_days from current_start)
+            current_end = min(current_start + timedelta(days=limit_days), to_date)
+            chunks.append((current_start, current_end))
+            
+            # Move to next chunk (add 1 day to avoid overlap)
+            current_start = current_end + timedelta(days=1)
+        
+        logger.info(f"Split {total_days} days into {len(chunks)} chunks for interval '{interval}' (limit: {limit_days} days)")
+        return chunks
+    
     @auto_refresh_token
     def get_historical_data(
         self, 
@@ -767,7 +818,97 @@ class ZerodhaDataClient:
         if not instrument_token:
             logger.error(f"Instrument token not found for {exchange}:{symbol}")
             return None
+        
+        # Check if we need to chunk the request
+        chunks = self._chunk_date_range(from_date, to_date, fetch_interval)
+        
+        # If multiple chunks needed, fetch and combine them
+        if len(chunks) > 1:
+            logger.info(f"Fetching {len(chunks)} chunks for {exchange}:{symbol} (total: {(to_date - from_date).days} days)")
+            all_dataframes = []
+            
+            for i, (chunk_start, chunk_end) in enumerate(chunks, 1):
+                logger.info(f"Fetching chunk {i}/{len(chunks)}: {chunk_start.date()} to {chunk_end.date()}")
+                
+                # Fetch this chunk (without chunking recursion)
+                chunk_df = self._fetch_single_chunk(
+                    instrument_token=instrument_token,
+                    symbol=symbol,
+                    exchange=exchange,
+                    interval=interval,
+                    fetch_interval=fetch_interval,
+                    from_date=chunk_start,
+                    to_date=chunk_end,
+                    aggregate_week=aggregate_week,
+                    aggregate_month=aggregate_month
+                )
+                
+                if chunk_df is not None and not chunk_df.empty:
+                    all_dataframes.append(chunk_df)
+                else:
+                    logger.warning(f"Chunk {i}/{len(chunks)} returned no data")
+            
+            # Combine all chunks
+            if not all_dataframes:
+                logger.error(f"No data retrieved for any chunk of {symbol}")
+                return None
+            
+            combined_df = pd.concat(all_dataframes, axis=0)
+            # Remove any duplicate dates (at chunk boundaries)
+            combined_df = combined_df[~combined_df.index.duplicated(keep='first')]
+            # Sort by date
+            combined_df.sort_index(inplace=True)
+            
+            logger.info(f"Combined {len(chunks)} chunks into {len(combined_df)} total records for {symbol}")
+            
+            # Cache the combined result
+            cache_key = self._normalize_history_key(symbol, exchange, interval, from_date, to_date)
+            self._lru_put(cache_key, combined_df)
+            
+            return combined_df
 
+        # Single chunk fetch - proceed with normal flow
+        return self._fetch_single_chunk(
+            instrument_token=instrument_token,
+            symbol=symbol,
+            exchange=exchange,
+            interval=interval,
+            fetch_interval=fetch_interval,
+            from_date=from_date,
+            to_date=to_date,
+            aggregate_week=aggregate_week,
+            aggregate_month=aggregate_month
+        )
+    
+    def _fetch_single_chunk(
+        self,
+        instrument_token: int,
+        symbol: str,
+        exchange: str,
+        interval: str,
+        fetch_interval: str,
+        from_date: datetime,
+        to_date: datetime,
+        aggregate_week: bool,
+        aggregate_month: bool
+    ) -> Optional[pd.DataFrame]:
+        """
+        Fetch a single chunk of historical data (internal method).
+        
+        Args:
+            instrument_token: Zerodha instrument token
+            symbol: Stock symbol
+            exchange: Exchange code
+            interval: Requested interval (may be week/month)
+            fetch_interval: Actual API interval to fetch
+            from_date: Start date for this chunk
+            to_date: End date for this chunk
+            aggregate_week: Whether to aggregate to weekly
+            aggregate_month: Whether to aggregate to monthly
+            
+        Returns:
+            pd.DataFrame: Historical data for this chunk or None if error
+        """
         try:
             # Build normalized key for caches (keyed by requested interval, not fetch_interval)
             cache_key = self._normalize_history_key(symbol, exchange, interval, from_date, to_date)
