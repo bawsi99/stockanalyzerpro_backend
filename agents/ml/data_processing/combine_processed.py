@@ -18,6 +18,7 @@ DEFAULT_PROCESSED_DIR = os.path.join(PROJECT_ROOT, "agents/ml/data/processed")
 DEFAULT_DATA_DIR = os.path.join(PROJECT_ROOT, "agents/ml/data")
 
 LABEL_FILENAMES = [
+    "bars_labels_capped_cleaned.csv",
     "labels_capped_cleaned.csv",
     "labels_capped.csv",
     "labels.csv",

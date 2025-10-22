@@ -97,31 +97,38 @@ def create_model_configs() -> Dict[str, object]:
             random_state=42
         ),
         "random_forest": RandomForestClassifier(
-            n_estimators=100,
-            max_depth=10,
-            min_samples_split=20,
-            min_samples_leaf=5,
+            n_estimators=200,
+            max_depth=4,
+            min_samples_split=100,
+            min_samples_leaf=50,
+            max_features=0.5,
             class_weight="balanced",
             random_state=42,
             n_jobs=-1
         ),
         "gradient_boosting": GradientBoostingClassifier(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
-            min_samples_split=20,
-            min_samples_leaf=5,
+            n_estimators=50,
+            max_depth=3,
+            learning_rate=0.05,
+            min_samples_split=100,
+            min_samples_leaf=50,
+            subsample=0.7,
+            max_features=0.5,
             random_state=42
         )
     }
     
     if HAS_XGB:
         configs["xgboost"] = XGBClassifier(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
+            n_estimators=50,
+            max_depth=3,
+            learning_rate=0.05,
+            subsample=0.7,
+            colsample_bytree=0.5,
+            min_child_weight=10,
+            gamma=0.1,
+            reg_alpha=0.1,
+            reg_lambda=1.0,
             random_state=42,
             eval_metric='logloss',
             verbosity=0
@@ -129,11 +136,14 @@ def create_model_configs() -> Dict[str, object]:
     
     if HAS_LGBM:
         configs["lightgbm"] = LGBMClassifier(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
+            n_estimators=50,
+            max_depth=3,
+            learning_rate=0.05,
+            subsample=0.7,
+            colsample_bytree=0.5,
+            min_child_samples=50,
+            reg_alpha=0.1,
+            reg_lambda=1.0,
             random_state=42,
             verbosity=-1,
             class_weight="balanced"

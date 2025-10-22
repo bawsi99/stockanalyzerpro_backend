@@ -99,7 +99,7 @@ def cap_feature(train_s: pd.Series, full_s: pd.Series, p_low: float, p_high: flo
 def derive_pipeline_outputs(input_csv: str, output_csv: Optional[str]) -> Tuple[str, str, str]:
     """Return (features_csv, labels_csv, cleaned_csv) following project conventions unless overridden.
 
-    Cleaned CSV defaults to data.archive/processed/.../labels_capped_cleaned.csv mirroring the raw path structure.
+    Cleaned CSV defaults to .../processed/<same subdirs>/<basename>_labels_capped_cleaned.csv, mirroring the raw path structure.
     """
     features_csv = bd.derive_default_output(input_csv)
     labels_csv = bl.derive_default_output(features_csv)
@@ -108,11 +108,16 @@ def derive_pipeline_outputs(input_csv: str, output_csv: Optional[str]) -> Tuple[
         cleaned_csv = output_csv
     else:
         in_dir = os.path.dirname(input_csv)
-        if "/data.archive/raw/" in in_dir:
-            proc_dir = in_dir.replace("/data.archive/raw/", "/data.archive/processed/")
-            cleaned_csv = os.path.join(proc_dir, "labels_capped_cleaned.csv")
+        # Replace a "raw" path segment with "processed" to mirror directory structure
+        parts = in_dir.split(os.sep)
+        if "raw" in parts:
+            idx = parts.index("raw")
+            proc_dir = os.sep.join(parts[:idx] + ["processed"] + parts[idx + 1:])
+            # Preserve the input basename prefix (e.g., bars -> bars_labels_capped_cleaned.csv)
+            base_stem = os.path.splitext(os.path.basename(input_csv))[0]
+            cleaned_csv = os.path.join(proc_dir, f"{base_stem}_labels_capped_cleaned.csv")
         else:
-            # Fallback: place next to input
+            # Fallback: place next to input if no "raw" segment is present
             root, _ = os.path.splitext(input_csv)
             cleaned_csv = f"{root}_labels_capped_cleaned.csv"
 

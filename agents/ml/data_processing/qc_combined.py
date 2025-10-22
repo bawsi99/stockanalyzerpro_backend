@@ -30,7 +30,7 @@ def qc_combined(
     max_row_nan_pct: float = 0.15,
     min_rows_per_group: int = 200,
     outlier_method: str = "iqr",
-    outlier_factor: float = 3.0,
+    outlier_factor: float = 4.0,
 ) -> (pd.DataFrame, Dict):
     rep: Dict = {}
 
@@ -40,11 +40,23 @@ def qc_combined(
     rep["symbols"] = sorted(df["symbol"].unique()) if "symbol" in df.columns else []
     rep["timeframes"] = sorted(df["timeframe"].unique()) if "timeframe" in df.columns else []
 
-    # Drop duplicate index rows (keep last)
-    dup_count = int(df.index.duplicated().sum())
-    rep["index_duplicate_count"] = dup_count
-    if dup_count:
-        df = df[~df.index.duplicated(keep="last")]
+    # Drop duplicate rows based on date+symbol+timeframe (keep last)
+    dup_cols = [col for col in ["symbol", "timeframe"] if col in df.columns]
+    if dup_cols:
+        # Reset index temporarily to check duplicates on date+symbol+timeframe
+        df_temp = df.reset_index()
+        dup_mask = df_temp.duplicated(subset=["date"] + dup_cols, keep="last")
+        dup_count = int(dup_mask.sum())
+        rep["index_duplicate_count"] = dup_count
+        if dup_count:
+            df_temp = df_temp[~dup_mask]
+            df = df_temp.set_index("date")
+    else:
+        # Fallback to just timestamp if symbol/timeframe columns don't exist
+        dup_count = int(df.index.duplicated().sum())
+        rep["index_duplicate_count"] = dup_count
+        if dup_count:
+            df = df[~df.index.duplicated(keep="last")]
 
     # Remove rows with too many NaNs across feature columns
     feature_cols = [c for c in df.columns if c not in META_COLS]
@@ -116,7 +128,7 @@ def main():
     ap.add_argument("--max_row_nan_pct", type=float, default=0.15)
     ap.add_argument("--min_rows_per_group", type=int, default=200)
     ap.add_argument("--outlier_method", default="iqr", choices=["none", "iqr"])
-    ap.add_argument("--outlier_factor", type=float, default=3.0)
+    ap.add_argument("--outlier_factor", type=float, default=4.0)
     args = ap.parse_args()
 
     df = read_csv(args.input_csv)

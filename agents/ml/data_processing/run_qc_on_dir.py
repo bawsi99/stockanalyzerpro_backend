@@ -29,7 +29,7 @@ def iter_csvs(start_dir: Path, max_depth: int) -> Iterable[Path]:
                 yield root_path / f
 
 
-def run_qc_on_csv(csv_path: Path, qc_script: Path, unique_output: bool = True) -> int:
+def run_qc_on_csv(csv_path: Path, qc_script: Path, unique_output: bool = True, silence_output: bool = False) -> tuple[int, Path]:
     csv_path = csv_path.resolve()
     out_json = (
         csv_path.with_name(f"{csv_path.stem}.qc.json") if unique_output else csv_path.with_name("qc_report.json")
@@ -47,19 +47,73 @@ def run_qc_on_csv(csv_path: Path, qc_script: Path, unique_output: bool = True) -
     if proc.returncode != 0:
         sys.stderr.write(f"[ERROR] {csv_path}: {proc.stderr}\n")
     else:
-        # Forward concise summary from qc script
-        sys.stdout.write(proc.stdout.rstrip() + "\n")
-    return proc.returncode
+        # Forward concise summary from qc script (unless silenced)
+        if not silence_output:
+            sys.stdout.write(proc.stdout.rstrip() + "\n")
+    return proc.returncode, out_json
+
+
+def _analyze_report(json_path: Path,
+                     min_rows: int,
+                     nan_threshold: int,
+                     max_dup_index: int,
+                     cls_minority_min: float) -> bool:
+    import json
+    try:
+        with open(json_path, "r") as f:
+            rep = json.load(f)
+    except Exception as e:
+        sys.stderr.write(f"[WARN] Failed to read QC JSON {json_path}: {e}\n")
+        return True
+
+    issues: list[str] = []
+
+    if not rep.get("index_monotonic_increasing", True):
+        issues.append("index not monotonic increasing")
+
+    dup_ct = int(rep.get("index_duplicate_count", 0))
+    if dup_ct > max_dup_index:
+        issues.append(f"duplicate index count={dup_ct} > {max_dup_index}")
+
+    nan_counts = rep.get("nan_counts", {}) or {}
+    bad_nan = {c: int(v) for c, v in nan_counts.items() if int(v) >= nan_threshold}
+    if bad_nan:
+        sample = ", ".join(f"{k}={v}" for k, v in list(bad_nan.items())[:5])
+        more = "" if len(bad_nan) <= 5 else f" (+{len(bad_nan)-5} more)"
+        issues.append(f"NaNs in columns: {sample}{more}")
+
+    inf_counts = rep.get("inf_counts", {}) or {}
+    bad_inf = {c: int(v) for c, v in inf_counts.items() if int(v) > 0}
+    if bad_inf:
+        sample = ", ".join(f"{k}={v}" for k, v in list(bad_inf.items())[:5])
+        more = "" if len(bad_inf) <= 5 else f" (+{len(bad_inf)-5} more)"
+        issues.append(f"Infs in columns: {sample}{more}")
+
+    rows = int(rep.get("rows", 0))
+    if rows < min_rows:
+        issues.append(f"rows={rows} < {min_rows}")
+
+    cls = rep.get("y_cls_distribution")
+    if isinstance(cls, dict) and len(cls) >= 2:
+        pcts = [float(v.get("pct", 0.0)) for v in cls.values()]
+        minority = min(pcts) if pcts else 0.0
+        if minority < cls_minority_min:
+            issues.append(f"class imbalance minority={minority:.2f} < {cls_minority_min:.2f}")
+
+    if issues:
+        sys.stdout.write(f"[ATTENTION] {json_path}: " + "; ".join(issues) + "\n")
+        return True
+    return False
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Recursively run qc_dataset.py on all CSV files within a directory."
+        description="Recursively run qc_dataset.py on all CSV files within a directory and flag reports needing attention."
     )
     parser.add_argument(
         "input_dir",
         type=Path,
-        help="Directory to search for CSVs (processed root)."
+        help="Directory to search for CSVs (processed or raw root)."
     )
     parser.add_argument(
         "--max-depth",
@@ -72,6 +126,11 @@ def main() -> int:
         action="store_true",
         help="Write results to qc_report.json (may overwrite if multiple CSVs in a folder). By default, writes <name>.qc.json",
     )
+    parser.add_argument("--min-rows", type=int, default=200, help="Warn if rows < this value (default: 200)")
+    parser.add_argument("--nan-threshold", type=int, default=1, help="Warn for columns with NaN count >= threshold (default: 1)")
+    parser.add_argument("--max-dup-index", type=int, default=0, help="Warn if duplicate index count > this (default: 0)")
+    parser.add_argument("--cls-minority-min", type=float, default=0.35, help="Warn if minority class pct < this (default: 0.35)")
+    parser.add_argument("--attention-only", action="store_true", help="Only print attention logs; suppress per-file QC summaries")
 
     args = parser.parse_args()
 
@@ -87,9 +146,24 @@ def main() -> int:
         return 2
 
     exit_code = 0
+    any_attention = False
     for csv_file in iter_csvs(start_dir, args.max_depth):
-        rc = run_qc_on_csv(csv_file, qc_script, unique_output=not args.use_common_name)
+        rc, json_path = run_qc_on_csv(csv_file, qc_script, unique_output=not args.use_common_name, silence_output=args.attention_only)
         exit_code = exit_code or rc
+        # Analyze report if QC succeeded
+        if rc == 0 and json_path.exists():
+            flagged = _analyze_report(
+                json_path,
+                min_rows=args.min_rows,
+                nan_threshold=args.nan_threshold,
+                max_dup_index=args.max_dup_index,
+                cls_minority_min=args.cls_minority_min,
+            )
+            any_attention = any_attention or flagged
+
+    # If attention-only and nothing flagged, give a succinct message for visibility
+    if args.attention_only and not any_attention:
+        sys.stdout.write("[OK] No issues found in QC reports.\n")
 
     return exit_code
 
