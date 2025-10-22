@@ -4,8 +4,10 @@ import os
 import sys
 
 script_dir = os.path.dirname(__file__)
-project_root = os.path.abspath(os.path.join(script_dir, "../../"))
-sys.path.insert(0, project_root)
+# Ensure repository root (parent of 'backend') is on sys.path for 'backend.*' imports
+repo_root = os.path.abspath(os.path.join(script_dir, "../../../../"))
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
 
 import os
 import sys
