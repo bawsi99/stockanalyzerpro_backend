@@ -1,0 +1,116 @@
+{
+  "dataset_info": {
+    "n": {
+      "train": 908,
+      "val": 194,
+      "test": 196
+    },
+    "features": [
+      "atr_14_pct",
+      "atr_vol_20",
+      "range_pct",
+      "dist_sma50_pct",
+      "macd_hist",
+      "bb_bw_20",
+      "vol_ratio_20",
+      "cmf_20",
+      "up_down_vol_ratio_20",
+      "ret_vol_corr_20",
+      "pct_dist_to_20_high",
+      "vwap_dist",
+      "vwap_slope_5",
+      "wick_to_body_ratio",
+      "gap_pct",
+      "up_streak",
+      "down_streak",
+      "wick_up_streak_3",
+      "wick_down_streak_3",
+      "ret_skew_20",
+      "ret_kurt_20",
+      "dow",
+      "dow_sin",
+      "dow_cos",
+      "hour",
+      "hour_sin",
+      "hour_cos",
+      "vol_cv_20_log",
+      "breakout_up_20",
+      "breakout_down_20",
+      "inside_bar",
+      "engulfing"
+    ],
+    "splits_dir": "data/processed/symbol=RELIANCE/timeframe=1d/splits"
+  },
+  "models": {
+    "logistic": {
+      "auc": {
+        "train": 0.6547970766599285,
+        "val": 0.5396808510638298,
+        "test": 0.6306503810418624
+      },
+      "ap_val": 0.570615872755661,
+      "threshold": 0.7837468633778367,
+      "test_performance": {
+        "coverage": 0.015306122448979591,
+        "avg_y_reg": 0.015530275974715234,
+        "cum_y_reg": 0.0465908279241457
+      }
+    },
+    "random_forest": {
+      "auc": {
+        "train": 0.9884397838594309,
+        "val": 0.5338297872340425,
+        "test": 0.5442112955423323
+      },
+      "ap_val": 0.5285052270049146,
+      "threshold": 0.7456257850342696,
+      "test_performance": {
+        "coverage": 0.0,
+        "avg_y_reg": NaN,
+        "cum_y_reg": 0.0
+      }
+    },
+    "gradient_boosting": {
+      "auc": {
+        "train": 1.0,
+        "val": 0.5230851063829788,
+        "test": 0.4847061279883078
+      },
+      "ap_val": 0.5476578439402453,
+      "threshold": 0.9369556062363543,
+      "test_performance": {
+        "coverage": 0.025510204081632654,
+        "avg_y_reg": 0.0032575304503485573,
+        "cum_y_reg": 0.016287652251742786
+      }
+    },
+    "xgboost": {
+      "auc": {
+        "train": 1.0,
+        "val": 0.5225531914893617,
+        "test": 0.5382607787869298
+      },
+      "ap_val": 0.537825783191547,
+      "threshold": 0.9674669247865676,
+      "test_performance": {
+        "coverage": 0.00510204081632653,
+        "avg_y_reg": 0.0615353909194527,
+        "cum_y_reg": 0.0615353909194527
+      }
+    },
+    "lightgbm": {
+      "auc": {
+        "train": 1.0,
+        "val": 0.5313829787234043,
+        "test": 0.49692034659150225
+      },
+      "ap_val": 0.5317811793982121,
+      "threshold": 0.9898346931416202,
+      "test_performance": {
+        "coverage": 0.0,
+        "avg_y_reg": NaN,
+        "cum_y_reg": 0.0
+      }
+    }
+  }
+}

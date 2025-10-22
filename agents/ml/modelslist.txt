@@ -1,0 +1,50 @@
+Suggest new conversation rejected for message
+
+For stock market prediction, you should try progressively more complex models. Here are good candidates beyond logistic regression:
+
+## Tree-Based Models (Start Here)
+```python
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+
+# Random Forest - handles non-linearity well
+rf = RandomForestClassifier(n_estimators=100, random_state=42)
+
+# Gradient Boosting - often performs well on tabular data
+gb = GradientBoostingClassifier(n_estimators=100, random_state=42)
+
+# XGBoost - industry standard for tabular data
+xgb = XGBClassifier(n_estimators=100, random_state=42)
+
+# LightGBM - faster alternative to XGBoost
+lgb = LGBMClassifier(n_estimators=100, random_state=42)
+```
+## Support Vector Machines
+```python
+from sklearn.svm import SVC
+
+# SVM with RBF kernel - good for non-linear patterns
+svm = SVC(kernel='rbf', random_state=42)
+```
+## Neural Networks
+```python
+from sklearn.neural_network import MLPClassifier
+
+# Multi-layer perceptron
+mlp = MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=500, random_state=42)
+```
+## Ensemble Methods
+```python
+from sklearn.ensemble import VotingClassifier
+
+# Combine multiple models
+ensemble = VotingClassifier([
+    ('rf', RandomForestClassifier(100)),
+    ('xgb', XGBClassifier(100)),
+    ('lgb', LGBMClassifier(100))
+], voting='soft')
+```
+**Recommendation**: Start with XGBoost or LightGBM as they typically perform best on financial time series data with technical indicators.
+
+Would you like me to update your training script to compare these models?

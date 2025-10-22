@@ -6,8 +6,18 @@ from typing import Dict, List
 
 
 # Default universe: placeholder; replace/extend as needed
+# Add more symbols for better cross-stock generalization
 DEFAULT_UNIVERSE: List[str] = [
-    "RELIANCE"
+    "RELIANCE",
+    "TCS", 
+    "INFY",
+    "HDFCBANK",
+    "ICICIBANK",
+    "ITC",
+    "SBIN",
+    "BAJFINANCE",
+    "BHARTIARTL",
+    "HINDUNILVR"
 ]
 
 
