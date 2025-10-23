@@ -33,7 +33,7 @@ try:
     from llm import get_llm_client
 except ImportError:
     try:
-from llm import get_llm_client
+        from backend.llm import get_llm_client
     except ImportError:
         # Fallback for testing
         def get_llm_client(name):
