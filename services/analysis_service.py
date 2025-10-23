@@ -356,61 +356,6 @@ CORS_ORIGINS = CORS_ORIGINS.split(",") if CORS_ORIGINS else []
 CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS if origin.strip()]
 print(f"🔧 CORS_ORIGINS: {CORS_ORIGINS}")
 
-# --- ML endpoints for CatBoost training and prediction ---
-from pydantic import BaseModel
-
-class MLTrainRequest(BaseModel):
-    days: int | None = None
-    patterns: list[str] | None = None
-
-class MLPredictRequest(BaseModel):
-    features: dict
-    pattern_type: str | None = None
-
-@app.post("/ml/train")
-async def ml_train(req: MLTrainRequest):
-    try:
-        # Lazy import to avoid heavy import-time overhead
-        from ml.dataset import build_pooled_dataset
-        from ml.model import train_global_model
-        ds = build_pooled_dataset()
-        rep = train_global_model(ds)
-        if rep is None:
-            raise HTTPException(status_code=500, detail="Training failed or no data")
-        return {
-            "model_path": rep.model_path,
-            "trained_at": rep.trained_at,
-            "metrics": rep.metrics,
-            "feature_schema": rep.feature_schema,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"/ml/train failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/ml/model")
-async def ml_model():
-    try:
-        from ml.model import load_registry
-        reg = load_registry() or {}
-        if not reg:
-            return {"status": "unavailable"}
-        return reg
-    except Exception as e:
-        logger.error(f"/ml/model failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/ml/predict")
-async def ml_predict(req: MLPredictRequest):
-    try:
-        from ml.inference import predict_probability, get_model_version, get_pattern_prediction_breakdown
-        p = predict_probability(req.features or {}, req.pattern_type)
-        return {"probability": p, "model_version": get_model_version()}
-    except Exception as e:
-        logger.error(f"/ml/predict failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 # --- Token Analytics Endpoints ---
 @app.get("/analytics/tokens")
@@ -1859,27 +1804,8 @@ async def enhanced_analyze(request: EnhancedAnalysisRequest):
         indicator_summary = indicator_summary_md
         chart_insights = chart_insights_md
 
-        # 5) Optional ML predictions (kept as before)
+        # 5) ML predictions removed
         ml_predictions = {}
-        try:
-            from ml.quant_system.engines.unified_manager import UnifiedMLManager
-            unified_ml_manager = UnifiedMLManager()
-            try:
-                _ = unified_ml_manager.train_all_engines(stock_data, None)
-            except Exception:
-                pass
-            ml_predictions = unified_ml_manager.get_comprehensive_prediction(stock_data)
-            try:
-                if hasattr(unified_ml_manager, 'clear_cache') and callable(unified_ml_manager.clear_cache):
-                    unified_ml_manager.clear_cache()
-                elif hasattr(unified_ml_manager, '_trained_models') and isinstance(unified_ml_manager._trained_models, dict):
-                    unified_ml_manager._trained_models.clear()
-            except Exception:
-                pass
-            del unified_ml_manager
-        except Exception as e:
-            print(f"[ML] Warning: {e}")
-            ml_predictions = {}
 
         # 6) Build frontend response
         chart_paths = {}  # No charts generated in enhanced path
