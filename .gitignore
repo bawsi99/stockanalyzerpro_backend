@@ -36,6 +36,8 @@ analysis_datasets/
 # Environment & secrets
 .env
 .env.*
+.env.backup
+
 
 # IDE/editor
 .vscode/*
