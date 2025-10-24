@@ -1,0 +1,4 @@
+[submodule "technical_analysis_agent"]
+	path = technical_analysis_agent
+	url = https://github.com/bawsi99/stockanalyzerpro_backend_technical_analysis_agent.git
+	branch = main
