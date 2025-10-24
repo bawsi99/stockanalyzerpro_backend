@@ -37,6 +37,7 @@ analysis_datasets/
 .env
 .env.*
 .env.backup
+env.txt
 
 
 # IDE/editor
