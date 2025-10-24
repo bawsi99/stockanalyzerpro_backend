@@ -31,7 +31,6 @@ coverage.xml
 logs/
 cache/
 output/
-analysis_datasets/
 
 # Environment & secrets
 .env

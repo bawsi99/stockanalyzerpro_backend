@@ -13,7 +13,7 @@ from pathlib import Path
 # Import existing components
 from agents.sector.classifier import SectorClassifier
 from core.instrument_filter import instrument_filter
-from analysis.datasets import analysis_datasets
+# Legacy import removed - analysis_datasets no longer used
 
 class EnhancedSectorClassifier(SectorClassifier):
     """
@@ -108,57 +108,13 @@ class EnhancedSectorClassifier(SectorClassifier):
         """
         return self.instrument_breakdown.copy()
     
-    def create_analysis_datasets(self, output_dir: str = "analysis_datasets"):
-        """
-        Create and export analysis datasets
-        
-        Args:
-            output_dir: Output directory for datasets
-        """
-        if self.filtered_equity_stocks.empty:
-            logging.warning("No filtered equity stocks available for dataset creation")
-            return
-        
-        # Create and export datasets
-        analysis_datasets.export_datasets(self.filtered_equity_stocks, output_dir)
+    # Legacy method removed - analysis datasets no longer created
     
-    def get_dataset_summary(self) -> Dict[str, Dict]:
-        """
-        Get summary of analysis datasets
-        
-        Returns:
-            Dict: Summary of all datasets
-        """
-        if self.filtered_equity_stocks.empty:
-            return {}
-        
-        return analysis_datasets.get_dataset_summary(self.filtered_equity_stocks)
+    # Legacy method removed - dataset summary no longer available
     
-    def get_trading_stocks(self) -> List[str]:
-        """
-        Get stocks suitable for trading analysis
-        
-        Returns:
-            List[str]: List of trading stocks
-        """
-        if self.filtered_equity_stocks.empty:
-            return []
-        
-        trading_dataset = analysis_datasets.create_trading_dataset(self.filtered_equity_stocks)
-        return trading_dataset.get('liquid_stocks', [])
+    # Legacy method removed - trading dataset no longer available
     
-    def get_portfolio_stocks(self) -> List[str]:
-        """
-        Get stocks suitable for portfolio analysis
-        
-        Returns:
-            List[str]: List of portfolio stocks
-        """
-        if self.filtered_equity_stocks.empty:
-            return []
-        
-        portfolio_dataset = analysis_datasets.create_portfolio_dataset(self.filtered_equity_stocks)
-        return portfolio_dataset.get('core_holdings', [])
+    # Legacy method removed - portfolio dataset no longer available
     
     def get_sector_stocks_enhanced(self, sector: str) -> List[str]:
         """
@@ -260,46 +216,7 @@ class EnhancedSectorClassifier(SectorClassifier):
             'analysis_type': 'sector_rotation'
         }
     
-    def export_enhanced_data(self, output_dir: str = "enhanced_sector_data"):
-        """
-        Export enhanced sector data
-        
-        Args:
-            output_dir: Output directory
-        """
-        output_path = Path(output_dir)
-        output_path.mkdir(exist_ok=True)
-        
-        # Export major stocks
-        major_stocks_file = output_path / "major_stocks.json"
-        with open(major_stocks_file, 'w') as f:
-            json.dump({
-                'major_stocks': list(self.major_stocks),
-                'total_count': len(self.major_stocks),
-                'created_at': pd.Timestamp.now().isoformat()
-            }, f, indent=2)
-        
-        # Export instrument breakdown
-        breakdown_file = output_path / "instrument_breakdown.json"
-        with open(breakdown_file, 'w') as f:
-            json.dump(self.instrument_breakdown, f, indent=2)
-        
-        # Export filtered equity stocks
-        if not self.filtered_equity_stocks.empty:
-            stocks_file = output_path / "filtered_equity_stocks.csv"
-            self.filtered_equity_stocks.to_csv(stocks_file, index=False)
-        
-        # Export sector performance data
-        sector_performance = {}
-        for sector_info in self.get_all_sectors():
-            sector_code = sector_info['code']
-            sector_performance[sector_code] = self.get_sector_performance_data(sector_code)
-        
-        performance_file = output_path / "sector_performance.json"
-        with open(performance_file, 'w') as f:
-            json.dump(sector_performance, f, indent=2)
-        
-        logging.info(f"Exported enhanced sector data to {output_path}")
+    # Legacy method removed - enhanced sector data export no longer performed
     
     def get_system_summary(self) -> Dict[str, any]:
         """
@@ -317,8 +234,6 @@ class EnhancedSectorClassifier(SectorClassifier):
             'enhanced_features': {
                 'major_stocks_filtering': True,
                 'instrument_filtering': True,
-                'analysis_datasets': True,
-                'portfolio_analysis': True,
                 'sector_rotation': True
             }
         }

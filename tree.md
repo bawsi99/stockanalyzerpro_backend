@@ -169,7 +169,6 @@ backend/
 │   ├── heavy_load.py
 │   ├── inference.py
 │   └── risk_scoring.py
-├── analysis_datasets/ [Directory for analysis-specific datasets]
 ├── api/
 │   ├── __init__.py
 │   └── responses.py
@@ -198,17 +197,6 @@ backend/
 │   └── utils.py
 ├── data/
 │   ├── __init__.py
-│   ├── analysis_datasets/
-│   │   ├── analysis_datasets.json
-│   │   ├── portfolio_dataset.json
-│   │   ├── sector_dataset_backup.json
-│   │   ├── sector_dataset.json
-│   │   └── trading_dataset.json
-│   ├── enhanced_sector_data/
-│   │   ├── filtered_equity_stocks.csv
-│   │   ├── instrument_breakdown.json
-│   │   ├── major_stocks.json
-│   │   └── sector_performance.json
 │   ├── sector_category/
 │   │   ├── __init__.py
 │   │   ├── auto.json
@@ -246,7 +234,6 @@ backend/
 ├── docs/
 │   ├── agent_migration_guide.md
 │   └── decision_flow.md
-├── enhanced_sector_data/ [Link/directory for enhanced sector data]
 ├── ENV_CONFIG_GUIDE.md [Environment configuration documentation]
 ├── llm/ [New unified LLM system]
 │   ├── __init__.py

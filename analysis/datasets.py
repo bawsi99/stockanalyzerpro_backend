@@ -271,48 +271,7 @@ class AnalysisDatasets:
         
         return sector_keywords.get(index_name, [])
     
-    def export_datasets(self, equity_stocks_df: pd.DataFrame, output_dir: str = "analysis_datasets"):
-        """
-        Export all analysis datasets to JSON files
-        
-        Args:
-            equity_stocks_df: Filtered equity stocks dataframe
-            output_dir: Output directory for datasets
-        """
-        output_path = Path(output_dir)
-        output_path.mkdir(exist_ok=True)
-        
-        # Create all datasets
-        trading_dataset = self.create_trading_dataset(equity_stocks_df)
-        portfolio_dataset = self.create_portfolio_dataset(equity_stocks_df)
-        sector_dataset = self.create_sector_dataset(equity_stocks_df)
-        
-        # Export datasets
-        datasets = {
-            'trading': trading_dataset,
-            'portfolio': portfolio_dataset,
-            'sector': sector_dataset,
-            'metadata': {
-                'total_stocks': len(equity_stocks_df),
-                'created_at': pd.Timestamp.now().isoformat(),
-                'description': 'Analysis-ready stock datasets'
-            }
-        }
-        
-        # Save to JSON file
-        output_file = output_path / "analysis_datasets.json"
-        with open(output_file, 'w') as f:
-            json.dump(datasets, f, indent=2)
-        
-        logging.info(f"Exported analysis datasets to {output_file}")
-        
-        # Also save individual datasets
-        for dataset_name, dataset_data in datasets.items():
-            if dataset_name != 'metadata':
-                individual_file = output_path / f"{dataset_name}_dataset.json"
-                with open(individual_file, 'w') as f:
-                    json.dump(dataset_data, f, indent=2)
-                logging.info(f"Exported {dataset_name} dataset to {individual_file}")
+    # Legacy export method removed - datasets no longer exported to files
     
     def get_dataset_summary(self, equity_stocks_df: pd.DataFrame) -> Dict[str, Dict]:
         """

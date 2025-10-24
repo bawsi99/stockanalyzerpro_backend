@@ -32,8 +32,6 @@ class StorageConfig:
             "base_path": "./output",
             "charts_path": "./output/charts",
             "analysis_path": "./output",
-            "datasets_path": "./analysis_datasets",
-            "enhanced_data_path": "./enhanced_sector_data",
             "logs_path": "./logs",
             "cache_path": "./cache"
         },
@@ -42,8 +40,6 @@ class StorageConfig:
             "base_path": "/app/data",
             "charts_path": "/app/data/charts",
             "analysis_path": "/app/data/analysis",
-            "datasets_path": "/app/data/datasets",
-            "enhanced_data_path": "/app/data/enhanced_sector_data",
             "logs_path": "/app/data/logs",
             "cache_path": "/app/data/cache"
         },
@@ -52,8 +48,6 @@ class StorageConfig:
             "base_path": "/app/data",
             "charts_path": "/app/data/charts",
             "analysis_path": "/app/data/analysis",
-            "datasets_path": "/app/data/datasets",
-            "enhanced_data_path": "/app/data/enhanced_sector_data",
             "logs_path": "/app/data/logs",
             "cache_path": "/app/data/cache"
         }
@@ -71,8 +65,6 @@ class StorageConfig:
             "base_path": os.getenv("STORAGE_BASE_PATH", config["base_path"]),
             "charts_path": os.getenv("STORAGE_CHARTS_PATH", config["charts_path"]),
             "analysis_path": os.getenv("STORAGE_ANALYSIS_PATH", config["analysis_path"]),
-            "datasets_path": os.getenv("STORAGE_DATASETS_PATH", config["datasets_path"]),
-            "enhanced_data_path": os.getenv("STORAGE_ENHANCED_DATA_PATH", config["enhanced_data_path"]),
             "logs_path": os.getenv("STORAGE_LOGS_PATH", config["logs_path"]),
             "cache_path": os.getenv("STORAGE_CACHE_PATH", config["cache_path"])
         })
@@ -91,17 +83,6 @@ class StorageConfig:
         config = cls.get_storage_config()
         return config["analysis_path"]
     
-    @classmethod
-    def get_datasets_path(cls) -> str:
-        """Get datasets storage path."""
-        config = cls.get_storage_config()
-        return config["datasets_path"]
-    
-    @classmethod
-    def get_enhanced_data_path(cls) -> str:
-        """Get enhanced sector data storage path."""
-        config = cls.get_storage_config()
-        return config["enhanced_data_path"]
     
     @classmethod
     def get_logs_path(cls) -> str:
@@ -164,8 +145,6 @@ class StorageConfig:
 STORAGE_PATHS = {
     "CHARTS": StorageConfig.get_charts_path,
     "ANALYSIS": StorageConfig.get_analysis_path,
-    "DATASETS": StorageConfig.get_datasets_path,
-    "ENHANCED_DATA": StorageConfig.get_enhanced_data_path,
     "LOGS": StorageConfig.get_logs_path,
     "CACHE": StorageConfig.get_cache_path
 }
